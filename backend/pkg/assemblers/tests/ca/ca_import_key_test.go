@@ -199,6 +199,11 @@ func TestSignCertificateLinksAKeyHeldBySeveralEngines(t *testing.T) {
 func subCAIssuedOutsideLamassu(t *testing.T, cn string) (*x509.Certificate, *ecdsa.PrivateKey) {
 	t.Helper()
 	root, rootKey := selfSignedCAWithForeignSKI(t, cn+" outside root")
+	return subCAIssuedBy(t, cn, root, rootKey)
+}
+
+func subCAIssuedBy(t *testing.T, cn string, root *x509.Certificate, rootKey *ecdsa.PrivateKey) (*x509.Certificate, *ecdsa.PrivateKey) {
+	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	template := &x509.Certificate{
@@ -277,9 +282,45 @@ func TestReimportingADeletedCAAppliesTheNewImportToTheReusedRow(t *testing.T) {
 	}
 }
 
+// Deleting an active CA imported without its key only removes it from Lamassu: the CA still operates outside
+// Lamassu, so the CAs and certificates below it keep their status, and so does its own certificate, which a
+// reimport brings back active.
+func TestDeletingAnActiveKeylessCAKeepsWhatItIssued(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+	caSvc := serverTest.CA.Service
+	profile := newKeyRefsProfile(t)
+
+	rootCert, rootKey := selfSignedCAWithForeignSKI(t, "keyless-delete-root")
+	root, err := caSvc.ImportCA(ctx, services.ImportCAInput{CACertificate: (*models.X509Certificate)(rootCert)})
+	require.NoError(t, err)
+	require.Equal(t, models.CertificateTypeImportedWithoutKey, root.Certificate.Type)
+
+	subCert, subKey := subCAIssuedBy(t, "keyless-delete-sub", rootCert, rootKey)
+	sub, err := caSvc.ImportCA(ctx, services.ImportCAInput{ProfileID: profile.ID, Key: subKey, CACertificate: (*models.X509Certificate)(subCert)})
+	require.NoError(t, err)
+	require.Equal(t, root.ID, sub.Certificate.IssuerCAMetadata.ID)
+
+	leaf, err := caSvc.CreateCertificate(ctx, services.CreateCertificateInput{
+		CAID: sub.ID, KeySpec: services.CertificateKeySpec{Type: models.KeyType(x509.ECDSA), Bits: 256}, Subject: models.Subject{CommonName: "keyless-delete-leaf"},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, caSvc.DeleteCA(ctx, services.DeleteCAInput{CAID: root.ID}))
+
+	for name, serial := range map[string]string{"sub CA": sub.Certificate.SerialNumber, "leaf": leaf.SerialNumber, "root": root.Certificate.SerialNumber} {
+		cert, err := caSvc.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{SerialNumber: serial})
+		require.NoError(t, err, name)
+		require.Equal(t, models.StatusActive, cert.Status, name)
+	}
+
+	reimported, err := caSvc.ImportCA(ctx, services.ImportCAInput{CACertificate: (*models.X509Certificate)(rootCert)})
+	require.NoError(t, err)
+	require.Equal(t, models.StatusActive, reimported.Certificate.Status)
+}
+
 // DeleteCA keeps the certificate row (#815), and ImportCA reuses it when the same certificate is imported again.
-// The reused row must reference the key this import brings, or the CA comes back without one. The CA is an
-// intermediate because DeleteCA revokes the row of a self-signed CA, which is then reimported revoked.
+// The reused row must reference the key this import brings, or the CA comes back without one.
 func TestReimportingADeletedKeylessCALinksTheKey(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()

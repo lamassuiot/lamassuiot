@@ -503,6 +503,13 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 		engineID, keyID = key.EngineID, key.KeyID
 	}
 
+	// The expiration monitor only looks at certificates that are not expired yet, so one that is already expired is
+	// stored as such, as ImportCertificate does.
+	status := models.StatusActive
+	if caCert.NotAfter.Before(time.Now()) {
+		status = models.StatusExpired
+	}
+
 	ca := &models.CACertificate{
 		ID:         caID,
 		Metadata:   map[string]any{},
@@ -514,7 +521,7 @@ func (svc *CAServiceBackend) ImportCA(ctx context.Context, input services.Import
 			AuthorityKeyID:      akid,
 			Certificate:         input.CACertificate,
 			Extensions:          certificateExtensionsFromX509((*x509.Certificate)(caCert)),
-			Status:              models.StatusActive,
+			Status:              status,
 			SerialNumber:        helpers.SerialNumberToHexString(caCert.SerialNumber),
 			KeyMetadata:         helpers.KeyStrengthMetadataFromCertificate((*x509.Certificate)(caCert)),
 			Subject:             chelpers.PkixNameToSubject(caCert.Subject),
@@ -1337,6 +1344,14 @@ func (svc *CAServiceBackend) releaseWhatCAHeld(ctx context.Context, ca *models.C
 // handleCascadeOperations handles the cascade deletion or revocation of child CAs and certificates
 func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *models.CACertificate, cascadeDelete bool, lFunc *logrus.Entry) error {
 	if !cascadeDelete {
+		// Only a CA imported without its key can be deleted while active. It still operates outside Lamassu, so what
+		// it issued stays valid: deleting it only removes it from Lamassu. The stored status can lag behind the
+		// expiration until the monitor runs, so ValidTo counts too. A CA that is not valid yet has not expired: it is
+		// still to come, so ValidFrom does not count.
+		if ca.Certificate.Status == models.StatusActive && !ca.Certificate.ValidTo.Before(time.Now()) {
+			lFunc.Infof("CA %s is active: its child CAs and the certificates it issued keep their status", ca.ID)
+			return nil
+		}
 		lFunc.Debugf("cascade delete is disabled, proceeding with child CA and certificate revocation")
 		return svc.revokeWhatCAIssued(ctx, ca, lFunc)
 	}
