@@ -440,11 +440,11 @@ func main() {
 			}),
 		)
 
-		uiPort, _ = strconv.Atoi(container.GetPort("8085/tcp"))
+		uiPort, _ = strconv.Atoi(container.GetPort("80/tcp"))
 
 		if err != nil {
 			containerCleanup()
-			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:dev-v4: %s", err)
+			log.Fatalf("could not launch ghcr.io/lamassuiot/lamassu-ui:latest: %s", err)
 		}
 	}
 
