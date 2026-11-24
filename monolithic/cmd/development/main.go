@@ -430,8 +430,8 @@ func main() {
 	if !*disableUI {
 		containerCleanup, container, _, err := dockerrunner.RunDocker(
 			"ghcr.io/lamassuiot/lamassu-ui",
-			dockertest.WithTag("dev-v4"),
-			dockertest.WithEnv([]string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors, "OIDC_ENABLED=true", "OIDC_AUTHORITY=https://cognito-idp.eu-west-1.amazonaws.com/eu-west-1_Yf6xm642m", "OIDC_CLIENT_ID=6ljh1pbt043ccc2hg1kd4b1aja"}),
+			dockertest.WithTag("latest"),
+			dockertest.WithEnv([]string{"OIDC_ENABLED=false", "UI_FOOTER_ENABLED=false", "LAMASSU_API=https://localhost:8443/api", "CLOUD_CONNECTORS=" + cloudConnectors}),
 			dockertest.WithLabels(map[string]string{
 				"group": "lamassuiot-monolithic",
 			}),
