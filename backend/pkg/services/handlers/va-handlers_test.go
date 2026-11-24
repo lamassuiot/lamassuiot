@@ -150,16 +150,50 @@ func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
-func TestReissueCAHandlerIgnoresCAWithoutCRLSettings(t *testing.T) {
+// A CA gets no CRL settings while it cannot sign its own CRL, and its reissued certificate may be what fixes that:
+// the reissue initializes them, which is the only way such a CA ever gets a CRL.
+func TestReissueCAHandlerInitsSettingsOfCAWithoutThem(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
 	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(settingsWithSigner(reissueTestNewSerial), nil)
 
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+	// InitCRLSettings sets the signer and issues the first CRL itself.
 	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+// The reissued certificate may still be unable to sign CRLs. The CA keeps no settings, and the event is accepted:
+// it would be redelivered forever otherwise.
+func TestReissueCAHandlerAcceptsCAThatStillCannotSignCRLs(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return((*models.CRLSettings)(nil), nil)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerReturnsSettingsInitializationError(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	initErr := errors.New("storage down")
+
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return((*models.CRLSettings)(nil), initErr)
+
+	err := dispatchReissue(t, svc)
+
+	assert.ErrorIs(t, err, initErr)
+	svc.AssertExpectations(t)
 }
 
 func revokedCertificateEvent(t *testing.T) *event.Event {
@@ -305,6 +339,44 @@ func TestCreateCAHandlerInitsSettingsByCAID(t *testing.T) {
 	}))
 
 	handler := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventCreateCAKey)]
+	assert.NoError(t, handler(context.Background(), &e))
+	svc.AssertExpectations(t)
+}
+
+// ImportCA raises ca.import, not ca.create: the VA must initialize the CRL settings of an imported CA too.
+// InitCRLSettings is what leaves the CAs without a key in the KMS out, so the handler is the same one.
+func TestImportCAHandlerInitsSettingsByCAID(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(settingsWithSigner("sn"), nil)
+
+	e := event.New()
+	e.SetType(string(models.EventImportCAKey))
+	assert.NoError(t, e.SetData(event.ApplicationJSON, models.CACertificate{
+		ID: reissueTestCAID, Certificate: models.Certificate{SubjectKeyID: reissueTestSKI},
+	}))
+
+	handler, ok := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventImportCAKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventImportCAKey) {
+		return
+	}
+	assert.NoError(t, handler(context.Background(), &e))
+	svc.AssertExpectations(t)
+}
+
+// A CA imported without a key cannot sign CRLs: InitCRLSettings returns no settings and the handler accepts it,
+// so the event is not redelivered forever.
+func TestImportCAHandlerWithoutSettingsIsAccepted(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(nil, nil)
+
+	e := event.New()
+	e.SetType(string(models.EventImportCAKey))
+	assert.NoError(t, e.SetData(event.ApplicationJSON, models.CACertificate{ID: reissueTestCAID}))
+
+	handler, ok := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventImportCAKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventImportCAKey) {
+		return
+	}
 	assert.NoError(t, handler(context.Background(), &e))
 	svc.AssertExpectations(t)
 }

@@ -19,7 +19,10 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
-			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			string(models.EventCreateCAKey): func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			// An imported CA raises ca.import instead of ca.create, and it also needs its CRL settings: the ones
+			// imported with a key in the KMS can sign CRLs. InitCRLSettings leaves the keyless ones without settings.
+			string(models.EventImportCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventReissueCAKey):               func(ctx context.Context, m *event.Event) error { return reissueCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
 			string(models.EventUpdateCAStatusKey):          func(ctx context.Context, m *event.Event) error { return updateCAStatusHandler(ctx, m, svc, l) },
@@ -30,7 +33,8 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 
 // reissueCAHandler moves the CRL signer of the CRL settings of the CA to its reissued certificate, then regenerates the
 // CRL so it is signed by that certificate right away. Only settings signed by the CA certificate being superseded are
-// updated: any other signer was chosen on purpose and is kept.
+// updated: any other signer was chosen on purpose and is kept. A CA that had no settings because it could not sign its
+// own CRL gets them here if its reissued certificate can.
 func reissueCAHandler(ctx context.Context, event *event.Event, crlSvc services.CRLService, lMessaging *logrus.Entry) error {
 	ca, err := helpers.GetEventBody[models.UpdateModel[models.CACertificate]](event)
 	if err != nil {
@@ -45,7 +49,21 @@ func reissueCAHandler(ctx context.Context, event *event.Event, crlSvc services.C
 
 	settings, err := crlSvc.GetCRLSettings(ctx, services.GetCRLSettingsInput{CAID: caID})
 	if errors.Is(err, errs.ErrCRLSettingsNotFound) {
-		lMessaging.Warnf("reissued CA %s has no CRL settings: no CRL signer to update", caID)
+		// A CA has no settings while it cannot sign its own CRL: it has no key in the KMS, or its certificate has
+		// no cRLSign key usage. Its reissued certificate may be the one that fixes it, and nothing else would
+		// create the settings afterwards, so they are initialized here. InitCRLSettings checks that certificate.
+		initialized, initErr := crlSvc.InitCRLSettings(ctx, caID)
+		if initErr != nil {
+			initErr = fmt.Errorf("could not initialize the CRL settings of reissued CA %s: %w", caID, initErr)
+			lMessaging.Error(initErr)
+			return initErr
+		}
+		if initialized == nil {
+			lMessaging.Warnf("reissued CA %s still cannot sign CRLs: it keeps no CRL settings", caID)
+			return nil
+		}
+
+		lMessaging.Infof("CRL settings of CA %s initialized on its reissue, signed by certificate %s", caID, initialized.Options.SignerSerialNumber)
 		return nil
 	}
 	if err != nil {
