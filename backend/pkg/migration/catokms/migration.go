@@ -13,6 +13,7 @@ import (
 	storagebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
@@ -83,7 +84,8 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 // keyEntry accumulates all data needed to build a models.Key record.
 type keyEntry struct {
 	engineID    string
-	keyID       string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
+	keyID       string // the CA's subject_key_id: crypto engines before the KMS named the keys of imported CAs after it
+	digest      string // SHA-256 hex of the PKIX public key: the name the KMS gives every key it stores
 	algorithm   string
 	size        int
 	publicKey   string // base64(PEM "PUBLIC KEY")
@@ -142,10 +144,16 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage CALister) (ma
 			}
 			pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubKeyDER})
 			pubKeyB64 := base64.StdEncoding.EncodeToString(pubKeyPEM)
+			digest, err := chelpers.PublicKeyDigest(x509Cert.PublicKey)
+			if err != nil {
+				logger.Errorf("could not compute the digest of the public key of CA %s: %s", ca.ID, err)
+				return
+			}
 
 			keyMap[keyID] = &keyEntry{
 				engineID:   cert.EngineID,
 				keyID:      keyID,
+				digest:     digest,
 				algorithm:  algorithm,
 				size:       size,
 				publicKey:  pubKeyB64,
@@ -192,6 +200,22 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			logger.Debugf("key %s already in KMS storage — skipping", entry.keyID)
 			skipped++
 			continue
+		}
+
+		// A CA imported since the KMS exists has its key stored under the digest of its public key, while its
+		// SKI is the one its issuer wrote: registering it under the SKI would add a row no crypto engine holds.
+		if entry.digest != "" && entry.digest != entry.keyID {
+			exists, _, err = kmsStorage.SelectExistsByKeyID(ctx, entry.digest, entry.engineID)
+			if err != nil {
+				logger.Errorf("could not check key %s in KMS storage: %s", entry.digest, err)
+				failed++
+				continue
+			}
+			if exists {
+				logger.Infof("key %s already in KMS storage as %s, the digest of its public key — skipping", entry.keyID, entry.digest)
+				skipped++
+				continue
+			}
 		}
 
 		key := &models.Key{

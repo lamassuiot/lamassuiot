@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -806,5 +807,59 @@ func TestMigrate_CAStorageError_ReturnsError(t *testing.T) {
 	_, err := Migrate(context.Background(), silentLogger(), caStore, kms, false)
 	if err == nil {
 		t.Fatal("expected error from CA storage failure, got nil")
+	}
+}
+
+// issuerSKI gives a CA the SKI an external issuer would write: the SHA-1 of the public key (RFC 5280),
+// 40 hex characters, which is not the SHA-256 digest the KMS names its keys after.
+func issuerSKI(t *testing.T, ca *models.CACertificate) {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(ca.Certificate.Certificate.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha1.Sum(der)
+	ca.Certificate.SubjectKeyID = hex.EncodeToString(sum[:])
+}
+
+// A CA imported with its key since the KMS exists has its key stored under the digest of its public key,
+// while its SKI is the one its issuer wrote. Registering the key under the SKI would add a second row for
+// the same key that no crypto engine holds.
+func TestMigrate_ImportedCAWhoseKeyIsStoredUnderItsDigest_IsNotRegisteredAgain(t *testing.T) {
+	ca := newECDSACACert(t, "ca-imported", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "ImportedCA", time.Now())
+	issuerSKI(t, &ca)
+	digest := keyIDFromPub(t, ca.Certificate.Certificate.PublicKey)
+
+	kms := newMockKMSStorage()
+	kms.existing[kmsKeyIndex(digest, "engine-a")] = &models.Key{KeyID: digest, EngineID: "engine-a", HasPrivateKey: true}
+
+	result, err := Migrate(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 0 || result.Skipped != 1 || result.Failed != 0 {
+		t.Errorf("result: %+v, want {0 1 0}", result)
+	}
+	if len(kms.inserted) != 0 {
+		t.Errorf("the key is already in the KMS under its digest, but %d key(s) were inserted: %+v", len(kms.inserted), kms.inserted[0])
+	}
+}
+
+// A CA imported before the KMS existed has its key in the crypto engine under its SKI and no row in the KMS:
+// the key is still registered under that name, which is how the engine holds it.
+func TestMigrate_CAImportedBeforeTheKMS_IsRegisteredUnderItsSKI(t *testing.T) {
+	ca := newECDSACACert(t, "ca-legacy", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "LegacyCA", time.Now())
+	issuerSKI(t, &ca)
+
+	kms := newMockKMSStorage()
+	result, err := Migrate(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 1 || len(kms.inserted) != 1 {
+		t.Fatalf("result: %+v, want exactly 1 insertion", result)
+	}
+	if got := kms.inserted[0].KeyID; got != ca.Certificate.SubjectKeyID {
+		t.Errorf("KeyID: got %q, want the SKI %q", got, ca.Certificate.SubjectKeyID)
 	}
 }

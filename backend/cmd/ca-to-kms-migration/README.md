@@ -25,12 +25,18 @@ and writes the missing records into the KMS.
 2. Reads all CA certificates of type `MANAGED` and `IMPORTED_WITH_KEY` from the
    `ca` schema.
 3. Groups certificates that share the same public key (same `subject_key_id`).
-4. For each unique key not already present in the KMS storage:
+4. For each unique key not already present in the KMS storage, neither under its
+   `subject_key_id` nor under the SHA-256 digest of its public key, in the same engine:
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA schema.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-5. Inserts the record into the KMS `kms_keys` table.
+5. Inserts the record into the KMS `kms_keys` table, with the `subject_key_id` as `key_id`.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
+
+A CA imported with its key since the KMS exists (3.7 and later) already has its key in the KMS
+under the digest of its public key, while its `subject_key_id` is the one its issuer wrote. The
+tool recognises that key by its digest and does not register it a second time under the
+`subject_key_id`, which would add a row that no crypto engine holds.
 
 The operation is **idempotent**: if a key already exists in the KMS storage it is
 skipped, so the tool can be run multiple times safely.
