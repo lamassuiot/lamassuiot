@@ -94,6 +94,10 @@ type UpdateDeviceMetadataInput struct {
 type UpdateDeviceIdentitySlotInput struct {
 	ID   string              `validate:"required"`
 	Slot models.Slot[string] `validate:"required"`
+	// SyncCertificateStatus makes a revoke update leave alone a certificate that is already revoked on hold, which is
+	// what the handler of the certificate status events needs: the slot only follows it. A certificate that is not
+	// revoked when the update runs is still revoked. The HTTP API never sets it.
+	SyncCertificateStatus bool
 }
 
 type DeleteDeviceInput struct {

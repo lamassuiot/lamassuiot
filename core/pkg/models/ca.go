@@ -127,6 +127,11 @@ const (
 	CAMetadataReissueReasonKey = "lamassu.io/ca/reissue-reason"
 )
 
+// CAMetadataSuspendedByCascadeKey marks a certificate, or the certificate of a sub-CA, that the hold of a CA put on
+// hold. Its value is the ID of that CA: releasing the CA releases the certificates it marks. Any later status change of
+// the certificate removes the mark.
+const CAMetadataSuspendedByCascadeKey = "lamassu.io/ca/suspended-by-cascade"
+
 type CAAttachedToDevice struct {
 	AuthorizedBy struct {
 		RAID string `json:"ra_id"`

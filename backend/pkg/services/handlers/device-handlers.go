@@ -79,8 +79,9 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 
 	if updated {
 		_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-			ID:   deviceID,
-			Slot: *dev.IdentitySlot,
+			ID:                    deviceID,
+			Slot:                  *dev.IdentitySlot,
+			SyncCertificateStatus: true,
 		})
 		if err != nil {
 			err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)

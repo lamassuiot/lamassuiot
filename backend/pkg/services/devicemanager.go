@@ -534,7 +534,11 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 			return nil, err
 		}
 
-		if crt.Status != models.StatusRevoked {
+		// A certificate on hold stays as it is with SyncCertificateStatus (the slot only follows it). Otherwise an
+		// operator that revokes it revokes it for good: changing the reason also removes the mark that releasing its
+		// CA looks for, so the release does not reinstate the device.
+		onHold := crt.Status == models.StatusRevoked && crt.RevocationReason == ocsp.CertificateHold
+		if crt.Status != models.StatusRevoked || (onHold && !input.SyncCertificateStatus) {
 			_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 				SerialNumber:     sn,
 				NewStatus:        models.StatusRevoked,
