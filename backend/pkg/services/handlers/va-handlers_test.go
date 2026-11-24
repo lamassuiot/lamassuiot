@@ -308,3 +308,41 @@ func TestCreateCAHandlerInitsSettingsByCAID(t *testing.T) {
 	assert.NoError(t, handler(context.Background(), &e))
 	svc.AssertExpectations(t)
 }
+
+// ImportCA raises ca.import, not ca.create: the VA must initialize the CRL settings of an imported CA too.
+// InitCRLSettings is what leaves the CAs without a key in the KMS out, so the handler is the same one.
+func TestImportCAHandlerInitsSettingsByCAID(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(settingsWithSigner("sn"), nil)
+
+	e := event.New()
+	e.SetType(string(models.EventImportCAKey))
+	assert.NoError(t, e.SetData(event.ApplicationJSON, models.CACertificate{
+		ID: reissueTestCAID, Certificate: models.Certificate{SubjectKeyID: reissueTestSKI},
+	}))
+
+	handler, ok := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventImportCAKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventImportCAKey) {
+		return
+	}
+	assert.NoError(t, handler(context.Background(), &e))
+	svc.AssertExpectations(t)
+}
+
+// A CA imported without a key cannot sign CRLs: InitCRLSettings returns no settings and the handler accepts it,
+// so the event is not redelivered forever.
+func TestImportCAHandlerWithoutSettingsIsAccepted(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(nil, nil)
+
+	e := event.New()
+	e.SetType(string(models.EventImportCAKey))
+	assert.NoError(t, e.SetData(event.ApplicationJSON, models.CACertificate{ID: reissueTestCAID}))
+
+	handler, ok := NewVAEventHandler(helpers.SetupLogger("debug", "VA", "Test"), svc).DispatchMap[string(models.EventImportCAKey)]
+	if !assert.True(t, ok, "VA must handle %s events", models.EventImportCAKey) {
+		return
+	}
+	assert.NoError(t, handler(context.Background(), &e))
+	svc.AssertExpectations(t)
+}

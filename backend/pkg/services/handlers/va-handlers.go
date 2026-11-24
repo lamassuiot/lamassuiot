@@ -19,7 +19,10 @@ func NewVAEventHandler(l *logrus.Entry, svc services.CRLService) *eventhandling.
 	return &eventhandling.CloudEventHandler{
 		Logger: l,
 		DispatchMap: map[string]func(context.Context, *event.Event) error{
-			string(models.EventCreateCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			string(models.EventCreateCAKey): func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
+			// An imported CA raises ca.import instead of ca.create, and it also needs its CRL settings: the ones
+			// imported with a key in the KMS can sign CRLs. InitCRLSettings leaves the keyless ones without settings.
+			string(models.EventImportCAKey):                func(ctx context.Context, m *event.Event) error { return createCAHandler(ctx, m, svc, l) },
 			string(models.EventReissueCAKey):               func(ctx context.Context, m *event.Event) error { return reissueCAHandler(ctx, m, svc, l) },
 			string(models.EventUpdateCertificateStatusKey): func(ctx context.Context, m *event.Event) error { return updateCertificateStatus(ctx, m, svc, l) },
 			string(models.EventUpdateCAStatusKey):          func(ctx context.Context, m *event.Event) error { return updateCAStatusHandler(ctx, m, svc, l) },
