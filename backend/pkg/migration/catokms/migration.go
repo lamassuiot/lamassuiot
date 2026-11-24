@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"slices"
+	"sort"
 	"time"
 
 	storagebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
@@ -183,7 +185,17 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage CALister) (ma
 // runMigration inserts missing keys into KMS storage (or logs what it would do in dry-run mode).
 // It returns the number of inserted (or would-insert in dry-run), skipped, and failed keys.
 func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMSKeysRepo, keyMap map[string]*keyEntry, dryRun bool) (inserted, skipped, failed int) {
-	for _, entry := range keyMap {
+	// Certificates can share a public key under different SKIs, and the KMS stores a public key once per engine. The
+	// SKIs are walked in order, so the one that names the key does not depend on the order of the map.
+	skis := make([]string, 0, len(keyMap))
+	for ski := range keyMap {
+		skis = append(skis, ski)
+	}
+	sort.Strings(skis)
+	registered := map[string]string{} // engine|digest -> SKI the key is registered under in this run
+
+	for _, ski := range skis {
+		entry := keyMap[ski]
 		if entry.conflictErr != "" {
 			logger.Errorf("skipping key %s: %s", entry.keyID, entry.conflictErr)
 			failed++
@@ -202,17 +214,25 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 
-		// A CA imported since the KMS exists has its key stored under the digest of its public key, while its
-		// SKI is the one its issuer wrote: registering it under the SKI would add a row no crypto engine holds.
-		if entry.digest != "" && entry.digest != entry.keyID {
-			exists, _, err = kmsStorage.SelectExistsByKeyID(ctx, entry.digest, entry.engineID)
+		// The key may already be stored under another name: a CA imported since the KMS exists has it under the digest of
+		// its public key, while its SKI is the one its issuer wrote, and a certificate that shares the key of another has
+		// another SKI. Registering it again would add a row no crypto engine holds, or break the unique (digest,
+		// engine_id) of the KMS.
+		if entry.digest != "" {
+			holder := entry.engineID + "|" + entry.digest
+			if by, ok := registered[holder]; ok {
+				logger.Infof("key %s has the public key of %s, registered earlier in this run — skipping", entry.keyID, by)
+				skipped++
+				continue
+			}
+			copies, err := kmsStorage.SelectByDigest(ctx, entry.digest)
 			if err != nil {
-				logger.Errorf("could not check key %s in KMS storage: %s", entry.digest, err)
+				logger.Errorf("could not check the public key of %s in KMS storage: %s", entry.keyID, err)
 				failed++
 				continue
 			}
-			if exists {
-				logger.Infof("key %s already in KMS storage as %s, the digest of its public key — skipping", entry.keyID, entry.digest)
+			if i := slices.IndexFunc(copies, func(k *models.Key) bool { return k.EngineID == entry.engineID }); i >= 0 {
+				logger.Infof("key %s already in KMS storage as %s, with the same public key — skipping", entry.keyID, copies[i].KeyID)
 				skipped++
 				continue
 			}
@@ -238,6 +258,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 
 		if dryRun {
 			inserted++ // count as "would insert"
+			registered[entry.engineID+"|"+entry.digest] = entry.keyID
 			continue
 		}
 
@@ -247,6 +268,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 		inserted++
+		registered[entry.engineID+"|"+entry.digest] = entry.keyID
 	}
 
 	action := "inserted"

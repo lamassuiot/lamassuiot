@@ -24,9 +24,10 @@ and writes the missing records into the KMS.
 1. Connects to the PostgreSQL database using the standard storage config.
 2. Reads all CA certificates of type `MANAGED` and `IMPORTED_WITH_KEY` from the
    `ca` schema.
-3. Groups certificates that share the same public key (same `subject_key_id`).
-4. For each unique key not already present in the KMS storage, neither under its
-   `subject_key_id` nor under the SHA-256 digest of its public key, in the same engine:
+3. Groups certificates by `subject_key_id`, in order.
+4. For each key whose public key is not already present in the KMS storage in the same
+   engine, whatever name it is stored under (its `subject_key_id`, the SHA-256 digest of
+   its public key, or the `subject_key_id` of another certificate that shares the key):
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA schema.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
 5. Inserts the record into the KMS `kms_keys` table, with the `subject_key_id` as `key_id` (the name the crypto engine holds the key under) and the SHA-256 digest of its public key as `digest`. The table keeps a public key once per engine, so a key can no longer be registered twice under different names.
@@ -37,6 +38,11 @@ A CA imported with its key since the KMS exists (3.7 and later) already has its 
 under the digest of its public key, while its `subject_key_id` is the one its issuer wrote. The
 tool recognises that key by its digest and does not register it a second time under the
 `subject_key_id`, which would add a row that no crypto engine holds.
+
+Certificates of one engine can share a public key and carry different `subject_key_id`s, since
+each is whatever its issuer wrote. The KMS stores a public key once per engine, so the tool
+registers it once, under the lowest `subject_key_id`, and the other certificates find it. The
+`ca` migration links them to that row by public key.
 
 The operation is **idempotent**: if a key already exists in the KMS storage it is
 skipped, so the tool can be run multiple times safely.

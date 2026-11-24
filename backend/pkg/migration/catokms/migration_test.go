@@ -147,13 +147,25 @@ func (m *mockKMSStorage) SelectByKeyID(_ context.Context, keyID string) ([]*mode
 func (m *mockKMSStorage) SelectExistsByID(context.Context, string) (bool, *models.Key, error) {
 	return false, nil, nil
 }
-func (m *mockKMSStorage) SelectByDigest(context.Context, string) ([]*models.Key, error) {
-	return nil, nil
+func (m *mockKMSStorage) SelectByDigest(_ context.Context, digest string) ([]*models.Key, error) {
+	var copies []*models.Key
+	for _, k := range m.existing {
+		if k.Digest == digest {
+			copies = append(copies, k)
+		}
+	}
+	return copies, nil
 }
 
 func (m *mockKMSStorage) Insert(_ context.Context, key *models.Key) (*models.Key, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
+	}
+	// kms_keys is unique per (digest, engine_id): a public key is stored once per engine, whatever its name
+	for _, k := range m.existing {
+		if key.Digest != "" && k.Digest == key.Digest && k.EngineID == key.EngineID {
+			return nil, errors.New(`duplicate key value violates unique constraint "kms_keys_digest_engine_key"`)
+		}
 	}
 	m.existing[kmsKeyIndex(key.KeyID, key.EngineID)] = key
 	m.inserted = append(m.inserted, key)
@@ -845,7 +857,7 @@ func TestMigrate_ImportedCAWhoseKeyIsStoredUnderItsDigest_IsNotRegisteredAgain(t
 	digest := keyIDFromPub(t, ca.Certificate.Certificate.PublicKey)
 
 	kms := newMockKMSStorage()
-	kms.existing[kmsKeyIndex(digest, "engine-a")] = &models.Key{KeyID: digest, EngineID: "engine-a", HasPrivateKey: true}
+	kms.existing[kmsKeyIndex(digest, "engine-a")] = &models.Key{KeyID: digest, Digest: digest, EngineID: "engine-a", HasPrivateKey: true}
 
 	result, err := Migrate(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
 	if err != nil {
@@ -884,4 +896,51 @@ func TestMigrate_CAImportedBeforeTheKMS_IsRegisteredUnderItsSKI(t *testing.T) {
 	if got := kms.inserted[0].Digest; got != wantDigest {
 		t.Errorf("Digest: got %q, want %q", got, wantDigest)
 	}
+}
+
+// Two CA certificates can share a public key and carry different SKIs: the SKI is whatever each issuer wrote. The KMS
+// stores a public key once per engine, so the key is registered once and the other certificate finds it, in this run and
+// in the next ones.
+func TestMigrate_CAsSharingAPublicKey_RegisterTheKeyOnce(t *testing.T) {
+	first := newECDSACACert(t, "ca-first", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "FirstCA", time.Now())
+	second := first
+	second.ID, second.CertificateSerialNumber = "ca-second", "serial-2"
+	second.Certificate.SerialNumber = "serial-2"
+	first.Certificate.SubjectKeyID = "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+	second.Certificate.SubjectKeyID = "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22"
+	cas := &mockCACertStorage{certs: []models.CACertificate{first, second}}
+	kms := newMockKMSStorage()
+
+	t.Run("dry run counts the key once", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Inserted: 1, Skipped: 1}) {
+			t.Fatalf("result: %+v, want {Inserted:1 Skipped:1 Failed:0}", result)
+		}
+	})
+
+	t.Run("the key is registered once under the lowest SKI", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Inserted: 1, Skipped: 1}) {
+			t.Fatalf("result: %+v, want {Inserted:1 Skipped:1 Failed:0}", result)
+		}
+		if len(kms.inserted) != 1 || kms.inserted[0].KeyID != first.Certificate.SubjectKeyID {
+			t.Fatalf("inserted: %+v, want one key named by the lowest SKI %s", kms.inserted, first.Certificate.SubjectKeyID)
+		}
+	})
+
+	t.Run("a second run changes nothing", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Skipped: 2}) {
+			t.Fatalf("result: %+v, want {Inserted:0 Skipped:2 Failed:0}", result)
+		}
+	})
 }
