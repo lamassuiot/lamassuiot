@@ -15,7 +15,7 @@ import (
 const caDBName = "ca_certificates"
 
 func caJoinCaCertificatesAndCertificates(db *gorm.DB) string {
-	return "JOIN " + qualifiedTableName(db, "certificates") +
+	return "JOIN " + qualifiedTableName(db, certificateReadTable) +
 		" ON ca_certificates.serial_number = certificates.serial_number"
 }
 

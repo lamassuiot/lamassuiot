@@ -119,7 +119,7 @@ func TestRDSDataAPISchemaQualification(t *testing.T) {
 	require.Equal(t, `SELECT * FROM "ca"."schema_qualified_test_models"`, modelTableQuery.Statement.SQL.String())
 
 	require.Equal(t,
-		"JOIN ca.certificates ON ca_certificates.serial_number = certificates.serial_number",
+		"JOIN ca.certificates_view AS certificates ON ca_certificates.serial_number = certificates.serial_number",
 		caJoinCaCertificatesAndCertificates(db),
 	)
 	require.Equal(t, "ca.device_groups", qualifiedTableName(db, "device_groups"))
@@ -142,7 +142,7 @@ func TestDirectTransportDoesNotQualifyExplicitTableNames(t *testing.T) {
 	require.NoError(t, query.Error)
 	require.Equal(t, `SELECT * FROM "ca_certificates"`, query.Statement.SQL.String())
 	require.Equal(t,
-		"JOIN certificates ON ca_certificates.serial_number = certificates.serial_number",
+		"JOIN certificates_view AS certificates ON ca_certificates.serial_number = certificates.serial_number",
 		caJoinCaCertificatesAndCertificates(db),
 	)
 }
