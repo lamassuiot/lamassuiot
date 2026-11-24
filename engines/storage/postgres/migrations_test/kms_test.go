@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -181,7 +182,9 @@ func migrationTest_KMS_20261124100000_kms_key_identity(t *testing.T, logger *log
 	insertKMSKey(t, con, opensslCAKeyID, "e1", publicA, `[]`, true)
 	insertKMSKey(t, con, opensslCAKeyID, "e2", publicA, `[]`, false)
 	// B: a key of a CA imported before the KMS: the engine holds it under the SKI, nothing else registers it
-	insertKMSKey(t, con, skiB, "e1", publicB, `[]`, true)
+	// aliases written when nothing kept them from looking like an id or a digest: an identifier of those shapes is no
+	// longer looked up as an alias, so they could never be used
+	insertKMSKey(t, con, skiB, "e1", publicB, `["keep-me", "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c9d", "`+strings.ToUpper(digestC)+`"]`, true)
 	// C: the key of an imported CA registered twice: under its digest by the KMS and under its SKI by the migration tool
 	insertKMSKey(t, con, digestC, "e1", publicC, `["real-alias"]`, true)
 	insertKMSKey(t, con, skiC, "e1", publicC, `["ghost-alias"]`, true)
@@ -218,6 +221,12 @@ func migrationTest_KMS_20261124100000_kms_key_identity(t *testing.T, logger *log
 		require.NoError(t, json.Unmarshal([]byte(rows[digestC+"@e1"].Aliases), &aliases))
 		assert.ElementsMatch(t, []string{"real-alias", "ghost-alias", skiC}, aliases,
 			"the survivor keeps what could address the removed row: its aliases and its old name")
+	})
+
+	t.Run("aliases shaped like an id or a digest are dropped, the rest kept", func(t *testing.T) {
+		var aliases []string
+		require.NoError(t, json.Unmarshal([]byte(rows[skiB+"@e1"].Aliases), &aliases))
+		assert.Equal(t, []string{"keep-me"}, aliases)
 	})
 
 	t.Run("a key cannot be registered twice in the same engine under different names", func(t *testing.T) {

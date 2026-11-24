@@ -91,6 +91,35 @@ func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]
 	return keys, nil
 }
 
+func (db *PostgresKMSStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error) {
+	// the column is a uuid: anything else cannot match, and Postgres would reject it rather than find nothing
+	if !chelpers.IsKeyUUID(id) {
+		return false, nil, nil
+	}
+
+	var elem models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("id = ?::uuid", id).Limit(1).Find(&elem)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil, nil
+	}
+
+	return true, &elem, nil
+}
+
+func (db *PostgresKMSStore) SelectByDigest(ctx context.Context, digest string) ([]*models.Key, error) {
+	var keys []*models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("digest = ?", digest).Order("engine_id").Find(&keys)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return keys, nil
+}
+
 func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string) (bool, *models.Key, error) {
 	col := "name"
 	return db.querier.SelectExists(ctx, name, &col)

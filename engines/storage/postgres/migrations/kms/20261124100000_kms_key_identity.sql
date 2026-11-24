@@ -105,6 +105,40 @@ BEGIN
     END LOOP;
 END $$;
 
+-- An identifier shaped like an id (a UUID) or a digest (64 hexadecimal digits) is read as that and never looked up as
+-- an alias, and such aliases are refused from now on. Earlier versions accepted them, so the ones stored could never be
+-- used again: drop them rather than leave names that answer to nothing. This cannot be undone by the Down migration.
+DO $$
+DECLARE dead text;
+BEGIN
+    SELECT string_agg(format('%s (on key %s in engine %s)', a.alias, k.key_id, k.engine_id), ', ')
+    INTO dead
+    FROM kms_keys AS k
+    CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE WHEN jsonb_typeof(k.aliases) = 'array' THEN k.aliases ELSE '[]'::jsonb END
+    ) AS a(alias)
+    WHERE a.alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' OR a.alias ~* '^[0-9a-f]{64}$';
+
+    IF dead IS NULL THEN
+        RETURN;
+    END IF;
+
+    RAISE NOTICE 'removing aliases shaped like a key id or a digest: %', dead;
+
+    UPDATE kms_keys AS k
+    SET aliases = (
+        SELECT COALESCE(jsonb_agg(a.alias ORDER BY a.ord), '[]'::jsonb)
+        FROM jsonb_array_elements(k.aliases) WITH ORDINALITY AS a(alias, ord)
+        WHERE NOT ((a.alias #>> '{}') ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                OR (a.alias #>> '{}') ~* '^[0-9a-f]{64}$')
+    )
+    WHERE jsonb_typeof(k.aliases) = 'array'
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(k.aliases) AS a(alias)
+        WHERE a.alias ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' OR a.alias ~* '^[0-9a-f]{64}$'
+      );
+END $$;
+
 ALTER TABLE kms_keys ALTER COLUMN digest SET NOT NULL;
 ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_digest_format CHECK (digest ~ '^[0-9a-f]{64}$');
 ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_digest_engine_key UNIQUE (digest, engine_id);
@@ -116,7 +150,7 @@ ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_id_key UNIQUE (id);
 -- +goose Down
 -- +goose StatementBegin
 
--- The rows removed as duplicates and the references moved to the surviving row are not restored.
+-- The rows removed as duplicates, the references moved to the surviving row and the aliases dropped are not restored.
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_id_key;
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_digest_engine_key;
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_digest_format;

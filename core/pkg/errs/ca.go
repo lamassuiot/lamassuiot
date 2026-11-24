@@ -46,6 +46,9 @@ var (
 	// A keyID wins over an alias when resolving an identifier, so such an alias would never
 	// resolve to the key it was set on.
 	ErrKeyAliasCollidesWithKeyID error = errors.New("alias collides with an existing keyID")
+	// An identifier shaped like an id, a digest or a pkcs11 URI is read as that and never as an alias, so such
+	// an alias would never resolve to the key it was set on.
+	ErrKeyAliasReservedFormat error = errors.New("alias must not look like a key id (UUID), a key digest (64 hexadecimal digits) or a pkcs11 URI")
 	// Resources such as certificates are bound to the key, so deleting it would leave them unable to sign.
 	ErrKeyInUse error = errors.New("key is in use")
 

@@ -20,6 +20,11 @@ type KMSKeysRepo interface {
 	// SelectByKeyID returns every engine's copy of the given keyID. A keyID alone is a
 	// search, not an identity: it resolves a key only while a single engine holds it.
 	SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error)
+	// SelectExistsByID looks a key up by its id, which names a single row. An id that is not a UUID matches nothing.
+	SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error)
+	// SelectByDigest returns every engine's copy of the key whose public key has the given digest. As with a
+	// keyID, a digest alone is a search: the same public key can be stored by several engines.
+	SelectByDigest(ctx context.Context, digest string) ([]*models.Key, error)
 
 	Insert(ctx context.Context, key *models.Key) (*models.Key, error)
 	Update(ctx context.Context, key *models.Key) (*models.Key, error)

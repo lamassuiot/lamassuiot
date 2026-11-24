@@ -23,14 +23,17 @@ type CertificateKey struct {
 // KMS
 type Key struct {
 	PKCS11URI string `json:"pkcs11_uri" gorm:"-"`
-	// ID is assigned by the database when the key is stored. Like Digest, the SHA-256 hex of the public key,
-	// it is not part of the API yet.
-	ID            string         `json:"-" gorm:"column:id;default:gen_random_uuid()"`
-	Digest        string         `json:"-" gorm:"column:digest"`
-	KeyID         string         `json:"key_id"`
+	// ID is a UUID the database assigns when the key is stored; Digest is the hex SHA-256 of the DER
+	// SubjectPublicKeyInfo of its public key. Either one finds the key, as does an alias.
+	//
+	// The primary key of the table is still (key_id, engine_id), and the model says so: otherwise gorm takes the
+	// field called ID for it, and saving a key without an id would insert it instead of updating it.
+	ID            string         `json:"id" gorm:"column:id;default:gen_random_uuid()"`
+	Digest        string         `json:"digest" gorm:"column:digest"`
+	KeyID         string         `json:"key_id" gorm:"primaryKey"`
 	Name          string         `json:"name"`
 	Aliases       []string       `json:"aliases" gorm:"serializer:json"`
-	EngineID      string         `json:"engine_id"`
+	EngineID      string         `json:"engine_id" gorm:"primaryKey"`
 	HasPrivateKey bool           `json:"has_private_key"`
 	Algorithm     string         `json:"algorithm"`
 	Size          int            `json:"size"`

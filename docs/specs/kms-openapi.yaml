@@ -300,7 +300,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       responses:
@@ -344,7 +347,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       responses:
@@ -388,7 +394,10 @@ paths:
       tags:
         - Keys
       summary: Update key aliases
-      description: Updates the aliases for a key using JSON Patch operations
+      description: >-
+        Updates the aliases for a key using JSON Patch operations. An alias must not look like an id (a UUID), a
+        digest (64 hexadecimal digits) or a pkcs11 URI, since an identifier of those shapes is never read as an alias;
+        it must not be the key_id of any key or an alias already in use.
       operationId: updateKeyAliases
       x-authz:
         namespace: pki
@@ -399,7 +408,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -450,7 +462,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -501,7 +516,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -552,7 +570,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -603,7 +624,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -654,7 +678,10 @@ paths:
         - name: id
           in: path
           required: true
-          description: Key identifier
+          description: >-
+            Key identifier: its id (a UUID), the digest of its public key (64 hexadecimal digits), an alias, its name
+            in the crypto engine (key_id) or a pkcs11 URI. A digest or key_id held by several engines does not name a
+            single key and is rejected: use the id or the pkcs11 URI.
           schema:
             type: string
       requestBody:
@@ -699,10 +726,22 @@ components:
           type: string
           description: PKCS#11 URI for the key
           example: "pkcs11:token-id=engine1;id=key123;type=private"
+        id:
+          type: string
+          format: uuid
+          description: Identifier the database assigns to the key. It never changes.
+          example: "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c9d"
+        digest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: >-
+            SHA-256 of the DER SubjectPublicKeyInfo of the public key, in hexadecimal. The same public key is
+            stored once per crypto engine.
+          example: "8787a0128436c18ccf278f6618b566faed694f0884473bc8217f98f7748d3b04"
         key_id:
           type: string
-          description: Unique identifier for the key
-          example: "key-123e4567-e89b-12d3-a456-426614174000"
+          description: Name of the key in its crypto engine
+          example: "8787a0128436c18ccf278f6618b566faed694f0884473bc8217f98f7748d3b04"
         name:
           type: string
           description: Human-readable name for the key

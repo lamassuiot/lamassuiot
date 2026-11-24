@@ -5,7 +5,7 @@
 | **Date** | 2026-11-24 |
 | **Authors** | Engineering Team |
 | **Focus** | KMS, CA Service, VA, `ca-to-kms-migration` |
-| **Implementation Status** | Phase 1 (migration tool) and Phase 2 (schema) done; Phase 3 (references and code) pending |
+| **Implementation Status** | Phase 1 (migration tool), Phase 2 (schema) and Phase 3a (resolution, aliases, API) done; Phase 3b (references) pending |
 
 ## 1. Abstract
 
@@ -45,13 +45,30 @@ A key whose engine object is named by its SKI keeps that name until `NormalizeKe
 
 ### 5.2 Resolution
 
-An identifier resolves, in this order, as: a PKCS#11 URI; an `id`; a `digest` (in several engines the engine must be given, as `key_id` does today); an alias. An alias is rejected when it is a UUID, a 64-character hex string or starts with `pkcs11:`, so it can never shadow another resolution. (A SHA-256 digest has 64 hex characters; the 40 of a SHA-1 SKI are not a digest.)
+An identifier resolves, in this order, as:
+
+1. a PKCS#11 URI (`pkcs11:token-id=<engine>;id=<name>;...`);
+2. an `id`, when it has the shape of a UUID (any case);
+3. a `digest`, when it has the shape of 64 hexadecimal digits (any case, compared in lowercase);
+4. the name of the key in its engine (`key_id`), while that column exists;
+5. an alias, but only when the identifier has neither of the shapes of steps 2 and 3.
+
+A digest or a `key_id` held by several engines does not name a single key: the caller must give the `id` or the PKCS#11 URI, and gets `keyID is held by several engines` otherwise.
+
+An identifier shaped like an id or a digest that matches nothing is "not found". It is never looked up as an alias: an alias of that shape would otherwise answer for a key that does not exist, and a client that asks for the key with a given digest could be handed another key. Step 4 stays for the keys an engine holds under their SKI, until `NormalizeKeyNames` renames them.
+
+### 5.2.1 Aliases
+
+`UpdateKeyAliases` refuses (`400`, `alias must not look like a key id (UUID), a key digest (64 hexadecimal digits) or a pkcs11 URI`) an alias that is a UUID, is 64 hexadecimal digits in either case, or starts with `pkcs11:`. It still refuses an alias equal to the `key_id` of any key, and one already in use. A SHA-256 digest has 64 hexadecimal digits; the 40 of a SHA-1 SKI are not a digest, so a SKI is a valid alias, which is how `NormalizeKeyNames` keeps the old name of a key it renames.
+
+The `kms` migration drops the aliases already stored with an id or a digest shape: they could never be used again.
 
 ### 5.3 Phases
 
 1. **Migration tool (done).** The tool also looks a key up by the digest of its public key in the engine and skips it when the KMS has it. CAs imported before the KMS are still registered under their SKI.
 2. **Schema, additive (done).** Migration `kms/20261124100000_kms_key_identity.sql` adds `id` and `digest`, removes the duplicates the earlier tool left (keeping the row named by the digest, moving certificate and CRL-signer references to it, and keeping the aliases and the old name as aliases) and adds `UNIQUE (digest, engine_id)`. It stops, listing them, when it cannot tell which duplicate the engine holds, or when a public key cannot be read. The storage computes `digest` on insert. `id` and `digest` are not in the API yet.
-3. **References and code (pending).** `ca.certificates.key_id` and `va.crl_settings.signer_key_id` become references to `kms_keys.id`; `key_id` is renamed `engine_key_id`; the resolution of 5.2 and the alias rule are implemented in every place an alias is written; `VerifySignature` and the VA look keys up by reference and not by SKI; OpenAPI, `pki.json` and the SDK follow.
+3. **Resolution, aliases and API (done, 3a).** `GetKey` resolves as in 5.2 through two new storage lookups (`SelectExistsByID`, `SelectByDigest`), alias writes are validated as in 5.2.1, and `id` and `digest` are part of the API (`Key`, `kms-openapi.yaml`, `pki.json`). The HTTP client maps the errors of `GetKey` and `UpdateKeyAliases`.
+4. **References (pending, 3b).** `ca.certificates.key_id` and `va.crl_settings.signer_key_id` become references to `kms_keys.id`; `key_id` is renamed `engine_key_id`; `VerifySignature` and the VA look keys up by reference and not by SKI; the migration tool follows.
 
 The phases are separate commits of one change so that each leaves the repository passing its tests: renaming the column and moving the references change what the code writes, so they go with the code.
 
@@ -63,6 +80,7 @@ Phase 2 is additive for readers of the table. Removing a duplicate row is not re
 
 - A removed duplicate is only ever one the database can show to be redundant: the survivor is named by the digest and has a private key whenever the removed row has one. Anything else aborts the migration.
 - Aliases merged into the survivor are checked against the `key_id` of every key, so a merged alias cannot start addressing another key.
+- An id or a digest is never resolved through an alias (5.2), so nobody who can write aliases can make an identifier that names a key by its content answer with another key.
 - The `digest` is derived from the stored public key, never taken from a client, and is not updatable.
 - The migration uses fixed schema names and parameters in the dynamic statements.
 
@@ -74,4 +92,4 @@ Phase 2 is additive for readers of the table. Removing a duplicate row is not re
 
 ## 9. Open Questions
 
-- Does the API keep a `key_id` field next to `id` and `digest`, or expose only the new two? It affects Phase 3 only.
+- Does the API keep a `key_id` field next to `id` and `digest` once `key_id` becomes `engine_key_id`, or expose only the new two? `id` and `digest` are already exposed next to `key_id`; this decides what happens to `key_id` in Phase 3b.

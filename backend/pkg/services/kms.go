@@ -278,10 +278,9 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// A key is identified by (key_id, engine_id). A PKCS#11 URI carries the engine in
-	// token-id and an alias is unique across engines, so both address a single key. A bare
-	// keyID is only a search: it resolves while one engine holds it and is rejected once
-	// several do, rather than silently picking a copy.
+	// A PKCS#11 URI carries the engine in token-id, an id names a single row and an alias is unique across
+	// engines, so each addresses a single key. A bare digest or keyID is only a search: it resolves while one
+	// engine holds it and is rejected once several do, rather than silently picking a copy.
 	if strings.HasPrefix(input.Identifier, "pkcs11:") {
 		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
 		engineID, keyID, _, err := parsePKCS11ID(input.Identifier)
@@ -304,8 +303,37 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return key, nil
 	}
 
-	// A keyID takes precedence over an alias, so an alias can never shadow the key whose
-	// keyID it happens to match.
+	// What is left is looked up as, in this order: the id of a key, the digest of its public key, its name in
+	// its engine (the key_id) and an alias. Each step precedes the next so that an alias never shadows the key
+	// whose id, digest or name it happens to match. An id and a digest are not looked up as an alias: an alias
+	// stored before aliases of these shapes were refused would otherwise answer for a key that does not exist.
+	isID := chelpers.IsKeyUUID(input.Identifier)
+	isDigest := chelpers.IsKeyDigest(input.Identifier)
+
+	if isID {
+		lFunc.Debugf("checking if Key '%s' exists via ID", input.Identifier)
+		exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, strings.ToLower(input.Identifier))
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+			return nil, err
+		}
+		if exists {
+			return key, nil
+		}
+	}
+
+	if isDigest {
+		lFunc.Debugf("checking if Key '%s' exists via digest", input.Identifier)
+		copies, err := svc.kmsStorage.SelectByDigest(ctx, strings.ToLower(input.Identifier))
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if digest '%s' exists in storage engine: %s", input.Identifier, err)
+			return nil, err
+		}
+		if len(copies) > 0 {
+			return singleCopy(lFunc, input.Identifier, copies)
+		}
+	}
+
 	lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
 	copies, err := svc.kmsStorage.SelectByKeyID(ctx, input.Identifier)
 	if err != nil {
@@ -313,17 +341,13 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, err
 	}
 
-	if len(copies) == 1 {
-		return copies[0], nil
+	if len(copies) > 0 {
+		return singleCopy(lFunc, input.Identifier, copies)
 	}
 
-	if len(copies) > 1 {
-		engineIDs := make([]string, len(copies))
-		for i, k := range copies {
-			engineIDs[i] = k.EngineID
-		}
-		lFunc.Infof("keyID %s is held by engines %v; an engine must be specified", input.Identifier, engineIDs)
-		return nil, errs.ErrKeyEngineRequired
+	if isID || isDigest {
+		lFunc.Infof("key %s can not be found in storage engine via id, digest or keyID", input.Identifier)
+		return nil, errs.ErrKeyNotFound
 	}
 
 	lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
@@ -339,6 +363,22 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 	}
 
 	return key, nil
+}
+
+// singleCopy returns the key an identifier found in the storage. The same digest or keyID can live in several
+// engines at once, and then it does not address a single key: the caller must say which, rather than have a
+// copy picked silently.
+func singleCopy(lFunc *logrus.Entry, identifier string, copies []*models.Key) (*models.Key, error) {
+	if len(copies) == 1 {
+		return copies[0], nil
+	}
+
+	engineIDs := make([]string, len(copies))
+	for i, k := range copies {
+		engineIDs[i] = k.EngineID
+	}
+	lFunc.Infof("identifier %s is held by engines %v; an engine must be specified", identifier, engineIDs)
+	return nil, errs.ErrKeyEngineRequired
 }
 
 func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
@@ -732,6 +772,13 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 			if !ok {
 				lFunc.Errorf("invalid alias value type for key '%s'", input.ID)
 				return nil, fmt.Errorf("invalid alias value type")
+			}
+
+			// An identifier shaped like an id, a digest or a pkcs11 URI is read as that (see GetKey), so such
+			// an alias would never resolve to this key.
+			if chelpers.IsKeyUUID(alias) || chelpers.IsKeyDigest(alias) || strings.HasPrefix(alias, "pkcs11:") {
+				lFunc.Errorf("alias '%s' has the shape of a key id, a digest or a pkcs11 URI", alias)
+				return nil, errs.ErrKeyAliasReservedFormat
 			}
 
 			// Check for duplicate aliases

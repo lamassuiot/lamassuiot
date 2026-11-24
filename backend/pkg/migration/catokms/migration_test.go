@@ -143,6 +143,13 @@ func (m *mockKMSStorage) SelectByKeyID(_ context.Context, keyID string) ([]*mode
 	return copies, nil
 }
 
+func (m *mockKMSStorage) SelectExistsByID(context.Context, string) (bool, *models.Key, error) {
+	return false, nil, nil
+}
+func (m *mockKMSStorage) SelectByDigest(context.Context, string) ([]*models.Key, error) {
+	return nil, nil
+}
+
 func (m *mockKMSStorage) Insert(_ context.Context, key *models.Key) (*models.Key, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
@@ -189,6 +196,12 @@ func (c *controlledKMSStorage) SelectExistsByKeyID(ctx context.Context, keyID, e
 
 func (c *controlledKMSStorage) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
 	return c.inner.SelectByKeyID(ctx, keyID)
+}
+func (c *controlledKMSStorage) SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error) {
+	return c.inner.SelectExistsByID(ctx, id)
+}
+func (c *controlledKMSStorage) SelectByDigest(ctx context.Context, digest string) ([]*models.Key, error) {
+	return c.inner.SelectByDigest(ctx, digest)
 }
 func (c *controlledKMSStorage) Insert(ctx context.Context, key *models.Key) (*models.Key, error) {
 	c.insertions++
