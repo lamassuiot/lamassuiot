@@ -537,64 +537,6 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
 
-  /cas/{id}/signature/sign:
-    post:
-      tags: [Certificates]
-      summary: Sign arbitrary message with CA private key
-      operationId: caSignatureSign
-      x-authz:
-        namespace: pki
-        schema_name: ca
-        entity_type: ca_certificate
-        action: sign
-      parameters:
-        - $ref: '#/components/parameters/CAId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SignatureSignBody'
-      responses:
-        '200':
-          description: Signed payload
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SignResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
-  /cas/{id}/signature/verify:
-    post:
-      tags: [Certificates]
-      summary: Verify signature using CA public key
-      operationId: caSignatureVerify
-      x-authz:
-        namespace: pki
-        schema_name: ca
-        entity_type: ca_certificate
-        action: read
-      parameters:
-        - $ref: '#/components/parameters/CAId'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SignatureVerifyBody'
-      responses:
-        '200':
-          description: Verification result
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VerifyResponse'
-        '400': { $ref: '#/components/responses/BadRequest' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '500': { $ref: '#/components/responses/InternalError' }
-
   /cas/{id}/certificates/{sn}:
     get:
       tags: [Certificates]
@@ -1234,30 +1176,6 @@ components:
         profile_id:
           type: string
 
-    SignatureSignBody:
-      type: object
-      properties:
-        message:
-          type: string
-          description: Base64 encoded message
-        message_type:
-          type: string
-        signature_algorithm:
-          type: string
-
-    SignatureVerifyBody:
-      type: object
-      properties:
-        signature:
-          type: string
-          description: Base64 encoded signature
-        message:
-          type: string
-        message_type:
-          type: string
-        signature_algorithm:
-          type: string
-
     UpdateCertificateStatusBody:
       type: object
       properties:
@@ -1712,18 +1630,6 @@ components:
     RevocationReason:
       type: string
       description: Reason for certificate revocation
-
-    SignResponse:
-      type: object
-      properties:
-        signed_data:
-          type: string
-
-    VerifyResponse:
-      type: object
-      properties:
-        valid:
-          type: boolean
 
     Error:
       type: object

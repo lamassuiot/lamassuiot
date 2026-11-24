@@ -208,22 +208,6 @@ func (mw CAEventPublisher) ImportCertificate(ctx context.Context, input services
 	return mw.Next.ImportCertificate(ctx, input)
 }
 
-func (mw CAEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventType, models.EventSignatureSignKey)
-	ctx = context.WithValue(ctx, core.LamassuContextKeyEventSubject, fmt.Sprintf("ca/%s", input.CAID))
-
-	defer func() {
-		if err == nil {
-			mw.eventMWPub.PublishCloudEvent(ctx, output)
-		}
-	}()
-	return mw.Next.SignatureSign(ctx, input)
-}
-
-func (mw CAEventPublisher) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
-	return mw.Next.SignatureVerify(ctx, input)
-}
-
 func (mw CAEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	return mw.Next.GetCertificateBySerialNumber(ctx, input)
 }

@@ -44,8 +44,6 @@ func registerCARoutes(parentRouterGroup *gin.RouterGroup, svc services.CAService
 	rv1.GET("/cas/:id/certificates", certAuthzMw.List(), routes.GetCertificatesByCA)
 	rv1.GET("/cas/:id/certificates/status/:status", certAuthzMw.List(), routes.GetCertificatesByCAAndStatus)
 	rv1.POST("/cas/:id/certificates/sign", caAuthzMw.Resource("sign", idKey), routes.SignCertificate)
-	rv1.POST("/cas/:id/signature/sign", caAuthzMw.Resource("sign", idKey), routes.SignatureSign)
-	rv1.POST("/cas/:id/signature/verify", caAuthzMw.Resource("read", idKey), routes.SignatureVerify)
 	rv1.GET("/cas/:id/certificates/:sn", certAuthzMw.Resource("read", certSNKey), routes.GetCertificateBySerialNumber)
 	rv1.DELETE("/cas/:id", caAuthzMw.Resource("delete", idKey), routes.DeleteCA)
 

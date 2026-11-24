@@ -68,19 +68,6 @@ type CreateCertificateBody struct {
 	Metadata          map[string]any               `json:"metadata"`
 }
 
-type SignatureSignBody struct {
-	Message          string                 `json:"message"`
-	MessageType      models.SignMessageType `json:"message_type"`
-	SigningAlgorithm string                 `json:"signature_algorithm"`
-}
-
-type SignatureVerifyBody struct {
-	Signature        string                 `json:"signature"`
-	Message          string                 `json:"message"`
-	MessageType      models.SignMessageType `json:"message_type"`
-	SigningAlgorithm string                 `json:"signature_algorithm"`
-}
-
 type UpdateCertificateStatusBody struct {
 	NewStatus        models.CertificateStatus `json:"status"`
 	RevocationReason models.RevocationReason  `json:"revocation_reason"`
