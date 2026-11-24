@@ -54,6 +54,12 @@ DECLARE
     ghost record;
     ambiguous text := '';
     moved jsonb;
+    -- A ca schema that has not run its migrations yet (a 3.8 database) has no key_id in ca.certificates: the CA migration
+    -- that adds it also relinks every certificate to its key by public key. Only a reference that exists is moved.
+    certificates_reference boolean := EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'ca' AND table_name = 'certificates' AND column_name IN ('engine_id', 'key_id') HAVING count(*) = 2);
+    signer_reference boolean := EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'va' AND table_name = 'crl_settings' AND column_name IN ('signer_engine_id', 'signer_key_id') HAVING count(*) = 2);
 BEGIN
     FOR grp IN
         SELECT digest, engine_id FROM kms_keys GROUP BY digest, engine_id HAVING count(*) > 1 ORDER BY engine_id, digest
@@ -77,11 +83,11 @@ BEGIN
         FOR ghost IN SELECT * FROM kms_keys WHERE digest = grp.digest AND engine_id = grp.engine_id AND key_id <> grp.digest LOOP
             RAISE NOTICE 'removing key % of engine %: it is the public key of %, which the engine holds under that name', ghost.key_id, ghost.engine_id, grp.digest;
 
-            IF to_regclass('ca.certificates') IS NOT NULL THEN
+            IF certificates_reference THEN
                 EXECUTE 'UPDATE ca.certificates SET key_id = $1 WHERE engine_id = $2 AND key_id = $3'
                     USING grp.digest, ghost.engine_id, ghost.key_id;
             END IF;
-            IF to_regclass('va.crl_settings') IS NOT NULL THEN
+            IF signer_reference THEN
                 EXECUTE 'UPDATE va.crl_settings SET signer_key_id = $1 WHERE signer_engine_id = $2 AND signer_key_id = $3'
                     USING grp.digest, ghost.engine_id, ghost.key_id;
             END IF;

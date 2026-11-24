@@ -305,6 +305,42 @@ func TestKMSKeyIdentityMigrationWithReferences(t *testing.T) {
 	assert.Equal(t, digestC, keyID, "so does a CRL signer")
 }
 
+// TestKMSKeyIdentityMigrationBefore38CAMigration covers a 3.8 database whose ca schema is already in the pki database:
+// ca.certificates exists, but the ca migrations have not run, so it has no key_id column yet (the CA migration that
+// adds it relinks the certificates to their key by public key). Duplicates the earlier tool left must still be removed.
+func TestKMSKeyIdentityMigrationBefore38CAMigration(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, con := RunDB(t, logger, kmsDBName)
+	defer cleanup()
+
+	ctx := context.Background()
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	// the shape 3.8 leaves: no key_id, the key is found through the SKI
+	require.NoError(t, con.Exec(`CREATE SCHEMA ca;
+		CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, engine_id text, subject_key_id text)`).Error)
+	// the VA schema of 3.8 holds roles keyed by SKI, no crl_settings yet
+	require.NoError(t, con.Exec(`CREATE SCHEMA va; CREATE TABLE va.va_role (ca_ski text PRIMARY KEY)`).Error)
+
+	publicC, digestC := kmsKeyFixture(t)
+	const skiC = "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+	insertKMSKey(t, con, digestC, "e1", publicC, `[]`, true)
+	insertKMSKey(t, con, skiC, "e1", publicC, `[]`, true)
+	require.NoError(t, con.Exec(`INSERT INTO ca.certificates VALUES ('s1', 'e1', ?)`, skiC).Error)
+
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.NoError(t, err, "a ca schema without key_id must not block the kms migration")
+
+	var keys int64
+	require.NoError(t, con.Raw(`SELECT count(*) FROM kms_keys WHERE digest = ?`, digestC).Scan(&keys).Error)
+	assert.EqualValues(t, 1, keys, "the duplicate is removed")
+	var kept string
+	require.NoError(t, con.Raw(`SELECT key_id FROM kms_keys WHERE digest = ?`, digestC).Scan(&kept).Error)
+	assert.Equal(t, digestC, kept)
+}
+
 // TestKMSKeyIdentityMigrationRefusesAmbiguousDuplicates: when none of the rows holding the same key in an
 // engine is named by its digest, the migration cannot tell which one the engine holds.
 func TestKMSKeyIdentityMigrationRefusesAmbiguousDuplicates(t *testing.T) {
