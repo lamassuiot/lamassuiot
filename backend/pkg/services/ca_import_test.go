@@ -216,6 +216,32 @@ func importCAChain(t *testing.T, omitChildAKI bool) []*x509.Certificate {
 	return certs
 }
 
+// The stored status follows the validity: a certificate that already expired is imported as EXPIRED, as ImportCertificate does.
+func TestImportCAStoresAnExpiredCertificateAsExpired(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(10),
+		Subject:               pkix.Name{CommonName: "expired-root"},
+		NotBefore:             time.Now().Add(-2 * time.Hour),
+		NotAfter:              time.Now().Add(-time.Hour),
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		SubjectKeyId:          []byte{10},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+	cert, err := x509.ParseCertificate(der)
+	require.NoError(t, err)
+
+	svc, repo := newImportCAService(t)
+	ca, err := svc.ImportCA(context.Background(), coreservices.ImportCAInput{CACertificate: (*models.X509Certificate)(cert)})
+	require.NoError(t, err)
+	require.Equal(t, models.StatusExpired, ca.Certificate.Status)
+	require.Equal(t, models.StatusExpired, repo.cas[ca.ID].Certificate.Status)
+}
+
 func TestImportCAPreservesAuthorityKeyID(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
