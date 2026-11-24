@@ -10,7 +10,7 @@ In deployments the migrations are run by the Helm chart as a Kubernetes Job. Thi
 goose-lamassu DBSTRING COMMAND [ARGS...]
 ```
 
-- `DBSTRING`: PostgreSQL connection string. Since 4.0.0 all services share the `pki` database and each one has its own schema, so it must include `dbname=pki` and `search_path=<schema>`, where `<schema>` is one of the supported schemas below. The tool exits if `search_path` is missing or is not a supported schema. It does not validate `dbname`, so check it before running the command.
+- `DBSTRING`: Direct PostgreSQL connection string. Since 4.0.0 the engine services share one database (normally `pki`), and each has its own schema. Set `dbname` to the database used by your deployment and include `search_path=<schema>`, where `<schema>` is one of the supported schemas below. The tool exits if `search_path` is missing or unsupported. It does not validate `dbname`, so check it before running the command.
 - `COMMAND`: a goose command. The most useful are `up`, `up-to VERSION`, `down`, `status` and `version`.
 
 ```bash

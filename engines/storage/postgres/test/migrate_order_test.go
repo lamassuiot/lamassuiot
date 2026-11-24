@@ -13,6 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMigrateSchemaReturnsErrorWhenMigratorCannotInitialize(t *testing.T) {
+	const schema = "no_embedded_migrations"
+	cfg, suite := BeforeSuite([]string{schema}, false)
+	defer suite.AfterSuite()
+
+	logger := logrus.NewEntry(logrus.New())
+	require.ErrorContains(t, postgres.MigrateSchema(logger, cfg, schema), "could not initialize migrator")
+}
+
 // The CA schema cannot be migrated without the KMS one, so migrating it migrates the KMS first.
 func TestMigratingCAMigratesKMSFirst(t *testing.T) {
 	cfg, suite := BeforeSuite([]string{postgres.CA_SCHEMA}, false)
