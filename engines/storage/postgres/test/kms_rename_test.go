@@ -18,7 +18,7 @@ func TestKMSStoreRenameKey(t *testing.T) {
 	ctx := context.Background()
 
 	_, err := kmsStore.Insert(ctx, &models.Key{
-		KeyID: "ski", EngineID: "engine-a", Name: "imported", Algorithm: "ECDSA", Size: 256, PublicKey: "pub", HasPrivateKey: true,
+		KeyID: "ski", EngineID: "engine-a", Name: "imported", Algorithm: "ECDSA", Size: 256, PublicKey: "pub", Digest: fakeDigest("ski"), HasPrivateKey: true,
 		CreationTS: time.Now().UTC().Truncate(time.Second), Aliases: []string{"my-alias"}, Tags: []string{}, Metadata: map[string]any{},
 	})
 	require.NoError(t, err)

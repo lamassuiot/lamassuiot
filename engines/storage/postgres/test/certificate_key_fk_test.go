@@ -5,8 +5,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -25,6 +27,13 @@ import (
 
 // newKMSAndCertStores starts Postgres with the KMS and CA schemas, migrated in the order the CA needs:
 // its certificates reference the keys of the KMS.
+// fakeDigest is the digest of the placeholder public keys these tests store: the storage derives the digest of a
+// real public key itself, and cannot of one that is not.
+func fakeDigest(name string) string {
+	sum := sha256.Sum256([]byte(name))
+	return hex.EncodeToString(sum[:])
+}
+
 func newKMSAndCertStores(t *testing.T) (*PostgresSuite, storage.KMSKeysRepo, storage.CertificatesRepo) {
 	t.Helper()
 	cfg, suite := BeforeSuite([]string{postgres.KMS_SCHEMA, postgres.CA_SCHEMA}, false)
@@ -44,7 +53,7 @@ func newKMSAndCertStores(t *testing.T) (*PostgresSuite, storage.KMSKeysRepo, sto
 func insertTestKey(t *testing.T, store storage.KMSKeysRepo, engineID, keyID string) {
 	t.Helper()
 	_, err := store.Insert(context.Background(), &models.Key{
-		KeyID: keyID, EngineID: engineID, Name: keyID, Algorithm: "ECDSA", Size: 256, PublicKey: "pub-" + keyID,
+		KeyID: keyID, EngineID: engineID, Name: keyID, Algorithm: "ECDSA", Size: 256, PublicKey: "pub-" + keyID, Digest: fakeDigest(keyID),
 		HasPrivateKey: true, CreationTS: time.Now().UTC().Truncate(time.Second),
 		Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
 	})

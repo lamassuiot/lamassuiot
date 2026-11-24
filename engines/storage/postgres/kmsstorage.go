@@ -3,9 +3,11 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -110,12 +112,24 @@ func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias strin
 	return true, &elem, nil
 }
 
+// Insert stores the key under the digest of its public key, which it derives when the caller has not set it:
+// within an engine a public key is stored once, so a second copy under another name is rejected.
 func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
+	if kmsKey.Digest == "" {
+		digest, err := chelpers.StoredPublicKeyDigest(kmsKey.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("cannot store key %s: %w", kmsKey.KeyID, err)
+		}
+		kmsKey.Digest = digest
+	}
+
 	return db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
 	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
+		// the id and the digest are fixed when the key is stored: the digest is that of its public key
+		Omit("id", "digest").
 		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
 	if tx.Error != nil {
 		return nil, tx.Error

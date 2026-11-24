@@ -78,7 +78,7 @@ func TestCertificateKeyForeignKeyMigration(t *testing.T) {
 	require.NoError(t, con.Exec(`CREATE TABLE kms.kms_keys (
 		key_id text NOT NULL, engine_id text NOT NULL, metadata jsonb NULL,
 		name text NOT NULL DEFAULT '', algorithm text NOT NULL DEFAULT '', size int8 NOT NULL DEFAULT 0,
-		public_key text NOT NULL, creation_ts timestamptz NULL,
+		public_key text NOT NULL, digest text NULL, creation_ts timestamptz NULL,
 		aliases jsonb DEFAULT '[]'::jsonb, has_private_key boolean DEFAULT true, tags jsonb DEFAULT '[]'::jsonb,
 		CONSTRAINT kms_keys_pkey PRIMARY KEY (key_id, engine_id))`).Error)
 	keysOf := func(engineID string) int64 {

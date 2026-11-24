@@ -256,15 +256,20 @@ func registerPublicKeysOfDeletedCAs(ctx context.Context, tx *sql.Tx) ([][2]strin
 		}
 		// the KMS stores public keys as the base64 of their PEM encoding
 		publicKey := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki}))
+		digest, err := chelpers.PublicKeyDigest(certificate.PublicKey)
+		if err != nil {
+			logger.Warnf("cannot register the public key of certificate %s: %s", o.serialNumber, err)
+			continue
+		}
 		name := o.commonName
 		if name == "" {
 			name = o.serialNumber
 		}
 
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO kms.kms_keys (key_id, engine_id, name, algorithm, size, public_key, has_private_key, creation_ts, metadata, aliases, tags)
-			VALUES ($1, $2, $3, $4, $5, $6, false, now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
-			o.keyID, o.engineID, name, algorithm, size, publicKey); err != nil {
+			INSERT INTO kms.kms_keys (key_id, engine_id, name, algorithm, size, public_key, digest, has_private_key, creation_ts, metadata, aliases, tags)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, false, now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
+			o.keyID, o.engineID, name, algorithm, size, publicKey, digest); err != nil {
 			return nil, fmt.Errorf("register the public key of certificate %s: %w", o.serialNumber, err)
 		}
 		registered = append(registered, [2]string{o.engineID, o.keyID})

@@ -22,7 +22,11 @@ type CertificateKey struct {
 
 // KMS
 type Key struct {
-	PKCS11URI     string         `json:"pkcs11_uri" gorm:"-"`
+	PKCS11URI string `json:"pkcs11_uri" gorm:"-"`
+	// ID is assigned by the database when the key is stored. Like Digest, the SHA-256 hex of the public key,
+	// it is not part of the API yet.
+	ID            string         `json:"-" gorm:"column:id;default:gen_random_uuid()"`
+	Digest        string         `json:"-" gorm:"column:digest"`
 	KeyID         string         `json:"key_id"`
 	Name          string         `json:"name"`
 	Aliases       []string       `json:"aliases" gorm:"serializer:json"`
