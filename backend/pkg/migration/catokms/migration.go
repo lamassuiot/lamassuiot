@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -19,6 +20,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // Result summarises the outcome of a migration run.
@@ -71,12 +73,35 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 	if err != nil {
 		return Result{}, fmt.Errorf("get CA storage: %w", err)
 	}
+	kmsDB, err := postgres.CreatePostgresDBConnection(logger, pg.Config, postgres.KMS_SCHEMA)
+	if err != nil {
+		return Result{}, fmt.Errorf("connect to KMS storage: %w", err)
+	}
+	if err := checkKMSSchema(kmsDB); err != nil {
+		return Result{}, err
+	}
 	kmsStorage, err := engine.GetKMSStorage()
 	if err != nil {
 		return Result{}, fmt.Errorf("get KMS storage: %w", err)
 	}
 
 	return Migrate(ctx, logger, caStorage, kmsStorage, dryRun)
+}
+
+// checkKMSSchema refuses a kms schema that has not been migrated to the key identity (kms_keys.digest): the tool
+// registers every key with its digest and applies no migration itself, so against an older schema each insert would
+// fail with a SQL error. The required order is kms -> this tool -> ca -> va.
+func checkKMSSchema(db *gorm.DB) error {
+	var migrated bool
+	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'kms_keys' AND column_name = 'digest')`).Scan(&migrated).Error; err != nil {
+		return fmt.Errorf("check the kms schema: %w", err)
+	}
+	if !migrated {
+		return errors.New("the kms schema has not been migrated: kms_keys has no digest column. Apply the kms migrations " +
+			"(goose-lamassu, schema kms) before this tool; the required order is kms, ca-to-kms-migration, ca, va")
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
