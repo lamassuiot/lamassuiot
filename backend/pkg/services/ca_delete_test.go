@@ -369,6 +369,49 @@ func TestDeleteCAWithoutCascadeRevokesWhatItIssued(t *testing.T) {
 	require.Empty(t, r.deletedCerts)
 }
 
+// withoutKey makes "ca-1" a CA imported without its key, in status.
+func (f deleteCAFixture) withoutKey(status models.CertificateStatus) {
+	ca := f.cas.cas["ca-1"]
+	ca.Certificate.Type = models.CertificateTypeImportedWithoutKey
+	ca.Certificate.Status = status
+	ca.Certificate.EngineID, ca.Certificate.KeyID = "", ""
+	f.cas.cas["ca-1"] = ca
+}
+
+// An active CA imported without its key still operates outside Lamassu: deleting it only removes it from Lamassu, and
+// what it issued keeps its status.
+func TestDeleteActiveCAWithoutKeyKeepsWhatItIssued(t *testing.T) {
+	f := newDeleteCAFixture(t, 0)
+	f.withoutKey(models.StatusActive)
+	f.addChildCA(t, "ca-1", "ca-2", models.StatusActive)
+	f.addIssuedCertificate("ca-1", "leaf-1")
+	r := f.record()
+
+	require.NoError(t, f.svc.DeleteCA(context.Background(), coreservices.DeleteCAInput{CAID: "ca-1"}))
+	require.Empty(t, r.revokedCAs)
+	require.Empty(t, r.revokedCerts)
+	require.Equal(t, models.StatusActive, f.certs.certificates["ca-2-cert"].Status)
+	require.Equal(t, []string{"ca-1"}, f.cas.deleted)
+}
+
+// Once a CA imported without its key is revoked or expired, deleting it revokes what it issued, as for any other CA.
+func TestDeleteInvalidCAWithoutKeyRevokesWhatItIssued(t *testing.T) {
+	for _, status := range []models.CertificateStatus{models.StatusRevoked, models.StatusExpired} {
+		t.Run(string(status), func(t *testing.T) {
+			f := newDeleteCAFixture(t, models.RevocationReason(ocsp.KeyCompromise))
+			f.withoutKey(status)
+			f.addChildCA(t, "ca-1", "ca-2", models.StatusActive)
+			f.addIssuedCertificate("ca-1", "leaf-1")
+			r := f.record()
+
+			require.NoError(t, f.svc.DeleteCA(context.Background(), coreservices.DeleteCAInput{CAID: "ca-1"}))
+			require.Equal(t, []string{"ca-2"}, r.revokedCAs)
+			require.Equal(t, []string{"leaf-1"}, r.revokedCerts)
+			require.Equal(t, []string{"ca-1"}, f.cas.deleted)
+		})
+	}
+}
+
 // Revoking a CA revokes its child CAs, with cessationOfOperation, and the certificates it issued.
 func TestRevokingACARevokesWhatItIssued(t *testing.T) {
 	f := newDeleteCAFixture(t, models.RevocationReason(ocsp.CertificateHold))

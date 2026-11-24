@@ -1225,6 +1225,12 @@ func (svc *CAServiceBackend) revokeWhatCAIssued(ctx context.Context, ca *models.
 // handleCascadeOperations handles the cascade deletion or revocation of child CAs and certificates
 func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *models.CACertificate, cascadeDelete bool, lFunc *logrus.Entry) error {
 	if !cascadeDelete {
+		// Only a CA imported without its key can be deleted while active. It still operates outside Lamassu, so what
+		// it issued stays valid: deleting it only removes it from Lamassu.
+		if ca.Certificate.Status == models.StatusActive {
+			lFunc.Debugf("CA %s is active, keeping the status of its child CAs and the certificates it issued", ca.ID)
+			return nil
+		}
 		lFunc.Debugf("cascade delete is disabled, proceeding with child CA and certificate revocation")
 		return svc.revokeWhatCAIssued(ctx, ca, lFunc)
 	}
