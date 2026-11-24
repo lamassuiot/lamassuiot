@@ -57,6 +57,13 @@ func newRevocationTestCA(t *testing.T, cn string) *revocationTestCA {
 
 func (ca *revocationTestCA) issueLeaf(t *testing.T, serial int64, ocspURLs, crlURLs []string) *x509.Certificate {
 	t.Helper()
+	return ca.issueLeafWithExtensions(t, serial, ocspURLs, crlURLs, nil)
+}
+
+// issueLeafWithExtensions is like issueLeaf, adding exts, such as a CRL distribution points extension crypto/x509
+// cannot write.
+func (ca *revocationTestCA) issueLeafWithExtensions(t *testing.T, serial int64, ocspURLs, crlURLs []string, exts []pkix.Extension) *x509.Certificate {
+	t.Helper()
 	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(serial),
@@ -65,6 +72,7 @@ func (ca *revocationTestCA) issueLeaf(t *testing.T, serial int64, ocspURLs, crlU
 		NotAfter:              time.Now().Add(time.Hour),
 		OCSPServer:            ocspURLs,
 		CRLDistributionPoints: crlURLs,
+		ExtraExtensions:       exts,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca.cert, &key.PublicKey, ca.key)
 	if err != nil {
@@ -171,6 +179,29 @@ func idpExtension(t *testing.T, idp issuingDistributionPoint) []pkix.Extension {
 
 func uriDistributionPoint(uri string) issuingDistributionPointName {
 	return issuingDistributionPointName{FullName: []asn1.RawValue{{Class: asn1.ClassContextSpecific, Tag: 6, Bytes: []byte(uri)}}}
+}
+
+// testDistributionPoint is a DistributionPoint of a certificate (RFC 5280 4.2.1.13). Reasons holds the full encoding of
+// the [1] ReasonFlags field, so that tests can also write a malformed one.
+type testDistributionPoint struct {
+	DistributionPoint issuingDistributionPointName `asn1:"optional,tag:0"`
+	Reasons           asn1.RawValue                `asn1:"optional"`
+}
+
+var (
+	// keyCompromiseOnlyReasons is [1] BIT STRING with only keyCompromise (bit 1) set.
+	keyCompromiseOnlyReasons = asn1.RawValue{FullBytes: []byte{0x81, 0x02, 0x06, 0x40}}
+	// malformedReasons is [1] BIT STRING with no content, which DER forbids.
+	malformedReasons = asn1.RawValue{FullBytes: []byte{0x81, 0x00}}
+)
+
+func cdpExtension(t *testing.T, dps ...testDistributionPoint) []pkix.Extension {
+	t.Helper()
+	value, err := asn1.Marshal(dps)
+	if err != nil {
+		t.Fatalf("could not marshal CRL distribution points: %s", err)
+	}
+	return []pkix.Extension{{Id: asn1.ObjectIdentifier{2, 5, 29, 31}, Value: value}}
 }
 
 func newRevocationTestService(stored *models.Certificate, lookupErr error) DMSManagerServiceBackend {
@@ -428,7 +459,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "OK/CRLWithLamassuIssuingDistributionPoint",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					ext, err := CRLServiceBackend{vaDomains: []string{strings.TrimPrefix(srvURL, "http://")}}.getDistributionPointExtension("aki")
+					ext, err := CRLServiceBackend{vaDomains: []string{strings.TrimPrefix(srvURL, "http://")}}.getDistributionPointExtension("aki", nil)
 					if err != nil {
 						t.Errorf("could not build Lamassu issuing distribution point: %s", err)
 						return nil
@@ -494,6 +525,65 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 55, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			// A present onlySomeReasons with no bit set covers no reason at all (RFC 5280 5.2.5).
+			name: "Err/CRLOnlySomeReasonsEmpty",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					noReason := asn1.BitString{Bytes: []byte{}}
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: noReason})
+				})
+				t.Cleanup(srv.Close)
+				return notInLamassu(), ca.issueLeaf(t, 59, nil, []string{srv.URL})
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			// The certificate itself limits the distribution point to some reasons (RFC 5280 6.3.3 (d)).
+			name: "Err/CRLDistributionPointLimitsReasons",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServer(t, ca, time.Now().Add(time.Hour))
+				t.Cleanup(srv.Close)
+				cdp := cdpExtension(t, testDistributionPoint{DistributionPoint: uriDistributionPoint(srv.URL), Reasons: keyCompromiseOnlyReasons})
+				return notInLamassu(), ca.issueLeafWithExtensions(t, 60, nil, nil, cdp)
+			},
+			expectedErr: "could not verify certificate revocation status",
+		},
+		{
+			name: "Err/CRLDistributionPointLimitsReasonsListsCertificate",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServer(t, ca, time.Now().Add(time.Hour), big.NewInt(61))
+				t.Cleanup(srv.Close)
+				cdp := cdpExtension(t, testDistributionPoint{DistributionPoint: uriDistributionPoint(srv.URL), Reasons: keyCompromiseOnlyReasons})
+				return notInLamassu(), ca.issueLeafWithExtensions(t, 61, nil, nil, cdp)
+			},
+			expectedErr: "certificate is revoked",
+		},
+		{
+			name: "OK/CRLDistributionPointLimitsReasonsWithCompleteDistributionPoint",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				limited := crlServer(t, ca, time.Now().Add(time.Hour))
+				t.Cleanup(limited.Close)
+				complete := crlServer(t, ca, time.Now().Add(time.Hour))
+				t.Cleanup(complete.Close)
+				cdp := cdpExtension(t,
+					testDistributionPoint{DistributionPoint: uriDistributionPoint(limited.URL), Reasons: keyCompromiseOnlyReasons},
+					testDistributionPoint{DistributionPoint: uriDistributionPoint(complete.URL)},
+				)
+				return notInLamassu(), ca.issueLeafWithExtensions(t, 62, nil, nil, cdp)
+			},
+		},
+		{
+			// crypto/x509 never reads the reasons of a distribution point, so it parses this certificate.
+			name: "Err/CRLDistributionPointMalformed",
+			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
+				srv := crlServer(t, ca, time.Now().Add(time.Hour))
+				t.Cleanup(srv.Close)
+				cdp := cdpExtension(t, testDistributionPoint{DistributionPoint: uriDistributionPoint(srv.URL), Reasons: malformedReasons})
+				return notInLamassu(), ca.issueLeafWithExtensions(t, 63, nil, nil, cdp)
 			},
 			expectedErr: "could not verify certificate revocation status",
 		},
@@ -715,6 +805,31 @@ func TestEnrollmentChainRevocation(t *testing.T) {
 				return []*x509.Certificate{intermediate.issueLeaf(t, 106, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
 			},
 			allowUnverifiable: true,
+		},
+		{
+			// A CRL of end-entity certificates only says nothing about an intermediate CA (RFC 5280 6.3.3 (b)(2)(iii)).
+			name: "Err/IntermediateCRLOnlyContainsUserCerts",
+			chain: func(t *testing.T) []*x509.Certificate {
+				srv := crlServerWithExtensions(t, root, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
+				})
+				t.Cleanup(srv.Close)
+				intermediate := root.issueSubCA(t, "intermediate-ca", 204, nil, []string{srv.URL})
+				return []*x509.Certificate{intermediate.issueLeaf(t, 110, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
+			expectedErrs: []string{"could not verify certificate revocation status", "intermediate-ca"},
+		},
+		{
+			// A CRL of CA certificates only (an ARL) covers an intermediate CA (RFC 5280 6.3.3 (b)(2)(ii)).
+			name: "OK/IntermediateCRLOnlyContainsCACerts",
+			chain: func(t *testing.T) []*x509.Certificate {
+				srv := crlServerWithExtensions(t, root, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
+					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
+				})
+				t.Cleanup(srv.Close)
+				intermediate := root.issueSubCA(t, "intermediate-ca", 205, nil, []string{srv.URL})
+				return []*x509.Certificate{intermediate.issueLeaf(t, 111, nil, []string{crlURL(t, intermediate)}), intermediate.cert}
+			},
 		},
 		{
 			name: "OK/ExtraUnrelatedCertificateIgnored",

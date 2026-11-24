@@ -1215,7 +1215,50 @@ const (
 var (
 	oidExtensionIssuingDistributionPoint = asn1.ObjectIdentifier{2, 5, 29, 28}
 	oidExtensionDeltaCRLIndicator        = asn1.ObjectIdentifier{2, 5, 29, 27}
+	oidExtensionCRLDistributionPoints    = asn1.ObjectIdentifier{2, 5, 29, 31}
 )
+
+// crlDistributionPoint mirrors a DistributionPoint of the CRL distribution points extension of RFC 5280 4.2.1.13.
+// crypto/x509 only keeps its URIs, and drops the reasons it is limited to.
+type crlDistributionPoint struct {
+	DistributionPoint issuingDistributionPointName `asn1:"optional,tag:0"`
+	Reasons           asn1.BitString               `asn1:"optional,tag:1"`
+	CRLIssuer         asn1.RawValue                `asn1:"optional,tag:2"`
+}
+
+// allReasonsDistributionPoints returns the URIs of the CRL distribution points of cert that cover every revocation
+// reason, that is, that have no reasons field (RFC 5280 4.2.1.13). A distribution point with one is left out
+// whatever its bits, as RFC 5280 recommends against segmenting CRLs by reason.
+func allReasonsDistributionPoints(cert *x509.Certificate) ([]string, error) {
+	var uris []string
+	for _, ext := range cert.Extensions {
+		if !ext.Id.Equal(oidExtensionCRLDistributionPoints) {
+			continue
+		}
+
+		var dps []crlDistributionPoint
+		if rest, err := asn1.Unmarshal(ext.Value, &dps); err != nil || len(rest) > 0 {
+			return nil, fmt.Errorf("malformed CRL distribution points extension")
+		}
+		for _, dp := range dps {
+			if dp.Reasons.Bytes != nil {
+				continue
+			}
+			for _, name := range dp.DistributionPoint.FullName {
+				if isURIGeneralName(name) {
+					uris = append(uris, string(name.Bytes))
+				}
+			}
+		}
+	}
+
+	return uris, nil
+}
+
+// isURIGeneralName tells whether name is a GeneralName uniformResourceIdentifier, [6] IA5String.
+func isURIGeneralName(name asn1.RawValue) bool {
+	return name.Class == asn1.ClassContextSpecific && name.Tag == 6
+}
 
 // issuingDistributionPoint mirrors the IssuingDistributionPoint extension of RFC 5280 5.2.5.
 type issuingDistributionPoint struct {
@@ -1232,14 +1275,24 @@ type issuingDistributionPointName struct {
 	RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
 }
 
-// checkCRLScope returns an error unless the absence of cert from crl proves it is not revoked. Delta CRLs only list
-// changes since a base CRL, and an IssuingDistributionPoint may limit the CRL to CA certificates, some revocation
-// reasons, another issuer's certificates or another partition. Without this check, a validly signed CRL of narrower
-// scope from the same CA could stand in for the complete one.
+// checkCRLScope returns an error unless the absence of cert from crl, downloaded from crlDP, proves it is not revoked.
+// Delta CRLs only list changes since a base CRL, and an IssuingDistributionPoint may limit the CRL to CA or end-entity
+// certificates, some revocation reasons, another issuer's certificates or another partition. The distribution point of
+// cert may also limit the CRL to some reasons. Without this check, a validly signed CRL of narrower scope from the
+// same CA could stand in for the complete one. A CRL must cover every reason on its own: unlike RFC 5280 6.3.3 (d),
+// the reasons covered by several CRLs are not added up.
 //
 // As in RFC 5280 6.3.3 (b)(2)(i), a distribution point named by the CRL must be one of the CRL distribution points of
 // cert, not necessarily the one the CRL was downloaded from: a certificate may list mirrors of the same CRL.
-func checkCRLScope(crl *x509.RevocationList, cert *x509.Certificate) error {
+func checkCRLScope(crl *x509.RevocationList, cert *x509.Certificate, crlDP string) error {
+	allReasonsDPs, err := allReasonsDistributionPoints(cert)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(allReasonsDPs, crlDP) {
+		return fmt.Errorf("the CRL distribution point of the certificate only covers some revocation reasons")
+	}
+
 	for _, ext := range crl.Extensions {
 		switch {
 		case ext.Id.Equal(oidExtensionDeltaCRLIndicator):
@@ -1250,20 +1303,29 @@ func checkCRLScope(crl *x509.RevocationList, cert *x509.Certificate) error {
 				return fmt.Errorf("malformed issuing distribution point extension")
 			}
 
-			if idp.OnlyContainsCACerts || idp.OnlyContainsAttributeCerts || idp.IndirectCRL || idp.OnlySomeReasons.BitLength > 0 {
+			// A present onlySomeReasons restricts the CRL whatever its bits: with none set it covers no reason at all
+			// (RFC 5280 5.2.5). encoding/asn1 leaves Bytes nil only when the field is absent.
+			if idp.OnlyContainsAttributeCerts || idp.IndirectCRL || idp.OnlySomeReasons.Bytes != nil {
 				return fmt.Errorf("issuing distribution point restricts the CRL scope")
+			}
+
+			// RFC 5280 6.3.3 (b)(2)(ii) and (iii). IsCA is only set by a basic constraints extension asserting cA.
+			if idp.OnlyContainsUserCerts && cert.IsCA {
+				return fmt.Errorf("CRL only covers end-entity certificates and the certificate is a CA")
+			}
+			if idp.OnlyContainsCACerts && !cert.IsCA {
+				return fmt.Errorf("CRL only covers CA certificates and the certificate is not a CA")
 			}
 
 			if len(idp.DistributionPoint.FullName) == 0 && len(idp.DistributionPoint.RelativeName) == 0 {
 				continue
 			}
 
-			// GeneralName uniformResourceIdentifier is [6] IA5String.
 			matchesURL := slices.ContainsFunc(idp.DistributionPoint.FullName, func(name asn1.RawValue) bool {
-				return name.Class == asn1.ClassContextSpecific && name.Tag == 6 && slices.Contains(cert.CRLDistributionPoints, string(name.Bytes))
+				return isURIGeneralName(name) && slices.Contains(allReasonsDPs, string(name.Bytes))
 			})
 			if !matchesURL {
-				return fmt.Errorf("issuing distribution point does not match any CRL distribution point of the certificate")
+				return fmt.Errorf("issuing distribution point does not match any CRL distribution point of the certificate covering every reason")
 			}
 		}
 	}
@@ -1384,7 +1446,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 			continue
 		}
 
-		if err := checkCRLScope(crl, cert); err != nil {
+		if err := checkCRLScope(crl, cert, crlDP); err != nil {
 			lFunc.Warnf("crl from %s does not cover certificate %s: %s. Checking with next revocation source", crlDP, clientSN, err)
 			continue
 		}
