@@ -419,6 +419,22 @@ func TestInitCRLSettings(t *testing.T) {
 		require.Empty(t, f.repo.rows)
 		require.Equal(t, 0, f.crlFiles("ca-a"), "no CRL is generated")
 	})
+
+	// An imported CA certificate may not have the cRLSign key usage, and then it cannot sign its own CRL: crlIssuer
+	// rejects it as a signer. It gets no settings either, instead of ACTIVE ones whose CRL could never be issued.
+	t.Run("a CA whose certificate cannot sign CRLs gets no settings and no error", func(t *testing.T) {
+		f := newCRLFixture(t)
+		ca := f.addCA("ca-a", "Root")
+		ca.Certificate = f.newCert("Root", x509.KeyUsageCertSign, true, f.key)
+		ca.CertificateSerialNumber = ca.Certificate.SerialNumber
+		f.cas["ca-a"] = ca
+
+		settings, err := f.svc.InitCRLSettings(ctx, "ca-a")
+		require.NoError(t, err)
+		require.Nil(t, settings)
+		require.Empty(t, f.repo.rows)
+		require.Equal(t, 0, f.crlFiles("ca-a"), "no CRL is generated")
+	})
 }
 
 func TestCalculateCRL(t *testing.T) {

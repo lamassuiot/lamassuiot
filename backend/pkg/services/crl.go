@@ -196,6 +196,15 @@ func (svc CRLServiceBackend) InitCRLSettings(ctx context.Context, caID string) (
 		return nil, nil
 	}
 
+	// The CRL of a CA is signed by the CA itself, so its certificate needs the cRLSign key usage, which crlIssuer
+	// checks on every CRL. An imported certificate may not have it: it gets no settings either, rather than ACTIVE
+	// ones whose CRL could never be issued. Like the check above, this is not an error.
+	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	if caCert == nil || caCert.KeyUsage&x509.KeyUsageCRLSign == 0 {
+		lFunc.Warnf("the certificate of CA %s cannot sign CRLs (it needs the cRLSign key usage), so no CRL settings are created", caID)
+		return nil, nil
+	}
+
 	settings, err := svc.vaRepo.Insert(ctx, &models.CRLSettings{
 		CAID:   caID,
 		Status: models.CRLSettingsActive,

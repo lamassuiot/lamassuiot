@@ -26,7 +26,7 @@ func TestImportedCAGetsCRLSettingsOnlyWithAKey(t *testing.T) {
 	profileID := issuanceProfileForImport(t)
 
 	t.Run("a CA imported with its private key", func(t *testing.T) {
-		cert, key := selfSignedCAForVA(t, "imported-with-key")
+		cert, key := selfSignedCAForVA(t, "imported-with-key", x509.KeyUsageCertSign|x509.KeyUsageCRLSign)
 
 		ca, err := caSvc.ImportCA(ctx, services.ImportCAInput{
 			ProfileID:     profileID,
@@ -42,7 +42,7 @@ func TestImportedCAGetsCRLSettingsOnlyWithAKey(t *testing.T) {
 	})
 
 	t.Run("a CA imported whose key the KMS already holds", func(t *testing.T) {
-		cert, key := selfSignedCAForVA(t, "imported-key-already-in-kms")
+		cert, key := selfSignedCAForVA(t, "imported-key-already-in-kms", x509.KeyUsageCertSign|x509.KeyUsageCRLSign)
 		_, err := serverTest.KMS.Service.ImportKey(ctx, services.ImportKeyInput{
 			PrivateKey: key,
 			Name:       "imported-key-already-in-kms",
@@ -61,8 +61,10 @@ func TestImportedCAGetsCRLSettingsOnlyWithAKey(t *testing.T) {
 		requireCRLIssuedBy(t, ca)
 	})
 
+	// A CA without a key cannot sign its CRL. The CAs whose certificate lacks the cRLSign key usage cannot either:
+	// TestOpenSSLCAWithoutCRLSignGetsNoCRLSettings covers those with a certificate OpenSSL issued.
 	t.Run("a CA imported without a key gets no CRL settings", func(t *testing.T) {
-		cert, _ := selfSignedCAForVA(t, "imported-without-key")
+		cert, _ := selfSignedCAForVA(t, "imported-without-key", x509.KeyUsageCertSign|x509.KeyUsageCRLSign)
 
 		ca, err := caSvc.ImportCA(ctx, services.ImportCAInput{
 			ProfileID:     profileID,
@@ -90,7 +92,7 @@ func issuanceProfileForImport(t *testing.T) string {
 	return profile.ID
 }
 
-func selfSignedCAForVA(t *testing.T, cn string) (*x509.Certificate, *ecdsa.PrivateKey) {
+func selfSignedCAForVA(t *testing.T, cn string, keyUsage x509.KeyUsage) (*x509.Certificate, *ecdsa.PrivateKey) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -102,7 +104,7 @@ func selfSignedCAForVA(t *testing.T, cn string) (*x509.Certificate, *ecdsa.Priva
 		NotAfter:              time.Now().Add(24 * time.Hour),
 		IsCA:                  true,
 		BasicConstraintsValid: true,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		KeyUsage:              keyUsage,
 	}
 	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
 	require.NoError(t, err)
