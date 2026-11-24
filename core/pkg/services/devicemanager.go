@@ -94,6 +94,9 @@ type UpdateDeviceMetadataInput struct {
 type UpdateDeviceIdentitySlotInput struct {
 	ID   string              `validate:"required"`
 	Slot models.Slot[string] `validate:"required"`
+	// SyncCertificateStatus makes the update only sync the slot with the status its certificate already has, and never
+	// change the certificate. The handler of the certificate status events sets it; the HTTP API never does.
+	SyncCertificateStatus bool
 }
 
 type DeleteDeviceInput struct {
