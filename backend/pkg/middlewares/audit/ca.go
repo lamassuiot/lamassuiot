@@ -128,18 +128,6 @@ func (mw CAAuditEventPublisher) ImportCertificate(ctx context.Context, input ser
 	return mw.next.ImportCertificate(ctx, input)
 }
 
-func (mw CAAuditEventPublisher) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
-	defer func() {
-		mw.auditPub.HandleServiceOutputAndPublishAuditRecord(ctx, models.EventSignatureSignKey, input, err, output)
-	}()
-
-	return mw.next.SignatureSign(ctx, input)
-}
-
-func (mw CAAuditEventPublisher) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
-	return mw.next.SignatureVerify(ctx, input)
-}
-
 func (mw CAAuditEventPublisher) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	return mw.next.GetCertificateBySerialNumber(ctx, input)
 }

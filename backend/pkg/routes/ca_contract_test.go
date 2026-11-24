@@ -44,6 +44,17 @@ func TestCAOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 	require.NoError(t, contract.ValidateOpenAPI(file))
 }
 
+// The CA key only signs through certificate issuance; the CA API exposes no arbitrary signing or verification with it.
+func TestCARoutesDoNotExposeSignatureEndpoints(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
+	registerCARoutes(router.Group("/api/ca"), nil, newRemoteAuthzEngine(client, models.CASource, logrus.NewEntry(logrus.New())), logrus.NewEntry(logrus.New()))
+	for _, route := range router.Routes() {
+		assert.NotContains(t, route.Path, "/signature/", "%s %s must not be registered", route.Method, route.Path)
+	}
+}
+
 func TestCreateCertificateContractDetectsAnOtherwiseValidWrongAction(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

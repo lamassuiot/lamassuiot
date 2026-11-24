@@ -90,19 +90,6 @@ func (m *MockCAService) DeleteCA(ctx context.Context, input services.DeleteCAInp
 	return args.Error(0)
 }
 
-func (m *MockCAService) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
-	args := m.Called(ctx, input)
-	val := args.Get(0).(*[]byte)
-	if val != nil {
-		return *val, args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-func (m *MockCAService) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
-	args := m.Called(ctx, input)
-	return args.Bool(0), args.Error(1)
-}
-
 func (m *MockCAService) SignCertificate(ctx context.Context, input services.SignCertificateInput) (*models.Certificate, error) {
 	args := m.Called(ctx, input)
 	return args.Get(0).(*models.Certificate), args.Error(1)

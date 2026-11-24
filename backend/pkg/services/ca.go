@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"crypto"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
@@ -1391,6 +1390,8 @@ func (svc *CAServiceBackend) deleteCAPrivateKey(ctx context.Context, ca *models.
 //     The CA is revoked and cannot be reissued
 //   - ErrCAExpired
 //     The CA is expired and cannot be reissued (reserved for future renewal feature)
+//   - ErrCAStatus
+//     The issuing CA is not active or is outside its validity period
 func (svc *CAServiceBackend) ReissueCA(ctx context.Context, input services.ReissueCAInput) (*models.CACertificate, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -1603,6 +1604,25 @@ func (svc *CAServiceBackend) SignCertificate(ctx context.Context, input services
 	return svc.signCertificate(ctx, input, nil, false)
 }
 
+// checkCACanSign reports why the CA key must not sign at now: the CA must be ACTIVE and inside its
+// validity window. The dates are checked as well because the stored status can lag behind them
+// until the expiration monitor runs.
+func checkCACanSign(ca *models.CACertificate, now time.Time) error {
+	if ca.Certificate.Status != models.StatusActive {
+		return fmt.Errorf("status is %s", ca.Certificate.Status)
+	}
+
+	if now.Before(ca.Certificate.ValidFrom) {
+		return fmt.Errorf("not valid before %s", ca.Certificate.ValidFrom.Format(time.RFC3339))
+	}
+
+	if now.After(ca.Certificate.ValidTo) {
+		return fmt.Errorf("expired at %s", ca.Certificate.ValidTo.Format(time.RFC3339))
+	}
+
+	return nil
+}
+
 // signCertificate retains a subject key already resolved by CA creation/reissuance.
 // allowCA permits a SignAsCA profile: only CA creation and reissue set it.
 func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services.SignCertificateInput, subjectKey *models.Key, allowCA bool) (*models.Certificate, error) {
@@ -1626,8 +1646,8 @@ func (svc *CAServiceBackend) signCertificate(ctx context.Context, input services
 		return nil, err
 	}
 
-	if ca.Certificate.Status != models.StatusActive {
-		lFunc.Errorf("%s CA is not active", ca.ID)
+	if err := checkCACanSign(ca, time.Now()); err != nil {
+		lFunc.Errorf("CA %s cannot sign: %s", ca.ID, err)
 		return nil, errs.ErrCAStatus
 	}
 
@@ -1791,109 +1811,6 @@ func (svc *CAServiceBackend) ImportCertificate(ctx context.Context, input servic
 	}
 
 	return cert, nil
-}
-
-func (svc *CAServiceBackend) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	err := caValidator.Struct(input)
-	if err != nil {
-		lFunc.Errorf("ImportCertificate struct validation error: %s", err)
-		return nil, errs.ErrValidateBadRequest
-	}
-
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
-		return nil, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return nil, errs.ErrCANotFound
-	}
-
-	certSigner := NewCertificateSigner(ctx, &ca.Certificate, svc.kmsService)
-
-	lFunc.Debugf("sign signature with %s Certificate", ca.Certificate.SerialNumber)
-
-	var opts crypto.SignerOpts
-	hash := crypto.SHA256
-
-	algo := strings.ToUpper(input.SigningAlgorithm)
-	switch {
-	case strings.Contains(algo, "SHA_256"):
-		hash = crypto.SHA256
-	case strings.Contains(algo, "SHA_384"):
-		hash = crypto.SHA384
-	case strings.Contains(algo, "SHA_512"):
-		hash = crypto.SHA512
-	}
-
-	if input.MessageType == models.Raw {
-		hashFunc := hash.New()
-		_, err = hashFunc.Write(input.Message)
-		if err != nil {
-			return nil, err
-		}
-		hashed := hashFunc.Sum(nil)
-
-		input.Message = hashed
-	}
-
-	if strings.HasPrefix(input.SigningAlgorithm, "RSASSA_PSS") {
-		opts = &rsa.PSSOptions{
-			SaltLength: rsa.PSSSaltLengthEqualsHash,
-			Hash:       hash,
-		}
-	} else {
-		opts = hash
-	}
-
-	entropy := software.NewLamassuEntropy(ctx)
-
-	signature, err := certSigner.Sign(entropy, input.Message, opts)
-	if err != nil {
-		return nil, err
-	}
-
-	return signature, nil
-}
-
-func (svc *CAServiceBackend) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
-	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
-
-	err := caValidator.Struct(input)
-	if err != nil {
-		lFunc.Errorf("SignatureVerifyInput struct validation error: %s", err)
-		return false, errs.ErrValidateBadRequest
-	}
-	lFunc.Debugf("checking if CA '%s' exists", input.CAID)
-	exists, ca, err := svc.caStorage.SelectExistsByID(ctx, input.CAID)
-	if err != nil {
-		lFunc.Errorf("something went wrong while checking if CA '%s' exists in storage engine: %s", input.CAID, err)
-		return false, err
-	}
-
-	if !exists {
-		lFunc.Errorf("CA %s can not be found in storage engine", input.CAID)
-		return false, errs.ErrCANotFound
-	}
-
-	res, err := svc.kmsService.VerifySignature(ctx, services.VerifySignInput{
-		Identifier:  ca.Certificate.SubjectKeyID,
-		Algorithm:   input.SigningAlgorithm,
-		Message:     input.Message,
-		Signature:   input.Signature,
-		MessageType: input.MessageType,
-	})
-	if err != nil {
-		lFunc.Errorf("could not verify signature with CA %s: %s", ca.Certificate.SerialNumber, err)
-		return false, err
-	}
-
-	return res.Valid, nil
 }
 
 // Returned Error Codes:

@@ -25,9 +25,6 @@ type CAService interface {
 	ReissueCA(ctx context.Context, input ReissueCAInput) (*models.CACertificate, error)
 	DeleteCA(ctx context.Context, input DeleteCAInput) error
 
-	SignatureSign(ctx context.Context, input SignatureSignInput) ([]byte, error)
-	SignatureVerify(ctx context.Context, input SignatureVerifyInput) (bool, error)
-
 	SignCertificate(ctx context.Context, input SignCertificateInput) (*models.Certificate, error)
 	CreateCertificate(ctx context.Context, input CreateCertificateInput) (*models.Certificate, error)
 	ImportCertificate(ctx context.Context, input ImportCertificateInput) (*models.Certificate, error)
@@ -64,13 +61,6 @@ type GetCertificatesStatsInput struct {
 type GetStatsByCAIDInput struct {
 	CAID                       string
 	CertificateQueryParameters *resources.QueryParameters
-}
-
-type SignInput struct {
-	CAID               string
-	Message            []byte
-	MessageType        models.SignMessageType
-	SignatureAlgorithm string
 }
 
 type IssueCACSRInput struct {
@@ -243,21 +233,6 @@ type CreateCertificateInput struct {
 type ImportCertificateInput struct {
 	Certificate *models.X509Certificate
 	Metadata    map[string]any
-}
-
-type SignatureSignInput struct {
-	CAID             string                 `validate:"required"`
-	Message          []byte                 `validate:"required"`
-	MessageType      models.SignMessageType `validate:"required"`
-	SigningAlgorithm string                 `validate:"required"`
-}
-
-type SignatureVerifyInput struct {
-	CAID             string                 `validate:"required"`
-	Signature        []byte                 `validate:"required"`
-	Message          []byte                 `validate:"required"`
-	MessageType      models.SignMessageType `validate:"required"`
-	SigningAlgorithm string                 `validate:"required"`
 }
 
 type GetCertificatesBySerialNumberInput struct {

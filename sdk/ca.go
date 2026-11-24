@@ -343,6 +343,7 @@ func (cli *httpCAClient) ReissueCA(ctx context.Context, input services.ReissueCA
 			errs.ErrCAAlreadyRevoked,
 			errs.ErrCAExpired,
 			errs.ErrValidateBadRequest,
+			errs.ErrCAStatus,
 		},
 	})
 	if err != nil {
@@ -380,33 +381,6 @@ func (cli *httpCAClient) DeleteCA(ctx context.Context, input services.DeleteCAIn
 	}
 
 	return nil
-}
-
-func (cli *httpCAClient) SignatureSign(ctx context.Context, input services.SignatureSignInput) ([]byte, error) {
-	response, err := cli.post[*resources.SignResponse](ctx, "/v1/cas/"+input.CAID+"/signature/sign", resources.SignatureSignBody{
-		Message:          base64.StdEncoding.EncodeToString(input.Message),
-		MessageType:      input.MessageType,
-		SigningAlgorithm: input.SigningAlgorithm,
-	}, map[int][]error{})
-	if err != nil {
-		return nil, err
-	}
-
-	return base64.StdEncoding.DecodeString(response.SignedData)
-}
-
-func (cli *httpCAClient) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (bool, error) {
-	response, err := cli.post[*resources.VerifyResponse](ctx, "/v1/cas/"+input.CAID+"/signature/verify", resources.SignatureVerifyBody{
-		Signature:        base64.StdEncoding.EncodeToString(input.Signature),
-		Message:          base64.StdEncoding.EncodeToString(input.Message),
-		MessageType:      input.MessageType,
-		SigningAlgorithm: input.SigningAlgorithm,
-	}, map[int][]error{})
-	if err != nil {
-		return false, err
-	}
-
-	return response.Valid, nil
 }
 
 func (cli *httpCAClient) GetCertificateKey(ctx context.Context, input services.GetCertificateKeyInput) (*models.CertificateKey, error) {

@@ -27,7 +27,6 @@ const (
 	EventUpdateCAMetadataKey    EventType = "ca.metadata.update"
 	EventReissueCAKey           EventType = "ca.reissue"
 	EventSignCertificateKey     EventType = "ca.sign.certificate"
-	EventSignatureSignKey       EventType = "ca.sign.signature"
 	EventDeleteCAKey            EventType = "ca.delete"
 
 	EventCreateKMSKey          EventType = "kms.create"

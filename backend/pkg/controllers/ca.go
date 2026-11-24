@@ -502,7 +502,7 @@ func (r *caHttpRoutes) ReissueCA(ctx *gin.Context) {
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		case errs.ErrValidateBadRequest:
 			ctx.JSON(400, gin.H{"err": err.Error()})
-		case errs.ErrCAExpired:
+		case errs.ErrCAExpired, errs.ErrCAStatus:
 			ctx.JSON(400, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
@@ -777,103 +777,6 @@ func (r *caHttpRoutes) CreateCertificate(ctx *gin.Context) {
 	}
 
 	ctx.JSON(201, cert)
-}
-
-func (r *caHttpRoutes) SignatureSign(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	var requestBody resources.SignatureSignBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	msgDecoded, err := base64.StdEncoding.DecodeString(requestBody.Message)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	signature, err := r.svc.SignatureSign(ctx.Request.Context(), services.SignatureSignInput{
-		CAID:             params.ID,
-		Message:          msgDecoded,
-		MessageType:      requestBody.MessageType,
-		SigningAlgorithm: requestBody.SigningAlgorithm,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.SignResponse{
-		SignedData: base64.StdEncoding.EncodeToString(signature),
-	})
-}
-
-func (r *caHttpRoutes) SignatureVerify(ctx *gin.Context) {
-	type uriParams struct {
-		ID string `uri:"id" binding:"required"`
-	}
-
-	var params uriParams
-	if err := ctx.ShouldBindUri(&params); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	var requestBody resources.SignatureVerifyBody
-	if err := ctx.BindJSON(&requestBody); err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	signDecoded, err := base64.StdEncoding.DecodeString(requestBody.Signature)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	msgDecoded, err := base64.StdEncoding.DecodeString(requestBody.Message)
-	if err != nil {
-		ctx.JSON(400, gin.H{"err": err.Error()})
-		return
-	}
-
-	valid, err := r.svc.SignatureVerify(ctx.Request.Context(), services.SignatureVerifyInput{
-		Signature:        signDecoded,
-		CAID:             params.ID,
-		Message:          msgDecoded,
-		MessageType:      requestBody.MessageType,
-		SigningAlgorithm: requestBody.SigningAlgorithm,
-	})
-	if err != nil {
-		switch err {
-		case errs.ErrCANotFound:
-			ctx.JSON(404, gin.H{"err": err.Error()})
-		default:
-			ctx.JSON(500, gin.H{"err": err.Error()})
-		}
-
-		return
-	}
-
-	ctx.JSON(200, resources.VerifyResponse{
-		Valid: valid,
-	})
 }
 
 func (r *caHttpRoutes) GetCertificatesByCAAndStatus(ctx *gin.Context) {

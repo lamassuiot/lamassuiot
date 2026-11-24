@@ -140,20 +140,6 @@ func (mw CAOTelTracer) ImportCertificate(ctx context.Context, input services.Imp
 	return mw.next.ImportCertificate(ctx, input)
 }
 
-func (mw CAOTelTracer) SignatureSign(ctx context.Context, input services.SignatureSignInput) (output []byte, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
-	defer span.End()
-
-	return mw.next.SignatureSign(ctx, input)
-}
-
-func (mw CAOTelTracer) SignatureVerify(ctx context.Context, input services.SignatureVerifyInput) (output bool, err error) {
-	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
-	defer span.End()
-
-	return mw.next.SignatureVerify(ctx, input)
-}
-
 func (mw CAOTelTracer) GetCertificateBySerialNumber(ctx context.Context, input services.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	ctx, span := otel.GetTracerProvider().Tracer(mw.tracerName).Start(ctx, sdk.GetCallerFunctionName(), trace.WithAttributes(semconv.ServiceName(mw.serviceName)))
 	defer span.End()

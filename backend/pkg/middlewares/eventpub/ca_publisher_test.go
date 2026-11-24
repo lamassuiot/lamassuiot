@@ -90,18 +90,6 @@ func TestCAEventPublisher(t *testing.T) {
 			},
 		},
 		{
-			name: "SignatureSign with errors - Not fire event",
-			test: func(t *testing.T) {
-				caWithErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
-			},
-		},
-		{
-			name: "SignatureSign without errors - fire event",
-			test: func(t *testing.T) {
-				caWithoutErrors(t, "SignatureSign", services.SignatureSignInput{}, models.EventSignatureSignKey, new([]byte))
-			},
-		},
-		{
 			name: "UpdateCAStatus with errors - Not fire event",
 			test: func(t *testing.T) {
 				caWithErrors(t, "UpdateCAStatus", services.UpdateCAStatusInput{}, models.EventUpdateCAStatusKey, &models.CACertificate{},

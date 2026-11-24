@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -37,6 +38,8 @@ func (r *signAsCAProfileRepo) SelectByID(_ context.Context, id string) (bool, *m
 func TestSignCertificateNeverIssuesACA(t *testing.T) {
 	ca := models.CACertificate{ID: "ca-1", ProfileID: "default"}
 	ca.Certificate.Status = models.StatusActive
+	ca.Certificate.ValidFrom = time.Now().Add(-time.Hour)
+	ca.Certificate.ValidTo = time.Now().Add(time.Hour)
 
 	for _, tc := range []struct {
 		name      string
