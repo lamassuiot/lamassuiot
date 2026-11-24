@@ -10,6 +10,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const kmsTableName = "kms_keys"
@@ -147,7 +148,7 @@ func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) 
 
 func (db *PostgresKMSStore) DeleteWith(ctx context.Context, keyID, engineID string, fn func() error) error {
 	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		res := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
+		res := tx.Table(qualifiedTableName(tx, kmsTableName)).Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)
 		if errors.Is(res.Error, gorm.ErrForeignKeyViolated) {
 			return errs.ErrKeyInUse
 		}
@@ -171,8 +172,9 @@ func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, n
 			return err
 		}
 
+		table := qualifiedTableName(tx, kmsTableName)
 		var found int64
-		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
+		if err := tx.Table(table).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
 			return err
 		}
 		if found == 0 {
@@ -183,8 +185,8 @@ func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, n
 			return err
 		}
 
-		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
-			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+		res := tx.Exec(`UPDATE ? SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
+			WHERE key_id = ? AND engine_id = ?`, clause.Table{Name: table}, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
 		if res.Error != nil {
 			return res.Error
 		}

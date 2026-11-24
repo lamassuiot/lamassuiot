@@ -35,7 +35,7 @@ func NewCAPostgresRepository(log *logrus.Entry, db *gorm.DB) (storage.CACertific
 	// This hook is only applied by the querier's SELECT paths; association writes keep their table.
 	querier.preload = func(tx *gorm.DB) *gorm.DB {
 		return tx.Preload("Certificate", func(association *gorm.DB) *gorm.DB {
-			return association.Table(certificateReadTable)
+			return association.Table(qualifiedTableName(association, certificateReadTable))
 		})
 	}
 

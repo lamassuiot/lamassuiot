@@ -18,18 +18,18 @@ const (
 )
 
 type PostgresCRLSettingsStore struct {
-	db      *gorm.DB
 	querier *DBQuerier[models.CRLSettings]
 }
 
+const crlSettingsTable = "crl_settings"
+
 func NewCRLSettingsRepository(logger *logrus.Entry, db *gorm.DB) (storage.CRLSettingsRepo, error) {
-	querier, err := TableQuery(logger, db, "crl_settings", "ca_id", models.CRLSettings{})
+	querier, err := TableQuery(logger, db, crlSettingsTable, "ca_id", models.CRLSettings{})
 	if err != nil {
 		return nil, err
 	}
 
 	return &PostgresCRLSettingsStore{
-		db:      db,
 		querier: querier,
 	}, nil
 }
@@ -96,7 +96,7 @@ func (db *PostgresCRLSettingsStore) noRowsError(ctx context.Context, caID string
 func notActive(status models.CRLSettingsStatus) bool { return status != models.CRLSettingsActive }
 
 func (db *PostgresCRLSettingsStore) UpdateOptions(ctx context.Context, caID string, options models.CRLSettingsOptions, signer models.CRLSignerKey) (*models.CRLSettings, error) {
-	tx := db.db.WithContext(ctx).Table("crl_settings").Where("ca_id = ? AND status = ?", caID, models.CRLSettingsActive).
+	tx := db.querier.Table(crlSettingsTable).WithContext(ctx).Where("ca_id = ? AND status = ?", caID, models.CRLSettingsActive).
 		Select("refresh_interval", "validity", "signer_serial_number", "regenerate_on_revoke", "signer_engine_id", "signer_key_id").
 		Updates(&models.CRLSettings{Options: options, SignerEngineID: nullable(signer.EngineID), SignerKeyID: nullable(signer.KeyID)})
 	if err := signerError(tx.Error); err != nil {
@@ -111,7 +111,7 @@ func (db *PostgresCRLSettingsStore) UpdateOptions(ctx context.Context, caID stri
 }
 
 func (db *PostgresCRLSettingsStore) UpdateLatestCRL(ctx context.Context, caID string, expectedVersion *big.Int, latest models.LatestCRLMeta) error {
-	tx := db.db.WithContext(ctx).Table("crl_settings").
+	tx := db.querier.Table(crlSettingsTable).WithContext(ctx).
 		Where("ca_id = ? AND status = ? AND latest_crl_version = ?", caID, models.CRLSettingsActive, expectedVersion.String()).
 		Updates(map[string]any{
 			"latest_crl_version":     latest.Version.String(),
@@ -128,7 +128,7 @@ func (db *PostgresCRLSettingsStore) UpdateLatestCRL(ctx context.Context, caID st
 }
 
 func (db *PostgresCRLSettingsStore) MarkFinal(ctx context.Context, caID string, latestVersion *big.Int) error {
-	q := db.db.WithContext(ctx).Table("crl_settings").Where("ca_id = ? AND status = ?", caID, models.CRLSettingsActive)
+	q := db.querier.Table(crlSettingsTable).WithContext(ctx).Where("ca_id = ? AND status = ?", caID, models.CRLSettingsActive)
 	if latestVersion != nil {
 		q = q.Where("latest_crl_version = ?", latestVersion.String())
 	}
@@ -144,7 +144,7 @@ func (db *PostgresCRLSettingsStore) MarkFinal(ctx context.Context, caID string, 
 }
 
 func (db *PostgresCRLSettingsStore) MarkArchived(ctx context.Context, caID string) error {
-	tx := db.db.WithContext(ctx).Table("crl_settings").
+	tx := db.querier.Table(crlSettingsTable).WithContext(ctx).
 		Where("ca_id = ? AND status IN ?", caID, []models.CRLSettingsStatus{models.CRLSettingsActive, models.CRLSettingsFinal}).
 		Updates(map[string]any{"status": models.CRLSettingsArchived, "signer_serial_number": nil, "signer_engine_id": nil, "signer_key_id": nil})
 	if tx.Error != nil {
@@ -163,7 +163,7 @@ func (db *PostgresCRLSettingsStore) MarkArchived(ctx context.Context, caID strin
 }
 
 func (db *PostgresCRLSettingsStore) Delete(ctx context.Context, caID string) error {
-	tx := db.db.WithContext(ctx).Table("crl_settings").Where("ca_id = ? AND status = ?", caID, models.CRLSettingsArchived).
+	tx := db.querier.Table(crlSettingsTable).WithContext(ctx).Where("ca_id = ? AND status = ?", caID, models.CRLSettingsArchived).
 		Delete(&models.CRLSettings{})
 	if tx.Error != nil {
 		return tx.Error
