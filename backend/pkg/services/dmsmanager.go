@@ -1200,7 +1200,7 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 				}
 
 				idxClientCrt := slices.IndexFunc(crl.RevokedCertificateEntries, func(entry x509.RevocationListEntry) bool {
-					return entry.SerialNumber == cert.SerialNumber
+					return entry.SerialNumber.Cmp(cert.SerialNumber) == 0
 				})
 
 				if idxClientCrt >= 0 {
