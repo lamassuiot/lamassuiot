@@ -3,6 +3,7 @@ package aws
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -12,6 +13,11 @@ import (
 )
 
 func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
+	accessKeyID, secretAccessKey, sessionToken, err := credentialsFromEnvironment(conf)
+	if err != nil {
+		return nil, err
+	}
+
 	customResolver := aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...any) (aws.Endpoint, error) {
 		if conf.EndpointURL != "" {
 			return aws.Endpoint{
@@ -27,7 +33,7 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 
 	switch conf.AWSAuthenticationMethod {
 	case Static:
-		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(conf.AccessKeyID, string(conf.SecretAccessKey), string(conf.SessionToken)))
+		creds := aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, sessionToken))
 		creds.Invalidate()
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
 			config.WithRegion(conf.Region),
@@ -40,14 +46,11 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 
 		return &awsCfg, nil
 	case AssumeRole:
-		stsCfg, err := config.LoadDefaultConfig(context.TODO(),
-			config.WithRegion(conf.Region),
-			config.WithEndpointResolverWithOptions(customResolver),
-		)
+		stsCfg, err := loadConfigWithOptionalCredentials(conf, accessKeyID, secretAccessKey, sessionToken, customResolver)
 		if err != nil {
 			return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 		}
-		stsSvc := sts.NewFromConfig(stsCfg)
+		stsSvc := sts.NewFromConfig(*stsCfg)
 		creds := aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(stsSvc, conf.RoleARN))
 		creds.Invalidate()
 		awsCfg, err := config.LoadDefaultConfig(context.TODO(),
@@ -60,16 +63,48 @@ func GetAwsSdkConfig(conf AWSSDKConfig) (*aws.Config, error) {
 		}
 		return &awsCfg, nil
 	default:
-		return loadAWSDefaultConfig(conf, customResolver)
+		return loadConfigWithOptionalCredentials(conf, accessKeyID, secretAccessKey, sessionToken, customResolver)
 	}
 
 }
 
-func loadAWSDefaultConfig(conf AWSSDKConfig, customResolver aws.EndpointResolverWithOptionsFunc) (*aws.Config, error) {
-	awsCfg, err := config.LoadDefaultConfig(context.TODO(),
+func credentialsFromEnvironment(conf AWSSDKConfig) (string, string, string, error) {
+	accessKeyID := conf.AccessKeyID
+	secretAccessKey := string(conf.SecretAccessKey)
+	sessionToken := string(conf.SessionToken)
+
+	for _, binding := range []struct {
+		name  string
+		value *string
+	}{
+		{conf.AccessKeyIDEnv, &accessKeyID},
+		{conf.SecretAccessKeyEnv, &secretAccessKey},
+		{conf.SessionTokenEnv, &sessionToken},
+	} {
+		if binding.name == "" {
+			continue
+		}
+		value, ok := os.LookupEnv(binding.name)
+		if !ok || value == "" {
+			return "", "", "", fmt.Errorf("AWS credential environment variable %s is missing or empty", binding.name)
+		}
+		*binding.value = value
+	}
+
+	return accessKeyID, secretAccessKey, sessionToken, nil
+}
+
+func loadConfigWithOptionalCredentials(conf AWSSDKConfig, accessKeyID, secretAccessKey, sessionToken string, customResolver aws.EndpointResolverWithOptionsFunc) (*aws.Config, error) {
+	options := []func(*config.LoadOptions) error{
 		config.WithRegion(conf.Region),
 		config.WithEndpointResolverWithOptions(customResolver),
-	)
+	}
+	if conf.AccessKeyIDEnv != "" || conf.SecretAccessKeyEnv != "" || conf.SessionTokenEnv != "" {
+		options = append(options, config.WithCredentialsProvider(
+			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(accessKeyID, secretAccessKey, sessionToken)),
+		))
+	}
+	awsCfg, err := config.LoadDefaultConfig(context.TODO(), options...)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load the AWS configs: %s", err)
 	}

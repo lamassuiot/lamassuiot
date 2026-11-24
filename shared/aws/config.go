@@ -18,4 +18,7 @@ type AWSSDKConfig struct {
 	SessionToken            cconfig.Password        `mapstructure:"session_token"`
 	Region                  string                  `mapstructure:"region"`
 	RoleARN                 string                  `mapstructure:"role_arn"`
+	AccessKeyIDEnv          string                  `mapstructure:"access_key_id_env"`
+	SecretAccessKeyEnv      string                  `mapstructure:"secret_access_key_env"`
+	SessionTokenEnv         string                  `mapstructure:"session_token_env"`
 }
