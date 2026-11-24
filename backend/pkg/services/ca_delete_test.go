@@ -414,6 +414,24 @@ func TestDeleteLapsedActiveCAWithoutKeyRevokesWhatItIssued(t *testing.T) {
 	require.Equal(t, []string{"ca-1"}, f.cas.deleted)
 }
 
+// A CA that is not valid yet has not expired: it is still to come and will operate outside Lamassu, so deleting it
+// keeps what it issued.
+func TestDeleteNotYetValidCAWithoutKeyKeepsWhatItIssued(t *testing.T) {
+	f := newDeleteCAFixture(t, 0)
+	f.withoutKey(models.StatusActive)
+	ca := f.cas.cas["ca-1"]
+	ca.Certificate.ValidFrom, ca.Certificate.ValidTo = time.Now().Add(24*time.Hour), time.Now().Add(48*time.Hour)
+	f.cas.cas["ca-1"] = ca
+	f.addChildCA(t, "ca-1", "ca-2", models.StatusActive)
+	f.addIssuedCertificate("ca-1", "leaf-1")
+	r := f.record()
+
+	require.NoError(t, f.svc.DeleteCA(context.Background(), coreservices.DeleteCAInput{CAID: "ca-1"}))
+	require.Empty(t, r.revokedCAs)
+	require.Empty(t, r.revokedCerts)
+	require.Equal(t, []string{"ca-1"}, f.cas.deleted)
+}
+
 // Once a CA imported without its key is revoked or expired, deleting it revokes what it issued, as for any other CA.
 func TestDeleteInvalidCAWithoutKeyRevokesWhatItIssued(t *testing.T) {
 	for _, status := range []models.CertificateStatus{models.StatusRevoked, models.StatusExpired} {

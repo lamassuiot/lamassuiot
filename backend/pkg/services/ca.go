@@ -1234,8 +1234,9 @@ func (svc *CAServiceBackend) handleCascadeOperations(ctx context.Context, ca *mo
 	if !cascadeDelete {
 		// Only a CA imported without its key can be deleted while active. It still operates outside Lamassu, so what
 		// it issued stays valid: deleting it only removes it from Lamassu. The stored status can lag behind the
-		// validity until the expiration monitor runs, so the dates count too.
-		if checkCACanSign(ca, time.Now()) == nil {
+		// expiration until the monitor runs, so ValidTo counts too. A CA that is not valid yet has not expired: it is
+		// still to come, so ValidFrom does not count.
+		if ca.Certificate.Status == models.StatusActive && !ca.Certificate.ValidTo.Before(time.Now()) {
 			lFunc.Infof("CA %s is active: its child CAs and the certificates it issued keep their status", ca.ID)
 			return nil
 		}
