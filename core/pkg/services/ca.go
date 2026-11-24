@@ -160,6 +160,9 @@ type UpdateCAStatusInput struct {
 	CAID             string                   `validate:"required"`
 	Status           models.CertificateStatus `validate:"required"`
 	RevocationReason models.RevocationReason
+	// SuspendedByCascadeOf is set by the hold of a CA, to the ID of that CA, when its cascade puts this CA on hold:
+	// releasing that CA releases this one. The HTTP API never sets it.
+	SuspendedByCascadeOf string
 }
 
 type UpdateCAProfileInput struct {
@@ -273,6 +276,9 @@ type UpdateCertificateStatusInput struct {
 	SerialNumber     string                   `validate:"required"`
 	NewStatus        models.CertificateStatus `validate:"required"`
 	RevocationReason models.RevocationReason
+	// SuspendedByCascadeOf is set by the hold of a CA, to the ID of that CA, when its cascade puts the certificate on
+	// hold: releasing that CA releases the certificate. The HTTP API never sets it.
+	SuspendedByCascadeOf string
 }
 
 type UpdateCertificateMetadataInput struct {

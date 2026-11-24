@@ -1043,6 +1043,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, errs.ErrCertificateStatusTransitionNotAllowed
 	}
 
+	wasOnHold := ca.Certificate.Status == models.StatusRevoked && ca.Certificate.RevocationReason == ocsp.CertificateHold
 	ca.Certificate.Status = input.Status
 	if ca.Certificate.Status == models.StatusRevoked {
 		rrb, _ := input.RevocationReason.MarshalText()
@@ -1050,6 +1051,7 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		ca.Certificate.RevocationReason = input.RevocationReason
 		ca.Certificate.RevocationTimestamp = time.Now()
 	}
+	setSuspendedByCascade(&ca.Certificate, input.SuspendedByCascadeOf)
 
 	lFunc.Debugf("updating the status of CA %s to %s", input.CAID, input.Status)
 	_, err = svc.certStorage.Update(ctx, &ca.Certificate)
@@ -1058,10 +1060,16 @@ func (svc *CAServiceBackend) UpdateCAStatus(ctx context.Context, input services.
 		return nil, err
 	}
 
-	if input.Status == models.StatusRevoked {
-		if err := svc.revokeWhatCAIssued(ctx, ca, lFunc); err != nil {
-			return nil, err
-		}
+	switch {
+	case input.Status == models.StatusRevoked && input.RevocationReason == ocsp.CertificateHold:
+		err = svc.holdWhatCAIssued(ctx, ca, lFunc)
+	case input.Status == models.StatusRevoked:
+		err = svc.revokeWhatCAIssued(ctx, ca, lFunc)
+	case wasOnHold:
+		err = svc.releaseWhatCAHeld(ctx, ca, lFunc)
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	return ca, nil
@@ -1213,6 +1221,110 @@ func (svc *CAServiceBackend) revokeWhatCAIssued(ctx context.Context, ca *models.
 		})
 		if err != nil {
 			lFunc.Errorf("could not revoke certificate %s issued by CA %s: %s", c.SerialNumber, ca.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		lFunc.Errorf("could not select the certificates issued by CA %s: %s", ca.ID, err)
+	}
+	return err
+}
+
+// setSuspendedByCascade sets the suspended-by-cascade mark of a certificate whose status changes: only a hold by the
+// cascade of the CA caID marks it, and any other status change removes the mark.
+func setSuspendedByCascade(cert *models.Certificate, caID string) {
+	delete(cert.Metadata, models.CAMetadataSuspendedByCascadeKey)
+	if caID == "" || cert.Status != models.StatusRevoked || cert.RevocationReason != ocsp.CertificateHold {
+		return
+	}
+	if cert.Metadata == nil {
+		cert.Metadata = map[string]any{}
+	}
+	cert.Metadata[models.CAMetadataSuspendedByCascadeKey] = caID
+}
+
+// holdWhatCAIssued puts on hold the active child CAs of the CA and the active certificates it issued, each marked with
+// the CA so that releasing the CA releases them. What is not active, the certificate of the CA itself included (a root
+// issues its own), is left as it is. A child or certificate it cannot hold is logged and skipped.
+func (svc *CAServiceBackend) holdWhatCAIssued(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+	err := forEachSelected(ctx, svc.caStorage.SelectByParentCA, ca.ID, func(child *models.CACertificate) error {
+		if child.Certificate.Status != models.StatusActive {
+			return nil
+		}
+		lFunc.Infof("Holding child CA %s (%s) issued by CA %s", child.ID, child.Certificate.Subject.CommonName, ca.ID)
+		_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{
+			CAID:                 child.ID,
+			Status:               models.StatusRevoked,
+			RevocationReason:     ocsp.CertificateHold,
+			SuspendedByCascadeOf: ca.ID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not hold child CA %s issued by CA %s: %s", child.ID, ca.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		lFunc.Errorf("could not select the child CAs of CA %s: %s", ca.ID, err)
+		return err
+	}
+
+	err = forEachSelected(ctx, svc.certStorage.SelectByCA, ca.ID, func(c *models.Certificate) error {
+		if c.Status != models.StatusActive || c.SerialNumber == ca.Certificate.SerialNumber {
+			return nil
+		}
+		lFunc.Infof("Holding certificate %s issued by CA %s", c.SerialNumber, ca.ID)
+		_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber:         c.SerialNumber,
+			NewStatus:            models.StatusRevoked,
+			RevocationReason:     ocsp.CertificateHold,
+			SuspendedByCascadeOf: ca.ID,
+		})
+		if err != nil {
+			lFunc.Errorf("could not hold certificate %s issued by CA %s: %s", c.SerialNumber, ca.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		lFunc.Errorf("could not select the certificates issued by CA %s: %s", ca.ID, err)
+	}
+	return err
+}
+
+// releaseWhatCAHeld reactivates the child CAs and certificates that the hold of the CA put on hold and that are still
+// on hold since. A child or certificate it cannot reactivate is logged and skipped.
+func (svc *CAServiceBackend) releaseWhatCAHeld(ctx context.Context, ca *models.CACertificate, lFunc *logrus.Entry) error {
+	suspendedByCascade := func(c *models.Certificate) bool {
+		return c.Status == models.StatusRevoked && c.RevocationReason == ocsp.CertificateHold &&
+			c.Metadata[models.CAMetadataSuspendedByCascadeKey] == ca.ID
+	}
+
+	err := forEachSelected(ctx, svc.caStorage.SelectByParentCA, ca.ID, func(child *models.CACertificate) error {
+		if !suspendedByCascade(&child.Certificate) {
+			return nil
+		}
+		lFunc.Infof("Releasing child CA %s (%s) held by CA %s", child.ID, child.Certificate.Subject.CommonName, ca.ID)
+		_, err := svc.service.UpdateCAStatus(ctx, services.UpdateCAStatusInput{CAID: child.ID, Status: models.StatusActive})
+		if err != nil {
+			lFunc.Errorf("could not release child CA %s held by CA %s: %s", child.ID, ca.ID, err)
+		}
+		return nil
+	})
+	if err != nil {
+		lFunc.Errorf("could not select the child CAs of CA %s: %s", ca.ID, err)
+		return err
+	}
+
+	err = forEachSelected(ctx, svc.certStorage.SelectByCA, ca.ID, func(c *models.Certificate) error {
+		if !suspendedByCascade(c) {
+			return nil
+		}
+		lFunc.Infof("Releasing certificate %s held by CA %s", c.SerialNumber, ca.ID)
+		_, err := svc.service.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber: c.SerialNumber,
+			NewStatus:    models.StatusActive,
+		})
+		if err != nil {
+			lFunc.Errorf("could not release certificate %s held by CA %s: %s", c.SerialNumber, ca.ID, err)
 		}
 		return nil
 	})
@@ -1997,6 +2109,7 @@ func (svc *CAServiceBackend) UpdateCertificateStatus(ctx context.Context, input 
 		//Make sure to reset revocation TS in case of reactivation
 		cert.RevocationTimestamp = time.Time{}
 	}
+	setSuspendedByCascade(cert, input.SuspendedByCascadeOf)
 
 	lFunc.Debugf("updating %s certificate status to %s", input.SerialNumber, input.NewStatus)
 	return svc.certStorage.Update(ctx, cert)
