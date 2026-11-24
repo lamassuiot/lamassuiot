@@ -75,4 +75,15 @@ func TestOpenSSLCAWithoutCRLSignGetsNoCRLSettings(t *testing.T) {
 
 	_, err = serverTest.VA.CRLService.GetCRL(ctx, services.GetCRLInput{ID: ca.ID, CRLVersion: big.NewInt(0)})
 	require.ErrorIs(t, err, errs.ErrCRLSettingsNotFound)
+
+	// Reissuing the CA gives it a certificate with cRLSign, since the default CA issuance profile asserts it. Its
+	// CRL settings are initialized then: nothing else would create them once the CA exists.
+	reissued, err := serverTest.CA.Service.ReissueCA(ctx, services.ReissueCAInput{CAID: ca.ID})
+	require.NoError(t, err)
+	require.NotZero(t, (*x509.Certificate)(reissued.Certificate.Certificate).KeyUsage&x509.KeyUsageCRLSign,
+		"the reissued certificate must be able to sign CRLs")
+
+	settings := waitForInitialCRL(t, ca.ID)
+	require.Equal(t, reissued.Certificate.SerialNumber, settings.Options.SignerSerialNumber)
+	requireCRLIssuedBy(t, reissued)
 }

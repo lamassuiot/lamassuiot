@@ -150,16 +150,50 @@ func TestReissueCAHandlerKeepsSignerWhenNewCertificateIsRejected(t *testing.T) {
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
 }
 
-func TestReissueCAHandlerIgnoresCAWithoutCRLSettings(t *testing.T) {
+// A CA gets no CRL settings while it cannot sign its own CRL, and its reissued certificate may be what fixes that:
+// the reissue initializes them, which is the only way such a CA ever gets a CRL.
+func TestReissueCAHandlerInitsSettingsOfCAWithoutThem(t *testing.T) {
 	svc := new(svcmock.MockVAService)
 
 	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return(settingsWithSigner(reissueTestNewSerial), nil)
 
 	err := dispatchReissue(t, svc)
 
 	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+	// InitCRLSettings sets the signer and issues the first CRL itself.
 	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
 	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+// The reissued certificate may still be unable to sign CRLs. The CA keeps no settings, and the event is accepted:
+// it would be redelivered forever otherwise.
+func TestReissueCAHandlerAcceptsCAThatStillCannotSignCRLs(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return((*models.CRLSettings)(nil), nil)
+
+	err := dispatchReissue(t, svc)
+
+	assert.NoError(t, err)
+	svc.AssertExpectations(t)
+	svc.AssertNotCalled(t, "UpdateCRLSettings", mock.Anything, mock.Anything)
+	svc.AssertNotCalled(t, "CalculateCRL", mock.Anything, mock.Anything)
+}
+
+func TestReissueCAHandlerReturnsSettingsInitializationError(t *testing.T) {
+	svc := new(svcmock.MockVAService)
+	initErr := errors.New("storage down")
+
+	svc.On("GetCRLSettings", mock.Anything, services.GetCRLSettingsInput{CAID: reissueTestCAID}).Return((*models.CRLSettings)(nil), errs.ErrCRLSettingsNotFound)
+	svc.On("InitCRLSettings", mock.Anything, reissueTestCAID).Return((*models.CRLSettings)(nil), initErr)
+
+	err := dispatchReissue(t, svc)
+
+	assert.ErrorIs(t, err, initErr)
+	svc.AssertExpectations(t)
 }
 
 func revokedCertificateEvent(t *testing.T) *event.Event {
