@@ -159,9 +159,7 @@ func kmsKeyFixture(t *testing.T) (publicKey, digest string) {
 	return base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki})), digest
 }
 
-func insertKMSKey(t *testing.T, con interface {
-	Exec(sql string, values ...interface{}) *gorm.DB
-}, keyID, engineID, publicKey, aliases string, hasPrivateKey bool) {
+func insertKMSKey(t *testing.T, con *gorm.DB, keyID, engineID, publicKey, aliases string, hasPrivateKey bool) {
 	t.Helper()
 	require.NoError(t, con.Exec(`INSERT INTO kms_keys
 		(key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, aliases, has_private_key)
@@ -240,6 +238,18 @@ func migrationTest_KMS_20261124100000_kms_key_identity(t *testing.T, logger *log
 			VALUES ('short', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), 'abc')`).Error)
 		assert.Error(t, con.Exec(`INSERT INTO kms_keys (key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts)
 			VALUES ('nodigest', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now())`).Error, "the digest is required")
+	})
+
+	t.Run("the id is text in the canonical form of a UUID", func(t *testing.T) {
+		var dataType string
+		require.NoError(t, con.Raw(`SELECT data_type FROM information_schema.columns
+			WHERE table_schema = 'kms' AND table_name = 'kms_keys' AND column_name = 'id'`).Scan(&dataType).Error)
+		assert.Equal(t, "text", dataType, "the authorization policies filter it as a string")
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (id, key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('not-a-uuid', 'bad-id', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), repeat('b', 64))`).Error)
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (id, key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('0190A6C4-7F3E-7B2A-9C1D-3E5F6A7B8C9D', 'upper-id', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), repeat('c', 64))`).Error,
+			"ids are stored in lowercase")
 	})
 
 	t.Run("a new key gets its id from the database", func(t *testing.T) {

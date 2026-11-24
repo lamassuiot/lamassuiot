@@ -2,7 +2,8 @@
 -- +goose StatementBegin
 
 -- A key gets two identifiers that do not depend on how its crypto engine names it:
---   id      a UUID the database assigns; nothing about the key can change it.
+--   id      a UUID the database assigns, in lowercase canonical form; nothing about the key can change it. It is text
+--           rather than the uuid type because the authorization policies filter it as a string.
 --   digest  the hex SHA-256 of the DER SubjectPublicKeyInfo of its public key (64 characters), the name the KMS has
 --           given the keys it creates since 3.7. Within an engine a public key is stored once, which the unique
 --           (digest, engine_id) enforces.
@@ -10,7 +11,7 @@
 -- under their SKI, and a SQL migration cannot rename an object in an HSM or a vault, so it keeps that name.
 
 ALTER TABLE kms_keys
-    ADD COLUMN id uuid NOT NULL DEFAULT gen_random_uuid(),
+    ADD COLUMN id text NOT NULL DEFAULT gen_random_uuid()::text,
     ADD COLUMN digest text;
 
 -- public_key is the base64 of a PEM "PUBLIC KEY" block. A key whose public key cannot be read is refused rather than
@@ -141,6 +142,8 @@ END $$;
 
 ALTER TABLE kms_keys ALTER COLUMN digest SET NOT NULL;
 ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_digest_format CHECK (digest ~ '^[0-9a-f]{64}$');
+ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_id_format
+    CHECK (id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_digest_engine_key UNIQUE (digest, engine_id);
 -- the target later references to a key point at
 ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_id_key UNIQUE (id);
@@ -153,6 +156,7 @@ ALTER TABLE kms_keys ADD CONSTRAINT kms_keys_id_key UNIQUE (id);
 -- The rows removed as duplicates, the references moved to the surviving row and the aliases dropped are not restored.
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_id_key;
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_digest_engine_key;
+ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_id_format;
 ALTER TABLE kms_keys DROP CONSTRAINT kms_keys_digest_format;
 ALTER TABLE kms_keys DROP COLUMN digest, DROP COLUMN id;
 

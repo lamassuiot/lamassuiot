@@ -29,7 +29,7 @@ and writes the missing records into the KMS.
    `subject_key_id` nor under the SHA-256 digest of its public key, in the same engine:
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA schema.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-5. Inserts the record into the KMS `kms_keys` table, with the `subject_key_id` as `key_id`.
+5. Inserts the record into the KMS `kms_keys` table, with the `subject_key_id` as `key_id` (the name the crypto engine holds the key under) and the SHA-256 digest of its public key as `digest`. The table keeps a public key once per engine, so a key can no longer be registered twice under different names.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
 

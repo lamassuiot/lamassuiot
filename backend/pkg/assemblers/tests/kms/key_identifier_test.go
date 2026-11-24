@@ -11,6 +11,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/stretchr/testify/require"
 )
@@ -49,6 +50,31 @@ func TestKeyIdentifiers(t *testing.T) {
 		require.NotEqual(t, copies["filesystem-1"].ID, copies["vault-1"].ID, "each copy has its own id")
 		require.True(t, helpers.IsKeyUUID(single.ID))
 		require.Equal(t, single.KeyID, single.Digest, "a key created by the KMS is named by its digest")
+	})
+
+	t.Run("id and digest can be filtered like any other field", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			field, value string
+			op           resources.FilterOperation
+			wantAtLeast  string
+		}{
+			"id equals":             {"id", single.ID, resources.StringEqual, single.ID},
+			"id contains":           {"id", single.ID[9:23], resources.StringContains, single.ID},
+			"id contains, any case": {"id", strings.ToUpper(single.ID[9:23]), resources.StringContainsIgnoreCase, single.ID},
+			"digest equals":         {"digest", single.Digest, resources.StringEqual, single.ID},
+			"digest contains":       {"digest", single.Digest[:16], resources.StringContains, single.ID},
+		} {
+			t.Run(name, func(t *testing.T) {
+				var found []string
+				_, err := kmsTest.HttpKMSSDK.GetKeys(ctx, services.GetKeysInput{ListInput: resources.ListInput[models.Key]{
+					QueryParameters: &resources.QueryParameters{PageSize: 25, Filters: []resources.FilterOption{{Field: tc.field, Value: tc.value, FilterOperation: tc.op}}},
+					ExhaustiveRun:   true,
+					ApplyFunc:       func(k models.Key) { found = append(found, k.ID) },
+				}})
+				require.NoError(t, err)
+				require.Contains(t, found, tc.wantAtLeast)
+			})
+		}
 	})
 
 	// The HTTP client must honour the same contract as the service it calls.

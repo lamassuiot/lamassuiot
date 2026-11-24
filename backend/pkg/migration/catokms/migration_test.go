@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	log "github.com/sirupsen/logrus"
@@ -874,5 +875,13 @@ func TestMigrate_CAImportedBeforeTheKMS_IsRegisteredUnderItsSKI(t *testing.T) {
 	}
 	if got := kms.inserted[0].KeyID; got != ca.Certificate.SubjectKeyID {
 		t.Errorf("KeyID: got %q, want the SKI %q", got, ca.Certificate.SubjectKeyID)
+	}
+	// the name in the engine is the SKI, but the key is identified by the digest of its public key
+	wantDigest, err := chelpers.PublicKeyDigest((*x509.Certificate)(ca.Certificate.Certificate).PublicKey)
+	if err != nil {
+		t.Fatalf("digest: %s", err)
+	}
+	if got := kms.inserted[0].Digest; got != wantDigest {
+		t.Errorf("Digest: got %q, want %q", got, wantDigest)
 	}
 }

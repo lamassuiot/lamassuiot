@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -92,13 +93,13 @@ func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]
 }
 
 func (db *PostgresKMSStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error) {
-	// the column is a uuid: anything else cannot match, and Postgres would reject it rather than find nothing
+	// ids are stored in lowercase: an id in any other case is the same id, and anything that is not a UUID matches nothing
 	if !chelpers.IsKeyUUID(id) {
 		return false, nil, nil
 	}
 
 	var elem models.Key
-	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("id = ?::uuid", id).Limit(1).Find(&elem)
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("id = ?", strings.ToLower(id)).Limit(1).Find(&elem)
 	if tx.Error != nil {
 		return false, nil, tx.Error
 	}

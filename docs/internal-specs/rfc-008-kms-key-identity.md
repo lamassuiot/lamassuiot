@@ -15,7 +15,6 @@ A KMS key is identified today by `(key_id, engine_id)`, where `key_id` is the na
 
 - **Keys that exist twice.** `ca-to-kms-migration` registered the key of each CA under the CA's `subject_key_id`. A CA imported with its key since 3.7 already has that key in the KMS under the digest of its public key, so the tool added a second row that no engine holds (`has_private_key = true`, nothing behind it). Signing with it fails, and deleting it answers "key not found".
 - **Names that are not a digest.** Keys of CAs imported before the KMS are held by their engine under the SKI their issuer wrote. A SKI is not a function of the key and is not canonical (`aa:bb`, a serial number, 40 or 64 hex characters), so it cannot identify a key.
-- **Lookups by SKI.** `VerifySignature` finds the key of a CA by its SKI, which stops working once the key is named by its digest.
 - **No database guard.** Nothing stops a public key being stored twice in one engine.
 
 ## 3. Goals
@@ -37,7 +36,7 @@ A KMS key is identified today by `(key_id, engine_id)`, where `key_id` is the na
 
 | Column | Meaning |
 |:---|:---|
-| `id` uuid | Assigned by the database. Target of the references of `ca.certificates` and `va.crl_settings`. |
+| `id` text | A UUID in lowercase canonical form, assigned by the database (`gen_random_uuid()`) and checked by a constraint. Text and not `uuid` because the authorization policies filter it as a string. |
 | `digest` text | Digest of the public key, checked against `^[0-9a-f]{64}$`. |
 | `key_id` text | Name of the object in the crypto engine. Renamed `engine_key_id` in Phase 3. |
 
@@ -68,7 +67,7 @@ The `kms` migration drops the aliases already stored with an id or a digest shap
 1. **Migration tool (done).** The tool also looks a key up by the digest of its public key in the engine and skips it when the KMS has it. CAs imported before the KMS are still registered under their SKI.
 2. **Schema, additive (done).** Migration `kms/20261124100000_kms_key_identity.sql` adds `id` and `digest`, removes the duplicates the earlier tool left (keeping the row named by the digest, moving certificate and CRL-signer references to it, and keeping the aliases and the old name as aliases) and adds `UNIQUE (digest, engine_id)`. It stops, listing them, when it cannot tell which duplicate the engine holds, or when a public key cannot be read. The storage computes `digest` on insert. `id` and `digest` are not in the API yet.
 3. **Resolution, aliases and API (done, 3a).** `GetKey` resolves as in 5.2 through two new storage lookups (`SelectExistsByID`, `SelectByDigest`), alias writes are validated as in 5.2.1, and `id` and `digest` are part of the API (`Key`, `kms-openapi.yaml`, `pki.json`). The HTTP client maps the errors of `GetKey` and `UpdateKeyAliases`.
-4. **References (pending, 3b).** `ca.certificates.key_id` and `va.crl_settings.signer_key_id` become references to `kms_keys.id`; `key_id` is renamed `engine_key_id`; `VerifySignature` and the VA look keys up by reference and not by SKI; the migration tool follows.
+4. **References (pending, 3b).** `ca.certificates.key_id` and `va.crl_settings.signer_key_id` become references to `kms_keys.id`; `key_id` is renamed `engine_key_id`; the migration tool follows.
 
 The phases are separate commits of one change so that each leaves the repository passing its tests: renaming the column and moving the references change what the code writes, so they go with the code.
 

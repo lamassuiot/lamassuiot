@@ -220,6 +220,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 
 		key := &models.Key{
 			KeyID:         entry.keyID,
+			Digest:        entry.digest,
 			EngineID:      entry.engineID,
 			Name:          entry.name,
 			Aliases:       []string{},
