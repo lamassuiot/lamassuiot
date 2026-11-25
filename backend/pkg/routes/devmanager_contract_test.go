@@ -26,7 +26,7 @@ func TestDeviceManagerOpenAPIContractCoversEveryEndpoint(t *testing.T) {
 			logger := logrus.NewEntry(logrus.New())
 			var hub *controllers.DeviceEventSSEHub
 			if withSSE {
-				hub = controllers.NewDeviceEventSSEHub(logger)
+				hub = controllers.NewDeviceEventSSEHub(logger, controllers.DeviceEventSSEHubOptions{})
 			}
 			// Client and hub construction are local; no servers or devices are needed.
 			client := config.AuthzClient{Protocol: "http", BasePath: "/api/authz", Hostname: "localhost", Port: 8080}
@@ -56,7 +56,7 @@ func deviceManagerGuardRouter(authenticated, withSSE bool) (*gin.Engine, *middle
 	logger := logrus.NewEntry(logrus.New())
 	var hub *controllers.DeviceEventSSEHub
 	if withSSE {
-		hub = controllers.NewDeviceEventSSEHub(logger)
+		hub = controllers.NewDeviceEventSSEHub(logger, controllers.DeviceEventSSEHubOptions{})
 	}
 	engine := &contractTestEngine{}
 	contract := registerDeviceManagerRoutes(router.Group("/api/devmanager"), nil, hub, engine, logger)

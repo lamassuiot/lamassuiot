@@ -1,6 +1,11 @@
 package config
 
-import cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+import (
+	"fmt"
+	"time"
+
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+)
 
 type DeviceManagerConfig struct {
 	OtelConfig            cconfig.OTELConfig             `mapstructure:"otel"`
@@ -15,5 +20,21 @@ type DeviceManagerConfig struct {
 	CAClient              struct {
 		cconfig.HTTPClient `mapstructure:",squash"`
 	} `mapstructure:"ca_client"`
-	AuthzClient           AuthzClient                    `mapstructure:"authz_client"`
+	AuthzClient AuthzClient `mapstructure:"authz_client"`
+	// SSEMaxSubscribers bounds the SSE clients served at once. 0 uses the default of 1000.
+	SSEMaxSubscribers int `mapstructure:"sse_max_subscribers"`
+	// SSEMaxStreamDuration bounds how long one SSE stream stays open, written as a Go duration such as "10m".
+	// 0 uses the default of 10m.
+	SSEMaxStreamDuration time.Duration `mapstructure:"sse_max_stream_duration"`
+}
+
+// ValidatedSSELimits returns the SSE limits as configured, 0 included so that the SSE hub applies its defaults.
+func (c DeviceManagerConfig) ValidatedSSELimits() (maxSubscribers int, maxStreamDuration time.Duration, err error) {
+	if c.SSEMaxSubscribers < 0 {
+		return 0, 0, fmt.Errorf("sse_max_subscribers must not be negative, got %d", c.SSEMaxSubscribers)
+	}
+	if c.SSEMaxStreamDuration < 0 {
+		return 0, 0, fmt.Errorf("sse_max_stream_duration must not be negative, got %s", c.SSEMaxStreamDuration)
+	}
+	return c.SSEMaxSubscribers, c.SSEMaxStreamDuration, nil
 }

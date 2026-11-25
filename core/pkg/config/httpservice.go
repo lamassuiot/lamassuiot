@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type HTTPConnection struct {
@@ -31,6 +32,31 @@ type HttpServer struct {
 	CertFile           string                   `mapstructure:"cert_file"`
 	KeyFile            string                   `mapstructure:"key_file"`
 	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
+	// ReadTimeout and WriteTimeout bound a whole request read and response write.
+	// Zero means DefaultHTTPServerTimeout.
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+}
+
+// DefaultHTTPServerTimeout is the read and write timeout applied when none is configured.
+const DefaultHTTPServerTimeout = 10 * time.Second
+
+// ServerTimeouts returns the effective read and write timeouts, applying DefaultHTTPServerTimeout to unset values.
+func (c HttpServer) ServerTimeouts() (read, write time.Duration, err error) {
+	if c.ReadTimeout < 0 {
+		return 0, 0, fmt.Errorf("server.read_timeout must not be negative, got %s", c.ReadTimeout)
+	}
+	if c.WriteTimeout < 0 {
+		return 0, 0, fmt.Errorf("server.write_timeout must not be negative, got %s", c.WriteTimeout)
+	}
+	read, write = c.ReadTimeout, c.WriteTimeout
+	if read == 0 {
+		read = DefaultHTTPServerTimeout
+	}
+	if write == 0 {
+		write = DefaultHTTPServerTimeout
+	}
+	return read, write, nil
 }
 
 type HttpServerAuthentication struct {

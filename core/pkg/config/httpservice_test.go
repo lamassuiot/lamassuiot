@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"strings"
 	"testing"
+	"time"
 )
 
 const (
@@ -42,6 +43,38 @@ func TestAuthMTLSOptionsContentPEM(t *testing.T) {
 			_, _, err := tc.opts.ContentPEM()
 			if err == nil || !strings.Contains(err.Error(), tc.err) {
 				t.Fatalf("expected error containing %q, got %v", tc.err, err)
+			}
+		})
+	}
+}
+
+func TestHttpServerTimeouts(t *testing.T) {
+	tests := []struct {
+		name        string
+		cfg         HttpServer
+		wantRead    time.Duration
+		wantWrite   time.Duration
+		expectedErr string
+	}{
+		{name: "UnsetUsesDefault", cfg: HttpServer{}, wantRead: DefaultHTTPServerTimeout, wantWrite: DefaultHTTPServerTimeout},
+		{name: "Configured", cfg: HttpServer{ReadTimeout: 5 * time.Second, WriteTimeout: 45 * time.Second}, wantRead: 5 * time.Second, wantWrite: 45 * time.Second},
+		{name: "NegativeRead", cfg: HttpServer{ReadTimeout: -time.Second}, expectedErr: "server.read_timeout"},
+		{name: "NegativeWrite", cfg: HttpServer{WriteTimeout: -time.Second}, expectedErr: "server.write_timeout"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			read, write, err := tc.cfg.ServerTimeouts()
+			if tc.expectedErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.expectedErr) {
+					t.Fatalf("expected error containing %q. Got %v", tc.expectedErr, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			if read != tc.wantRead || write != tc.wantWrite {
+				t.Fatalf("expected (%s, %s). Got (%s, %s)", tc.wantRead, tc.wantWrite, read, write)
 			}
 		})
 	}

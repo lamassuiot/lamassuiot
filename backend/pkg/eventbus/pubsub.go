@@ -6,6 +6,7 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -20,6 +21,30 @@ func NewEventBusSubscriber(conf cconfig.EventBusEngine, serviceID string, logger
 		return nil, err
 	}
 
+	return engine.Subscriber()
+}
+
+// NewEventBusEphemeralSubscriber builds a subscriber meant for a per-process serviceID, whose
+// broker-side state is removed once the subscriber goes away. Engines that do not implement
+// eventbus.EphemeralSubscriberEngine fall back to the regular subscriber, which leaves one queue per
+// process behind, and a warning is logged.
+func NewEventBusEphemeralSubscriber(conf cconfig.EventBusEngine, serviceID string, logger *logrus.Entry) (message.Subscriber, error) {
+	engine, err := builder.BuildEventBusEngine(string(conf.Provider), conf.Config, serviceID, logger)
+	if err != nil {
+		logger.Errorf("could not generate Event Bus Ephemeral Subscriber: %s", err)
+		return nil, err
+	}
+	if engine == nil {
+		err := fmt.Errorf("unknown event bus provider %q", conf.Provider)
+		logger.Errorf("could not generate Event Bus Ephemeral Subscriber: %s", err)
+		return nil, err
+	}
+
+	if ephemeral, ok := engine.(eventbus.EphemeralSubscriberEngine); ok {
+		return ephemeral.EphemeralSubscriber()
+	}
+
+	logger.Warnf("event bus provider %q does not support ephemeral subscribers; falling back to a regular subscriber (providers that create one durable queue per process, such as AWS SQS/SNS, will leave a queue behind per process)", conf.Provider)
 	return engine.Subscriber()
 }
 

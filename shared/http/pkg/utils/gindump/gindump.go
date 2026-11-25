@@ -42,9 +42,17 @@ type bodyWriter struct {
 }
 
 // rewrite Write()
-func (w bodyWriter) Write(b []byte) (int, error) {
-	w.bodyCache.Write(b)
+func (w *bodyWriter) Write(b []byte) (int, error) {
+	// Event streams are unbounded; caching them would grow memory for as long as the stream lives.
+	if !strings.HasPrefix(w.Header().Get("Content-Type"), "text/event-stream") {
+		w.bodyCache.Write(b)
+	}
 	return w.ResponseWriter.Write(b)
+}
+
+// Unwrap exposes the wrapped writer so http.ResponseController can reach the net/http one.
+func (w *bodyWriter) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
 }
 
 // bodyAllowedForStatus is a copy of http.bodyAllowedForStatus non-exported function.
