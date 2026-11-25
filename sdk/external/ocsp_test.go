@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -134,7 +135,8 @@ func TestDelegatedOCSPResponderValidity(t *testing.T) {
 }
 
 // TestOCSPResponseSignedByIssuer covers responses signed with the key of the issuer itself, which RFC 6960 4.2.2.2
-// authorizes without any EKU, whether or not they embed the issuer's certificate.
+// authorizes without any EKU, whether or not they embed the issuer's certificate, and the rejection of responses
+// signed by any other key that the issuer did not delegate to.
 func TestOCSPResponseSignedByIssuer(t *testing.T) {
 	caTemplate := func(serial int64, cn string) *x509.Certificate {
 		return &x509.Certificate{
@@ -157,6 +159,14 @@ func TestOCSPResponseSignedByIssuer(t *testing.T) {
 	root := issueTestCert(t, caTemplate(1, "root"), nil)
 	intermediate := issueTestCert(t, caTemplate(2, "intermediate"), root)
 	other := issueTestCert(t, caTemplate(4, "other"), nil)
+	otherResponder := issueTestCert(t, &x509.Certificate{
+		SerialNumber: big.NewInt(5),
+		Subject:      pkix.Name{CommonName: "ocsp-responder of another CA"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageOCSPSigning},
+	}, other)
 
 	tests := []struct {
 		name        string
@@ -198,6 +208,15 @@ func TestOCSPResponseSignedByIssuer(t *testing.T) {
 			signer:      func(*testKeyPair) *ecdsa.PrivateKey { return other.key },
 			expectedErr: "signature",
 		},
+		{
+			// The response signature matches the embedded certificate, which has the OCSPSigning EKU, but the issuer
+			// did not issue it: only the issuer can delegate.
+			name:        "Err/DelegatedResponderNotIssuedByTheIssuer",
+			issuer:      intermediate,
+			embedded:    func(*testKeyPair) *x509.Certificate { return otherResponder.cert },
+			signer:      func(*testKeyPair) *ecdsa.PrivateKey { return otherResponder.key },
+			expectedErr: "not issued by the issuer",
+		},
 	}
 
 	for _, tc := range tests {
@@ -219,5 +238,46 @@ func TestOCSPResponseSignedByIssuer(t *testing.T) {
 				t.Fatalf("expected error containing '%s'. Got %v", tc.expectedErr, err)
 			}
 		})
+	}
+}
+
+// TestGetOCSPResponseRequiresCertificateAndIssuer checks that a missing certificate or issuer is an error, not a panic:
+// both are needed to build the request, and the issuer to verify the response.
+func TestGetOCSPResponseRequiresCertificateAndIssuer(t *testing.T) {
+	ca := issueTestCert(t, &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}, nil)
+	leaf := issueTestCert(t, &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "device"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+	}, ca)
+	srv := delegatedOCSPServer(t, ca, ca)
+
+	tests := []struct {
+		name        string
+		certificate *x509.Certificate
+		issuer      *x509.Certificate
+	}{
+		{"NilIssuer", leaf.cert, nil},
+		{"NilCertificate", nil, ca.cert},
+	}
+
+	for _, tc := range tests {
+		for _, verify := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/Verify=%t", tc.name, verify), func(t *testing.T) {
+				_, err := GetOCSPResponsePost(srv.URL, tc.certificate, tc.issuer, nil, verify)
+				if err == nil || !strings.Contains(err.Error(), "required") {
+					t.Fatalf("expected error containing 'required'. Got %v", err)
+				}
+			})
+		}
 	}
 }

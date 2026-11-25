@@ -27,6 +27,11 @@ func GetOCSPResponsePost(ocspServerURL string, certificate *x509.Certificate, is
 }
 
 func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Certificate, issuer *x509.Certificate, serverCertificate *x509.Certificate, verifyOCSPResponse bool) (*ocsp.Response, error) {
+	// ocsp.CreateRequest dereferences both, and the issuer also verifies the response.
+	if certificate == nil || issuer == nil {
+		return nil, fmt.Errorf("could not generate OCSP request: the certificate and its issuer are required")
+	}
+
 	opts := &ocsp.RequestOptions{Hash: crypto.SHA1}
 
 	buffer, err := ocsp.CreateRequest(certificate, issuer, opts)
