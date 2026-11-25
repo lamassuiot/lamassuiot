@@ -68,7 +68,33 @@ func ParseIssuingDistributionPoint(der []byte) (IssuingDistributionPoint, error)
 
 // MarshalIssuingDistributionPoint encodes idp as the DER value of an IssuingDistributionPoint extension.
 func MarshalIssuingDistributionPoint(idp IssuingDistributionPoint) ([]byte, error) {
+	idp.OnlySomeReasons = canonicalNamedBits(idp.OnlySomeReasons)
 	return asn1.Marshal(idp)
+}
+
+// canonicalNamedBits returns bits, a BIT STRING with named bits, as DER encodes it: without trailing 0 bits (X.690
+// 11.2.2) and with the unused bits of its last byte set to 0 (X.690 11.2.1). Absent bits (nil Bytes) stay absent and
+// present bits with none set stay present, since an IDP tells them apart.
+func canonicalNamedBits(bits asn1.BitString) asn1.BitString {
+	if bits.Bytes == nil {
+		return bits
+	}
+
+	length := 0
+	for i := min(bits.BitLength, 8*len(bits.Bytes)) - 1; i >= 0; i-- {
+		if bits.At(i) == 1 {
+			length = i + 1
+			break
+		}
+	}
+
+	out := make([]byte, (length+7)/8)
+	for i := range length {
+		if bits.At(i) == 1 {
+			out[i/8] |= 0x80 >> (i % 8)
+		}
+	}
+	return asn1.BitString{Bytes: out, BitLength: length}
 }
 
 // ParseCRLDistributionPoints decodes the CRL distribution points extensions of cert.

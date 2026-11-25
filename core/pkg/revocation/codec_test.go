@@ -73,6 +73,29 @@ func TestMarshalIssuingDistributionPointIsDER(t *testing.T) {
 			want: tlv(0x30, relativeNameDP()),
 		},
 		{
+			// ReasonFlags is a named bit list: DER removes its trailing 0 bits (X.690 11.2.2). keyCompromise is bit 1.
+			name: "OnlySomeReasonsTrailingZeroBits",
+			idp:  IssuingDistributionPoint{OnlySomeReasons: asn1.BitString{Bytes: []byte{0x40}, BitLength: 8}},
+			want: tlv(0x30, []byte{0x83, 0x02, 0x06, 0x40}),
+		},
+		{
+			// The unused bits of the last byte are 0 (X.690 11.2.1).
+			name: "OnlySomeReasonsUnusedBitsSet",
+			idp:  IssuingDistributionPoint{OnlySomeReasons: asn1.BitString{Bytes: []byte{0x7f}, BitLength: 2}},
+			want: tlv(0x30, []byte{0x83, 0x02, 0x06, 0x40}),
+		},
+		{
+			// Present with no bit set restricts the CRL to no reason at all, unlike an absent field: it stays encoded.
+			name: "OnlySomeReasonsNoBitSet",
+			idp:  IssuingDistributionPoint{OnlySomeReasons: asn1.BitString{Bytes: []byte{0x00}, BitLength: 8}},
+			want: tlv(0x30, []byte{0x83, 0x01, 0x00}),
+		},
+		{
+			name: "OnlySomeReasonsEmpty",
+			idp:  IssuingDistributionPoint{OnlySomeReasons: asn1.BitString{Bytes: []byte{}}},
+			want: tlv(0x30, []byte{0x83, 0x01, 0x00}),
+		},
+		{
 			name: "AllBooleansTrue",
 			idp:  IssuingDistributionPoint{OnlyContainsUserCerts: true, OnlyContainsCACerts: true, IndirectCRL: true, OnlyContainsAttributeCerts: true},
 			want: tlv(0x30, []byte{0x81, 0x01, 0xff, 0x82, 0x01, 0xff, 0x84, 0x01, 0xff, 0x85, 0x01, 0xff}),
