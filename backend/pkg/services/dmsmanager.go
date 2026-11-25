@@ -761,6 +761,12 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 		lFunc.Warn("DMS is configured with no CSR signature verification, allowing enrollment")
 	}
 
+	// Resolved before registering the device, so a rejected profile does not leave a device behind.
+	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollSettings.EnrollmentCA)
+	if err != nil {
+		return nil, err
+	}
+
 	lFunc = lFunc.WithField("step", "DeviceReg")
 
 	var device *models.Device
@@ -827,11 +833,6 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 	lFunc = lFunc.WithField("step", "Signature")
 	lFunc.Infof("starting signature process")
-
-	issuanceProfile, err := svc.resolveIssuanceProfile(ctx, lFunc, dms, enrollSettings.EnrollmentCA)
-	if err != nil {
-		return nil, err
-	}
 
 	lFunc.Infof("requesting certificate signature")
 	crt, err := svc.caClient.SignCertificate(ctx, services.SignCertificateInput{

@@ -182,16 +182,11 @@ func TestEnrollFailedReplacementKeepsCurrentCertificateActive(t *testing.T) {
 	require.NoError(t, err, "first enrollment should succeed")
 	firstSN := helpers.SerialNumberToHexString(firstCrt.SerialNumber)
 
-	// Make the next enrollment fail after the device check: the issuance profile cannot be resolved.
-	settings := fx.dms.Settings
-	settings.IssuanceProfileID = fmt.Sprintf("missing-profile-%s", uuid.NewV7().String())
-	_, err = fx.dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{
-		ID:       fx.dms.ID,
-		Name:     fx.dms.Name,
-		Metadata: fx.dms.Metadata,
-		Settings: &settings,
-	})
-	require.NoError(t, err, "could not update DMS")
+	// Make the next enrollment fail at signing, after the device check: the profile no longer accepts ECDSA keys.
+	profile := *fx.profile
+	profile.CryptoEnforcement = models.IssuanceProfileCryptoEnforcement{Enabled: true, AllowRSAKeys: true}
+	_, err = fx.testServers.CA.Service.UpdateIssuanceProfile(ctx, services.UpdateIssuanceProfileInput{Profile: profile})
+	require.NoError(t, err, "could not update issuance profile")
 
 	_, err = fx.estCli.Enroll(ctx, csr)
 	require.Error(t, err, "second enrollment should fail")

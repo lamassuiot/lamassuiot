@@ -151,6 +151,10 @@ func TestEnrollRejectsIssuanceProfileOverridingCN(t *testing.T) {
 	_, err := fx.estCli.Enroll(ctx, csr)
 	require.Error(t, err, "enrollment should be rejected")
 	assert.Equal(t, issuedBefore, countCertificatesIssuedBy(t, fx, fx.enrollCA.ID), "no certificate should be issued")
+
+	// The DMS registers devices just in time, but a rejected enrollment must not leave a device behind.
+	_, err = fx.testServers.DeviceManager.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
+	assert.ErrorIs(t, err, errs.ErrDeviceNotFound, "no device should be registered")
 }
 
 func TestReenrollRejectsIssuanceProfileOverridingCN(t *testing.T) {
