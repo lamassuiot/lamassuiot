@@ -658,7 +658,7 @@ Returns **only the atomic actions** (those that require an entity ID, e.g. `read
 **Input (Direct)**:
 - `principal_id`: The principal whose capabilities are queried
 - `namespace`: The authorization namespace / config domain (e.g. `"iot"`, `"pki"`)
-- `schema_name`: The database schema the entity belongs to (e.g. `"public"`, `"ca"`)
+- `schema_name`: The schema used in policy and API identifiers. For SQL, `"public"` (also the default when omitted) uses the connection's default schema: `search_path` with direct PostgreSQL, or the configured schema prefix with RDS Data API. Other explicit schemas (e.g. `"ca"`) qualify the relation directly.
 - `entity_type`: The entity type within that schema (e.g. `"device"`, `"gateway"`)
 - `entity_key`: Map of PK column → value (e.g. `{"device_id": "sensor-temp-101"}` or `{"tenant_id": "acme", "device_id": "sensor-101"}`)
 - `entity_id` *(legacy, simple PK only)*: Bare string; promoted to `entity_key` automatically

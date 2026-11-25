@@ -112,14 +112,24 @@ func qualifiedTableName(db *gorm.DB, tableName string) string {
 	if strings.Contains(tableName, ".") {
 		return tableName
 	}
+	if schemaName := ExplicitPostgresSchema(db); schemaName != "" {
+		return schemaName + "." + tableName
+	}
+	return tableName
+}
 
+// ExplicitPostgresSchema returns the schema for connections configured to qualify table names.
+func ExplicitPostgresSchema(db *gorm.DB) string {
+	if db == nil {
+		return ""
+	}
 	switch namingStrategy := db.Config.NamingStrategy.(type) {
 	case postgresSchemaNamingStrategy:
-		return namingStrategy.schemaName + "." + tableName
+		return namingStrategy.schemaName
 	case *postgresSchemaNamingStrategy:
-		return namingStrategy.schemaName + "." + tableName
+		return namingStrategy.schemaName
 	default:
-		return tableName
+		return ""
 	}
 }
 
