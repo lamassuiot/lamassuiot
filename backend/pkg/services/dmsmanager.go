@@ -790,6 +790,10 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			lFunc.Errorf("aborting enrollment. device '%s' is registered with DMS '%s'", csr.Subject.CommonName, device.DMSOwner)
 			return nil, fmt.Errorf("device already registered to another DMS")
 		}
+		if device.Status == models.DeviceDecommissioned {
+			lFunc.Errorf("aborting enrollment. device '%s' is decommissioned", device.ID)
+			return nil, errs.ErrDeviceInvalidStatus
+		}
 
 		if enrollSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("DMS allows new enrollments. Continuing enrollment for device '%s'", csr.Subject.CommonName)
@@ -962,6 +966,10 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 	} else {
 		lFunc.Debugf("device found")
+	}
+	if device.Status == models.DeviceDecommissioned {
+		lFunc.Errorf("aborting reenrollment. device '%s' is decommissioned", device.ID)
+		return nil, errs.ErrDeviceInvalidStatus
 	}
 
 	lFunc = lFunc.WithField("step", "CSRCheck")
@@ -1490,6 +1498,10 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	if err != nil {
 		return nil, err
 	}
+	if device.Status == models.DeviceDecommissioned {
+		lFunc.Errorf("cannot bind a certificate to decommissioned device '%s'", device.ID)
+		return nil, errs.ErrDeviceInvalidStatus
+	}
 
 	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{
 		ID: device.DMSOwner,
@@ -1551,13 +1563,19 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		eventType = input.BindMode
 		eventDescription = fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion)
 	}
-	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
+	updatedDevice, err := svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
 		ID:   device.ID,
 		Slot: *idSlot,
 	})
 	if err != nil {
 		lFunc.Errorf("could not update device '%s' identity slot. Aborting enrollment process: %s", device.ID, err)
 		return nil, err
+	}
+	// Device Manager can return success for an unchanged decommissioned device.
+	if updatedDevice == nil || updatedDevice.Status == models.DeviceDecommissioned ||
+		updatedDevice.IdentitySlot == nil || updatedDevice.IdentitySlot.Status != models.SlotActive ||
+		updatedDevice.IdentitySlot.Secrets[updatedDevice.IdentitySlot.ActiveVersion] != crt.SerialNumber {
+		return nil, fmt.Errorf("device %q did not activate certificate %q", device.ID, crt.SerialNumber)
 	}
 
 	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
@@ -1575,7 +1593,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	return &models.BindIdentityToDeviceOutput{
 		Certificate: crt,
 		DMS:         dms,
-		Device:      device,
+		Device:      updatedDevice,
 	}, nil
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/globalsign/est"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers/tests"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
@@ -166,6 +167,61 @@ func TestBindIdentityToDeviceTargetsInputDeviceNotCertificateCN(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, device.IdentitySlot, "identity slot should be set")
 	assert.Equal(t, crt.SerialNumber, device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion])
+}
+
+func TestESTRejectsDecommissionedDeviceBeforeSigning(t *testing.T) {
+	ctx := context.Background()
+	fx := newEnrollBindFixture(t)
+
+	deviceID := "device-" + uuid.NewV7().String()
+	_, err := fx.testServers.DeviceManager.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        deviceID,
+		Alias:     deviceID,
+		Tags:      []string{},
+		Metadata:  map[string]any{},
+		DMSID:     fx.dms.ID,
+		Icon:      "BiSolidCreditCardFront",
+		IconColor: "#25ee32",
+	})
+	require.NoError(t, err)
+	device, err := fx.testServers.DeviceManager.Service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
+		ID:        deviceID,
+		NewStatus: models.DeviceDecommissioned,
+	})
+	require.NoError(t, err)
+	require.Equal(t, models.DeviceDecommissioned, device.Status)
+
+	key, err := chelpers.GenerateECDSAKey(elliptic.P224())
+	require.NoError(t, err)
+	csr, err := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, key)
+	require.NoError(t, err)
+
+	t.Run("Enroll", func(t *testing.T) {
+		issuedBefore := countCertificatesIssuedBy(t, fx, fx.enrollCA.ID)
+		crt, err := fx.estCli.Enroll(ctx, csr)
+		assert.ErrorContains(t, err, errs.ErrDeviceInvalidStatus.Error())
+		assert.Nil(t, crt)
+		assert.Equal(t, issuedBefore, countCertificatesIssuedBy(t, fx, fx.enrollCA.ID))
+	})
+
+	t.Run("Reenroll", func(t *testing.T) {
+		// Use a valid client certificate to reach the device check with an empty identity slot.
+		clientCert, err := fx.testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
+			CAID:              fx.enrollCA.ID,
+			CertRequest:       (*models.X509CertificateRequest)(csr),
+			IssuanceProfileID: fx.enrollCA.ProfileID,
+		})
+		require.NoError(t, err)
+		reenrollCli := fx.estCli
+		reenrollCli.Certificates = []*x509.Certificate{(*x509.Certificate)(clientCert.Certificate)}
+		reenrollCli.PrivateKey = key
+
+		issuedBefore := countCertificatesIssuedBy(t, fx, fx.enrollCA.ID)
+		crt, err := reenrollCli.Reenroll(ctx, csr)
+		assert.ErrorContains(t, err, errs.ErrDeviceInvalidStatus.Error())
+		assert.Nil(t, crt)
+		assert.Equal(t, issuedBefore, countCertificatesIssuedBy(t, fx, fx.enrollCA.ID))
+	})
 }
 
 // A replaceable enrollment that fails must not revoke the certificate the device is currently using: there is no
