@@ -18,6 +18,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	svcmock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/mock"
@@ -168,24 +169,24 @@ func crlServerWithExtensions(t *testing.T, signer *revocationTestCA, nextUpdate 
 	return srv
 }
 
-func idpExtension(t *testing.T, idp issuingDistributionPoint) []pkix.Extension {
+func idpExtension(t *testing.T, idp revocation.IssuingDistributionPoint) []pkix.Extension {
 	t.Helper()
 	value, err := asn1.Marshal(idp)
 	if err != nil {
 		t.Fatalf("could not marshal issuing distribution point: %s", err)
 	}
-	return []pkix.Extension{{Id: oidExtensionIssuingDistributionPoint, Critical: true, Value: value}}
+	return []pkix.Extension{{Id: revocation.OIDExtensionIssuingDistributionPoint, Critical: true, Value: value}}
 }
 
-func uriDistributionPoint(uri string) issuingDistributionPointName {
-	return issuingDistributionPointName{FullName: []asn1.RawValue{{Class: asn1.ClassContextSpecific, Tag: 6, Bytes: []byte(uri)}}}
+func uriDistributionPoint(uri string) revocation.DistributionPointName {
+	return revocation.DistributionPointName{FullName: []asn1.RawValue{revocation.URIGeneralName(uri)}}
 }
 
 // testDistributionPoint is a DistributionPoint of a certificate (RFC 5280 4.2.1.13). Reasons holds the full encoding of
 // the [1] ReasonFlags field, so that tests can also write a malformed one.
 type testDistributionPoint struct {
-	DistributionPoint issuingDistributionPointName `asn1:"optional,tag:0"`
-	Reasons           asn1.RawValue                `asn1:"optional"`
+	DistributionPoint revocation.DistributionPointName `asn1:"optional,tag:0"`
+	Reasons           asn1.RawValue                    `asn1:"optional"`
 }
 
 var (
@@ -475,7 +476,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "OK/CRLOnlyContainsUserCerts",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 51, nil, []string{srv.URL})
@@ -486,7 +487,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
 					baseCRLNumber, _ := asn1.Marshal(big.NewInt(1))
-					return []pkix.Extension{{Id: oidExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
+					return []pkix.Extension{{Id: revocation.OIDExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 52, nil, []string{srv.URL})
@@ -498,7 +499,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
 					baseCRLNumber, _ := asn1.Marshal(big.NewInt(1))
-					return []pkix.Extension{{Id: oidExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
+					return []pkix.Extension{{Id: revocation.OIDExtensionDeltaCRLIndicator, Critical: true, Value: baseCRLNumber}}
 				}, big.NewInt(53))
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 53, nil, []string{srv.URL})
@@ -509,7 +510,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "Err/CRLOnlyContainsCACerts",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 54, nil, []string{srv.URL})
@@ -522,7 +523,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
 					keyCompromiseOnly := asn1.BitString{Bytes: []byte{0x40}, BitLength: 2}
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: keyCompromiseOnly})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: keyCompromiseOnly})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 55, nil, []string{srv.URL})
@@ -535,7 +536,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
 					noReason := asn1.BitString{Bytes: []byte{}}
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: noReason})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlySomeReasons: noReason})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 59, nil, []string{srv.URL})
@@ -592,7 +593,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "Err/CRLIndirect",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), IndirectCRL: true})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), IndirectCRL: true})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 56, nil, []string{srv.URL})
@@ -604,7 +605,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "Err/CRLForAnotherPartition",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL + "/partition-2")})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL + "/partition-2")})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 57, nil, []string{srv.URL + "/partition-1"})
@@ -619,7 +620,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 				down := httptest.NewServer(http.NotFoundHandler())
 				down.Close()
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(down.URL)})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(down.URL)})
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 70, nil, []string{down.URL, srv.URL})
@@ -629,7 +630,7 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 			name: "Err/CRLMalformedIssuingDistributionPoint",
 			setup: func(t *testing.T) (DMSManagerServiceBackend, *x509.Certificate) {
 				srv := crlServerWithExtensions(t, ca, time.Now().Add(time.Hour), func(string) []pkix.Extension {
-					return []pkix.Extension{{Id: oidExtensionIssuingDistributionPoint, Critical: true, Value: []byte{0x30, 0x03, 0x01}}}
+					return []pkix.Extension{{Id: revocation.OIDExtensionIssuingDistributionPoint, Critical: true, Value: []byte{0x30, 0x03, 0x01}}}
 				})
 				t.Cleanup(srv.Close)
 				return notInLamassu(), ca.issueLeaf(t, 58, nil, []string{srv.URL})
@@ -693,37 +694,6 @@ func TestCheckCertificateRevocationReusesCachedCRL(t *testing.T) {
 	}
 	if n := requests.Load(); n != 1 {
 		t.Fatalf("expected 1 CRL download. Got %d", n)
-	}
-}
-
-func TestCheckRevocationFreshness(t *testing.T) {
-	now := time.Now()
-	tests := []struct {
-		name       string
-		thisUpdate time.Time
-		nextUpdate time.Time
-		fresh      bool
-	}{
-		{"OK/WithinWindow", now.Add(-time.Hour), now.Add(time.Hour), true},
-		{"OK/NextUpdateJustPassedWithinSkew", now.Add(-time.Hour), now.Add(-time.Minute), true},
-		{"OK/ThisUpdateSlightlyAheadWithinSkew", now.Add(time.Minute), now.Add(time.Hour), true},
-		{"OK/NoNextUpdateRecent", now.Add(-time.Hour), time.Time{}, true},
-		{"Err/MissingThisUpdate", time.Time{}, now.Add(time.Hour), false},
-		{"Err/ThisUpdateInFuture", now.Add(time.Hour), now.Add(2 * time.Hour), false},
-		{"Err/NextUpdatePassed", now.Add(-2 * time.Hour), now.Add(-time.Hour), false},
-		{"Err/NoNextUpdateTooOld", now.Add(-25 * time.Hour), time.Time{}, false},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := checkRevocationFreshness(tc.thisUpdate, tc.nextUpdate, now)
-			if tc.fresh && err != nil {
-				t.Fatalf("expected fresh. Got %s", err)
-			}
-			if !tc.fresh && err == nil {
-				t.Fatalf("expected not fresh. Got no error")
-			}
-		})
 	}
 }
 
@@ -830,7 +800,7 @@ func TestEnrollmentChainRevocation(t *testing.T) {
 			name: "Err/IntermediateCRLOnlyContainsUserCerts",
 			chain: func(t *testing.T) []*x509.Certificate {
 				srv := crlServerWithExtensions(t, root, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsUserCerts: true})
 				})
 				t.Cleanup(srv.Close)
 				intermediate := root.issueSubCA(t, "intermediate-ca", 204, nil, []string{srv.URL})
@@ -843,7 +813,7 @@ func TestEnrollmentChainRevocation(t *testing.T) {
 			name: "OK/IntermediateCRLOnlyContainsCACerts",
 			chain: func(t *testing.T) []*x509.Certificate {
 				srv := crlServerWithExtensions(t, root, time.Now().Add(time.Hour), func(srvURL string) []pkix.Extension {
-					return idpExtension(t, issuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
+					return idpExtension(t, revocation.IssuingDistributionPoint{DistributionPoint: uriDistributionPoint(srvURL), OnlyContainsCACerts: true})
 				})
 				t.Cleanup(srv.Close)
 				intermediate := root.issueSubCA(t, "intermediate-ca", 205, nil, []string{srv.URL})

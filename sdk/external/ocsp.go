@@ -10,10 +10,10 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"slices"
 	"time"
 
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/ocsp"
 )
@@ -119,41 +119,15 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 }
 
 // verifyResponseSigner checks that response was signed by issuer or by a responder it delegated to (RFC 6960 4.2.2.2).
-// When the response embeds a certificate, ocsp.ParseResponse has already checked the response signature against it.
+// A response without an embedded certificate must be signed with the issuer's key; otherwise the rules on the embedded
+// responder certificate apply.
 func verifyResponseSigner(response *ocsp.Response, issuer *x509.Certificate) error {
-	responder := response.Certificate
-	if responder == nil {
+	if response.Certificate == nil {
 		if err := response.CheckSignatureFrom(issuer); err != nil {
 			return fmt.Errorf("bad OCSP signature: %w", err)
 		}
 		return nil
 	}
 
-	// Signed with the issuer's own key: the issuer embedded its certificate, no delegation is involved.
-	if bytes.Equal(responder.RawSubjectPublicKeyInfo, issuer.RawSubjectPublicKeyInfo) {
-		return nil
-	}
-
-	if err := issuer.CheckSignature(responder.SignatureAlgorithm, responder.RawTBSCertificate, responder.Signature); err != nil {
-		return fmt.Errorf("OCSP response signed by %q, whose certificate was not issued by the issuer: %w", responder.Subject.CommonName, err)
-	}
-
-	return checkDelegatedResponder(responder)
-}
-
-// checkDelegatedResponder enforces RFC 6960 4.2.2.2 on a responder certificate issued by the issuer: it must carry the
-// id-kp-OCSPSigning EKU and be within its validity period. Being issued by the issuer is not enough, since any
-// end-entity certificate of that CA satisfies it, expired ones included.
-func checkDelegatedResponder(responder *x509.Certificate) error {
-	if !slices.Contains(responder.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
-		return fmt.Errorf("OCSP response signed by %q, which is not the issuer and is not authorized for OCSP signing", responder.Subject.CommonName)
-	}
-
-	now := time.Now()
-	if now.Before(responder.NotBefore) || now.After(responder.NotAfter) {
-		return fmt.Errorf("OCSP response signed by %q, whose certificate is not valid at this time (valid from %s to %s)",
-			responder.Subject.CommonName, responder.NotBefore.UTC().Format(time.RFC3339), responder.NotAfter.UTC().Format(time.RFC3339))
-	}
-
-	return nil
+	return revocation.CheckDelegatedResponder(response, issuer, time.Now())
 }
