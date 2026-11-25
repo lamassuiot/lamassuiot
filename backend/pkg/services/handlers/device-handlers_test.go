@@ -150,6 +150,59 @@ func TestCertificateMetadataHandlerFindsTheDeviceInTheBindingMetadata(t *testing
 	svc.AssertCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, slotUpdatedTo("dev-1", models.SlotRenewalWindow))
 }
 
+// A binding can name a device that has no identity slot: the device manager does not write the slot of a
+// decommissioned device. There is no slot to sync, so the event is skipped.
+func TestCertificateStatusHandlerSkipsADeviceWithoutSlot(t *testing.T) {
+	cert := certWithCN(t, "ES", "sn-1", map[string]any{models.DMSAttachedToDeviceKey: attachedTo("dev-1")})
+	cert.Status = models.StatusRevoked
+	cert.RevocationReason = ocsp.Unspecified
+
+	svc := deviceManagerMock(&models.Device{ID: "dev-1"})
+	require.NotPanics(t, func() {
+		require.NoError(t, updateCertStatusHandler(context.Background(), certUpdateEvent(t, models.Certificate{}, cert), svc, discardLogger()))
+	})
+
+	svc.AssertNotCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, mock.Anything)
+}
+
+func TestCertificateMetadataHandlerSkipsADeviceWithoutSlot(t *testing.T) {
+	previous := certWithCN(t, "ES", "sn-1", map[string]any{
+		models.DMSAttachedToDeviceKey:                  attachedTo("dev-1"),
+		models.CAMetadataMonitoringExpirationDeltasKey: renewalWindowTriggered(false),
+	})
+	updated := previous
+	updated.Metadata = map[string]any{
+		models.DMSAttachedToDeviceKey:                  attachedTo("dev-1"),
+		models.CAMetadataMonitoringExpirationDeltasKey: renewalWindowTriggered(true),
+	}
+
+	svc := deviceManagerMock(&models.Device{ID: "dev-1"})
+	require.NotPanics(t, func() {
+		require.NoError(t, updateCertMetaHandler(context.Background(), certUpdateEvent(t, previous, updated), svc, discardLogger()))
+	})
+
+	svc.AssertNotCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, mock.Anything)
+}
+
+// The binding key can hold a value the DMS did not write, since certificate metadata accepts any JSON patch. The
+// handler then finds the device by the CommonName, as it did before it read the binding, instead of failing the event.
+func TestCertificateMetadataHandlerFallsBackToTheCommonNameOnAnUnreadableBinding(t *testing.T) {
+	previous := certWithCN(t, "dev-1", "sn-1", map[string]any{
+		models.DMSAttachedToDeviceKey:                  "dms-1",
+		models.CAMetadataMonitoringExpirationDeltasKey: renewalWindowTriggered(false),
+	})
+	updated := previous
+	updated.Metadata = map[string]any{
+		models.DMSAttachedToDeviceKey:                  "dms-1",
+		models.CAMetadataMonitoringExpirationDeltasKey: renewalWindowTriggered(true),
+	}
+
+	svc := deviceManagerMock(activeDevice("dev-1", "sn-1"))
+	require.NoError(t, updateCertMetaHandler(context.Background(), certUpdateEvent(t, previous, updated), svc, discardLogger()))
+
+	svc.AssertCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, slotUpdatedTo("dev-1", models.SlotRenewalWindow))
+}
+
 func TestCertificateMetadataHandlerFallsBackToTheCommonName(t *testing.T) {
 	previous := certWithCN(t, "dev-1", "sn-1", map[string]any{
 		models.CAMetadataMonitoringExpirationDeltasKey: renewalWindowTriggered(false),

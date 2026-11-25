@@ -58,6 +58,12 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		return err
 	}
 
+	// The device manager does not write the slot of a decommissioned device, so a bound device can have none.
+	if dev.IdentitySlot == nil {
+		lMessaging.Debugf("skipping event %s, device %s has no identity slot", event.Type(), deviceID)
+		return nil
+	}
+
 	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
 		//event is not for the active certificate. Skip
 		return nil
@@ -103,12 +109,12 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return err
 	}
 
-	// The device the DMS bound the certificate to. Bindings that recorded none fall back to the CommonName.
+	// The device the DMS bound the certificate to. Bindings that recorded none, or a value the DMS did not write (the
+	// metadata accepts any patch), fall back to the CommonName.
 	var attachedBy models.CAAttachedToDevice
 	if _, err := helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy); err != nil {
-		err = fmt.Errorf("could not decode metadata with key %s: %s", models.DMSAttachedToDeviceKey, err)
-		lMessaging.Error(err)
-		return err
+		lMessaging.Warnf("could not decode metadata with key %s, using the certificate CommonName: %s", models.DMSAttachedToDeviceKey, err)
+		attachedBy = models.CAAttachedToDevice{}
 	}
 	deviceID := attachedBy.DeviceID
 	if deviceID == "" {
@@ -123,7 +129,13 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return err
 	}
 
-	if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
+	// The device manager does not write the slot of a decommissioned device, so a bound device can have none.
+	if dev.IdentitySlot == nil {
+		lMessaging.Debugf("skipping event %s, device %s has no identity slot", event.Type(), deviceID)
+		return nil
+	}
+
+	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
 		//event is not for the active certificate. Skip
 		return nil
 	}
