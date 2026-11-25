@@ -11,6 +11,7 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -99,6 +100,9 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("webhook validation error: %s", err)
 		return nil, err
 	}
+	if err := svc.validateDMSIssuanceProfile(ctx, lFunc, input.Settings); err != nil {
+		return nil, err
+	}
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -136,6 +140,9 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	}
 	if err := validateDMSWebhooks(*input.Settings); err != nil {
 		lFunc.Errorf("webhook validation error: %s", err)
+		return nil, err
+	}
+	if err := svc.validateDMSIssuanceProfile(ctx, lFunc, *input.Settings); err != nil {
 		return nil, err
 	}
 
@@ -757,6 +764,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc = lFunc.WithField("step", "DeviceReg")
 
 	var device *models.Device
+	// supersededSN is the certificate the device uses before this enrollment. It is revoked only once the new
+	// certificate is bound to the device.
+	supersededSN := ""
 	device, err = svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: csr.Subject.CommonName,
 	})
@@ -777,26 +787,9 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 		if enrollSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("DMS allows new enrollments. Continuing enrollment for device '%s'", csr.Subject.CommonName)
-			//revoke active certificate
-			defer func() {
-				lFunc = lFunc.WithField("step", "PostEnroll")
-				lFunc.Infof("starting PostEnroll process")
-				if device.IdentitySlot == nil {
-					device.IdentitySlot = &models.Slot[string]{}
-				}
-				_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-					SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
-					NewStatus:        models.StatusRevoked,
-					RevocationReason: ocsp.Superseded,
-				})
-				if err != nil {
-					lFunc.Warnf("could not revoke certificate %s: %s", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion], err)
-				} else {
-					lFunc.Infof("revoked certificate %s successfully", device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion])
-				}
-
-				lFunc.Infof("PostEnroll process completed successfully")
-			}()
+			if device.IdentitySlot != nil {
+				supersededSN = device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion]
+			}
 		} else {
 			lFunc.Debugf("aborting enrollment. DMS forbids new enrollments. consider switching NewEnrollment option ON in the DMS")
 			return nil, fmt.Errorf("forbiddenNewEnrollment")
@@ -870,6 +863,23 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	}
 
 	lFunc.Infof("certificate signing process completed successfully")
+
+	if supersededSN != "" {
+		lFunc = lFunc.WithField("step", "PostEnroll")
+		lFunc.Infof("starting PostEnroll process")
+		_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+			SerialNumber:     supersededSN,
+			NewStatus:        models.StatusRevoked,
+			RevocationReason: ocsp.Superseded,
+		})
+		if err != nil {
+			lFunc.Warnf("could not revoke certificate %s: %s", supersededSN, err)
+		} else {
+			lFunc.Infof("revoked certificate %s successfully", supersededSN)
+		}
+
+		lFunc.Infof("PostEnroll process completed successfully")
+	}
 
 	lFunc = lFunc.WithField("step", "Done")
 	lFunc.Infof("enrollment process completed successfully")
@@ -1541,7 +1551,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		eventDescription = fmt.Sprintf("New Active Version set to %d", idSlot.ActiveVersion)
 	}
 	_, err = svc.deviceManagerCli.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-		ID:   crt.Subject.CommonName,
+		ID:   device.ID,
 		Slot: *idSlot,
 	})
 	if err != nil {
@@ -1550,7 +1560,7 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	}
 
 	_, err = svc.deviceManagerCli.CreateDeviceEvent(ctx, services.CreateDeviceEventInput{
-		DeviceID:    crt.Subject.CommonName,
+		DeviceID:    device.ID,
 		Timestamp:   time.Now(),
 		Type:        eventType,
 		Description: eventDescription,
@@ -1568,6 +1578,9 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	}, nil
 }
 
+// resolveIssuanceProfile returns the issuance profile the DMS signs with: the one referenced by ID, the inline one, or
+// the default profile of the enrollment CA. It fails with ErrDMSIssuanceProfileOverridesCN when that profile replaces
+// the CSR CommonName, which is the device ID.
 func (svc DMSManagerServiceBackend) resolveIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, dms *models.DMS, enrollmentCA string) (*models.IssuanceProfile, error) {
 	issuanceProfile := dms.Settings.IssuanceProfile
 	if dms.Settings.IssuanceProfileID != "" {
@@ -1591,7 +1604,26 @@ func (svc DMSManagerServiceBackend) resolveIssuanceProfile(ctx context.Context, 
 		issuanceProfile = profile
 	}
 
+	if !issuanceProfile.HonorSubject && issuanceProfile.Subject.CommonName != "" {
+		lFunc.Errorf("issuance profile '%s' replaces the device CommonName with '%s'", issuanceProfile.ID, issuanceProfile.Subject.CommonName)
+		return nil, errs.ErrDMSIssuanceProfileOverridesCN
+	}
+
 	return issuanceProfile, nil
+}
+
+// validateDMSIssuanceProfile rejects DMS settings whose issuance profile replaces the certificate CommonName. The
+// profile can change after the DMS is saved, so enrollment checks it again; a profile that cannot be resolved now is
+// left to that check.
+func (svc DMSManagerServiceBackend) validateDMSIssuanceProfile(ctx context.Context, lFunc *logrus.Entry, settings models.DMSSettings) error {
+	_, err := svc.resolveIssuanceProfile(ctx, lFunc, &models.DMS{Settings: settings}, settings.EnrollmentSettings.EnrollmentCA)
+	if errors.Is(err, errs.ErrDMSIssuanceProfileOverridesCN) {
+		return fmt.Errorf("%w: %w", errs.ErrValidateBadRequest, err)
+	}
+	if err != nil {
+		lFunc.Warnf("could not resolve the DMS issuance profile to validate it, enrollment will check it: %s", err)
+	}
+	return nil
 }
 
 func (svc DMSManagerServiceBackend) getProfileForCA(ctx context.Context, caID string) (*models.IssuanceProfile, error) {

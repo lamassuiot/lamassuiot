@@ -601,6 +601,11 @@ components:
           $ref: '#/components/schemas/CADistributionSettings'
         issuance_profile_id:
           type: string
+          description: >-
+            Issuance profile the DMS signs with. Without it, the inline issuance_profile, or else the default profile of
+            the enrollment CA, is used. The profile must keep the CSR CommonName, which is the device ID: a profile with
+            honor_subject false and a subject common_name is rejected with 400 when the DMS is saved, and enrollment
+            fails before signing if the profile changes afterwards.
         issuance_profile:
           $ref: '#/components/schemas/IssuanceProfile'
 
