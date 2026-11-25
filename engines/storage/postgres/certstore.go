@@ -145,11 +145,11 @@ func (db *PostgresCertificateStorage) ReleaseKey(ctx context.Context, serialNumb
 		return nil
 	}
 
-	return db.db.WithContext(ctx).Table("certificates").Where("serial_number IN ?", serialNumbers).Update("key_id", nil).Error
+	return db.querier.Table("certificates").WithContext(ctx).Where("serial_number IN ?", serialNumbers).Update("key_id", nil).Error
 }
 
-// crlSettingsTable is the VA table whose ACTIVE rows retain the key of their signer certificate.
-const crlSettingsTable = VA_SCHEMA + ".crl_settings"
+// vaCRLSettingsTable is explicitly qualified because the CA store reads it across schemas.
+const vaCRLSettingsTable = VA_SCHEMA + "." + crlSettingsTable
 
 // CRLSettingsHoldingKey names the CAs whose ACTIVE CRL settings have one of the certificates as signer: they retain
 // its KMS key (crl_settings_signer_key_fk), which the KMS cannot delete until they are FINAL. It only reads, so it
@@ -162,14 +162,14 @@ func (db *PostgresCertificateStorage) CRLSettingsHoldingKey(ctx context.Context,
 
 	tx := db.db.WithContext(ctx)
 	var vaMigrated bool
-	if err := tx.Raw("SELECT to_regclass(?) IS NOT NULL", crlSettingsTable).Scan(&vaMigrated).Error; err != nil {
+	if err := tx.Raw("SELECT to_regclass(?) IS NOT NULL", vaCRLSettingsTable).Scan(&vaMigrated).Error; err != nil {
 		return nil, err
 	}
 	if !vaMigrated {
 		return holders, nil
 	}
 
-	err := tx.Raw("SELECT ca_id FROM "+crlSettingsTable+" WHERE status = ? AND signer_serial_number IN ? ORDER BY ca_id",
+	err := tx.Raw("SELECT ca_id FROM "+vaCRLSettingsTable+" WHERE status = ? AND signer_serial_number IN ? ORDER BY ca_id",
 		models.CRLSettingsActive, serialNumbers).Scan(&holders).Error
 	if err != nil {
 		return nil, err

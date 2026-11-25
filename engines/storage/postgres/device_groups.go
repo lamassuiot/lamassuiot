@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	rds "github.com/krotscheck/go-rds-driver"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/sirupsen/logrus"
@@ -49,26 +50,27 @@ func (db *PostgresDeviceGroupsStore) SelectAncestors(ctx context.Context, id str
 	var ancestors []*models.DeviceGroup
 
 	// Recursive CTE query to get all ancestors
-	query := `
+	tableName := qualifiedTableName(db.db, deviceGroupsDBName)
+	query := fmt.Sprintf(`
 		WITH RECURSIVE ancestor_chain AS (
 			-- Base case: start with the given group
 			SELECT id, name, description, parent_id, criteria, created_at, updated_at
-			FROM device_groups
+			FROM %s
 			WHERE id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get parent of current group
 			SELECT dg.id, dg.name, dg.description, dg.parent_id, dg.criteria, dg.created_at, dg.updated_at
-			FROM device_groups dg
+			FROM %s dg
 			INNER JOIN ancestor_chain ac ON dg.id = ac.parent_id
 		)
 		SELECT id, name, description, parent_id, criteria, created_at, updated_at
 		FROM ancestor_chain
 		ORDER BY created_at ASC
-	`
+	`, tableName, tableName)
 
-	result := db.db.WithContext(ctx).Raw(query, id).Scan(&ancestors)
+	result := db.db.WithContext(ctx).Raw(query, rds.UUID(id)).Scan(&ancestors)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -115,24 +117,25 @@ func (db *PostgresDeviceGroupsStore) validateNoCircularReference(ctx context.Con
 	// Check if the proposed parent is actually a descendant of this group
 	// Use a recursive query to find all descendants of groupID
 	var count int64
-	query := `
+	tableName := qualifiedTableName(db.db, deviceGroupsDBName)
+	query := fmt.Sprintf(`
 		WITH RECURSIVE descendant_chain AS (
 			-- Base case: start with the current group
 			SELECT id, parent_id
-			FROM device_groups
+			FROM %s
 			WHERE id = ?
 			
 			UNION ALL
 			
 			-- Recursive case: get all children
 			SELECT dg.id, dg.parent_id
-			FROM device_groups dg
+			FROM %s dg
 			INNER JOIN descendant_chain dc ON dg.parent_id = dc.id
 		)
 		SELECT COUNT(*) FROM descendant_chain WHERE id = ?
-	`
+	`, tableName, tableName)
 
-	result := db.db.WithContext(ctx).Raw(query, groupID, parentID).Scan(&count)
+	result := db.db.WithContext(ctx).Raw(query, rds.UUID(groupID), rds.UUID(parentID)).Scan(&count)
 	if result.Error != nil {
 		return result.Error
 	}

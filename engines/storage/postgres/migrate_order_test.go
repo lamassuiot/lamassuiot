@@ -4,9 +4,23 @@ import (
 	"slices"
 	"testing"
 
+	lconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestMigrationRejectsRDSDataAPI(t *testing.T) {
+	cfg := lconfig.PostgresPSEConfig{Transport: lconfig.PostgresTransportRDSDataAPI}
+	logger := logrus.NewEntry(logrus.New())
+
+	t.Run("single schema", func(t *testing.T) {
+		require.ErrorContains(t, MigrateSchema(logger, cfg, CA_SCHEMA), "migrations require direct PostgreSQL")
+	})
+	t.Run("all schemas", func(t *testing.T) {
+		require.ErrorContains(t, MigrateAllSchemas(logger, cfg), "migrations require direct PostgreSQL")
+	})
+}
 
 // ca.certificates references kms.kms_keys, so the KMS schema is migrated first.
 func TestMigrationSchemaOrderPutsKMSBeforeCA(t *testing.T) {

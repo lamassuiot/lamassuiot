@@ -7,6 +7,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // FilterableField declares a column that can be used as a condition in policy rules
@@ -18,6 +20,8 @@ type FilterableField struct {
 // SchemaDefinition defines the structure of an entity type
 type SchemaDefinition struct {
 	PrimaryKeys []string // all PK columns; always len >= 1 after loading
+
+	defaultTableSchema string // Physical default for connections without search_path.
 
 	EntityType    string            `json:"entity_type"`
 	TableName     string            `json:"table_name"`
@@ -376,8 +380,14 @@ func (s *SchemaDefinition) QualifiedTableName() string {
 	if len(s.ViewTables) > 0 {
 		table = s.ViewTables[0]
 	}
+	if strings.Contains(table, ".") {
+		return table
+	}
 	if s.SchemaName == "" || s.SchemaName == "public" {
-		// For public schema or empty, just return table name (PostgreSQL default)
+		// These definitions traditionally resolve through the connection's search_path.
+		if s.defaultTableSchema != "" {
+			return pgx.Identifier{s.defaultTableSchema}.Sanitize() + "." + table
+		}
 		return table
 	}
 	return fmt.Sprintf("%s.%s", s.SchemaName, table)

@@ -14,9 +14,11 @@ import (
 // GormPrincipalStore implements both PrincipalStore and GrantStore against a *gorm.DB.
 // Both interfaces must be satisfied by the same instance to share transaction context.
 type GormPrincipalStore struct {
-	db        *gorm.DB
-	querier   *postgres.DBQuerier[models.Principal]
-	ppQuerier *postgres.DBQuerier[models.PrincipalPolicy]
+	db                         *gorm.DB
+	querier                    *postgres.DBQuerier[models.Principal]
+	ppQuerier                  *postgres.DBQuerier[models.PrincipalPolicy]
+	principalTableExpr         string
+	principalPoliciesTableExpr string
 }
 
 // NewGormPrincipalStore creates the store. Schema is managed by RunMigrations.
@@ -29,7 +31,13 @@ func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &GormPrincipalStore{db: db, querier: q, ppQuerier: ppq}, nil
+	return &GormPrincipalStore{
+		db:                         db,
+		querier:                    q,
+		ppQuerier:                  ppq,
+		principalTableExpr:         q.Table("principals").Statement.TableExpr.SQL,
+		principalPoliciesTableExpr: ppq.Table("principal_policies").Statement.TableExpr.SQL,
+	}, nil
 }
 
 // --- PrincipalStore ---
@@ -41,7 +49,7 @@ func (s *GormPrincipalStore) Create(ctx context.Context, p *models.Principal) er
 	if p.Name == "" {
 		return fmt.Errorf("principal name is required")
 	}
-	if err := s.db.WithContext(ctx).Create(p).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.principalTableExpr).Create(p).Error; err != nil {
 		return fmt.Errorf("create principal: %w", err)
 	}
 	return nil
@@ -49,7 +57,7 @@ func (s *GormPrincipalStore) Create(ctx context.Context, p *models.Principal) er
 
 func (s *GormPrincipalStore) Get(ctx context.Context, id string) (*models.Principal, error) {
 	var p models.Principal
-	if err := s.db.WithContext(ctx).First(&p, "id = ?", id).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.principalTableExpr).First(&p, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("principal not found: %s", id)
 		}
@@ -60,11 +68,15 @@ func (s *GormPrincipalStore) Get(ctx context.Context, id string) (*models.Princi
 
 func (s *GormPrincipalStore) GetWithPolicies(ctx context.Context, id string) (*models.Principal, error) {
 	var p models.Principal
-	if err := s.db.WithContext(ctx).Preload("Policies").First(&p, "id = ?", id).Error; err != nil {
+	db := s.db.WithContext(ctx)
+	if err := db.Table(s.principalTableExpr).First(&p, "id = ?", id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, fmt.Errorf("principal not found: %s", id)
 		}
 		return nil, fmt.Errorf("get principal with policies: %w", err)
+	}
+	if err := db.Table(s.principalPoliciesTableExpr).Where("principal_id = ?", id).Find(&p.Policies).Error; err != nil {
+		return nil, fmt.Errorf("get principal policies: %w", err)
 	}
 	return &p, nil
 }
@@ -90,7 +102,7 @@ func (s *GormPrincipalStore) Update(ctx context.Context, p *models.Principal) er
 		"active":      p.Active,
 	}
 
-	result := s.db.WithContext(ctx).Model(&models.Principal{}).Where("id = ?", p.ID).Updates(updates)
+	result := s.db.WithContext(ctx).Table(s.principalTableExpr).Model(&models.Principal{}).Where("id = ?", p.ID).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("update principal: %w", result.Error)
 	}
@@ -102,10 +114,10 @@ func (s *GormPrincipalStore) Update(ctx context.Context, p *models.Principal) er
 
 func (s *GormPrincipalStore) Delete(ctx context.Context, id string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("principal_id = ?", id).Delete(&models.PrincipalPolicy{}).Error; err != nil {
+		if err := tx.Table(s.principalPoliciesTableExpr).Where("principal_id = ?", id).Delete(&models.PrincipalPolicy{}).Error; err != nil {
 			return fmt.Errorf("delete principal policies: %w", err)
 		}
-		result := tx.Delete(&models.Principal{}, "id = ?", id)
+		result := tx.Table(s.principalTableExpr).Delete(&models.Principal{}, "id = ?", id)
 		if result.Error != nil {
 			return fmt.Errorf("delete principal: %w", result.Error)
 		}
@@ -117,7 +129,7 @@ func (s *GormPrincipalStore) Delete(ctx context.Context, id string) error {
 }
 
 func (s *GormPrincipalStore) SetActive(ctx context.Context, id string, active bool) error {
-	result := s.db.WithContext(ctx).Model(&models.Principal{}).Where("id = ?", id).Update("active", active)
+	result := s.db.WithContext(ctx).Table(s.principalTableExpr).Model(&models.Principal{}).Where("id = ?", id).Update("active", active)
 	if result.Error != nil {
 		return fmt.Errorf("set principal active: %w", result.Error)
 	}
@@ -129,7 +141,7 @@ func (s *GormPrincipalStore) SetActive(ctx context.Context, id string, active bo
 
 func (s *GormPrincipalStore) ListByType(ctx context.Context, authType string) ([]models.Principal, error) {
 	var principals []models.Principal
-	if err := s.db.WithContext(ctx).Where("type = ? AND active = ?", authType, true).Find(&principals).Error; err != nil {
+	if err := s.db.WithContext(ctx).Table(s.principalTableExpr).Where("type = ? AND active = ?", authType, true).Find(&principals).Error; err != nil {
 		return nil, fmt.Errorf("list principals by type: %w", err)
 	}
 	return principals, nil
@@ -140,14 +152,14 @@ func (s *GormPrincipalStore) ListByType(ctx context.Context, authType string) ([
 func (s *GormPrincipalStore) Grant(ctx context.Context, principalID, policyID, grantedBy string) error {
 	db := s.db.WithContext(ctx)
 	var existing models.PrincipalPolicy
-	result := db.Where("principal_id = ? AND policy_id = ?", principalID, policyID).First(&existing)
+	result := db.Table(s.principalPoliciesTableExpr).Where("principal_id = ? AND policy_id = ?", principalID, policyID).First(&existing)
 	if result.Error == nil {
 		return fmt.Errorf("policy %s already granted to principal %s", policyID, principalID)
 	}
 	if result.Error != gorm.ErrRecordNotFound {
 		return fmt.Errorf("check existing grant: %w", result.Error)
 	}
-	if err := db.Create(&models.PrincipalPolicy{
+	if err := db.Table(s.principalPoliciesTableExpr).Create(&models.PrincipalPolicy{
 		PrincipalID: principalID,
 		PolicyID:    policyID,
 		GrantedBy:   grantedBy,
@@ -158,7 +170,7 @@ func (s *GormPrincipalStore) Grant(ctx context.Context, principalID, policyID, g
 }
 
 func (s *GormPrincipalStore) Revoke(ctx context.Context, principalID, policyID string) error {
-	result := s.db.WithContext(ctx).Where("principal_id = ? AND policy_id = ?", principalID, policyID).
+	result := s.db.WithContext(ctx).Table(s.principalPoliciesTableExpr).Where("principal_id = ? AND policy_id = ?", principalID, policyID).
 		Delete(&models.PrincipalPolicy{})
 	if result.Error != nil {
 		return fmt.Errorf("revoke policy: %w", result.Error)
@@ -173,14 +185,14 @@ func (s *GormPrincipalStore) GrantBatch(ctx context.Context, principalID string,
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, policyID := range policyIDs {
 			var existing models.PrincipalPolicy
-			result := tx.Where("principal_id = ? AND policy_id = ?", principalID, policyID).First(&existing)
+			result := tx.Table(s.principalPoliciesTableExpr).Where("principal_id = ? AND policy_id = ?", principalID, policyID).First(&existing)
 			if result.Error == nil {
 				continue // idempotent skip
 			}
 			if result.Error != gorm.ErrRecordNotFound {
 				return fmt.Errorf("check existing grant for %s: %w", policyID, result.Error)
 			}
-			if err := tx.Create(&models.PrincipalPolicy{
+			if err := tx.Table(s.principalPoliciesTableExpr).Create(&models.PrincipalPolicy{
 				PrincipalID: principalID,
 				PolicyID:    policyID,
 				GrantedBy:   grantedBy,
@@ -195,7 +207,7 @@ func (s *GormPrincipalStore) GrantBatch(ctx context.Context, principalID string,
 func (s *GormPrincipalStore) RevokeBatch(ctx context.Context, principalID string, policyIDs []string) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, policyID := range policyIDs {
-			if err := tx.Where("principal_id = ? AND policy_id = ?", principalID, policyID).
+			if err := tx.Table(s.principalPoliciesTableExpr).Where("principal_id = ? AND policy_id = ?", principalID, policyID).
 				Delete(&models.PrincipalPolicy{}).Error; err != nil {
 				return fmt.Errorf("revoke policy %s: %w", policyID, err)
 			}
@@ -206,7 +218,7 @@ func (s *GormPrincipalStore) RevokeBatch(ctx context.Context, principalID string
 
 func (s *GormPrincipalStore) Has(ctx context.Context, principalID, policyID string) (bool, error) {
 	var count int64
-	if err := s.db.WithContext(ctx).Model(&models.PrincipalPolicy{}).
+	if err := s.db.WithContext(ctx).Table(s.principalPoliciesTableExpr).Model(&models.PrincipalPolicy{}).
 		Where("principal_id = ? AND policy_id = ?", principalID, policyID).
 		Count(&count).Error; err != nil {
 		return false, fmt.Errorf("check policy grant: %w", err)
@@ -231,13 +243,13 @@ func (s *GormPrincipalStore) ListForPrincipal(ctx context.Context, principalID s
 func (s *GormPrincipalStore) ListForPolicy(ctx context.Context, policyID string) ([]*models.Principal, error) {
 	db := s.db.WithContext(ctx)
 	var rows []models.PrincipalPolicy
-	if err := db.Where("policy_id = ?", policyID).Find(&rows).Error; err != nil {
+	if err := db.Table(s.principalPoliciesTableExpr).Where("policy_id = ?", policyID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list grants for policy: %w", err)
 	}
 	out := make([]*models.Principal, 0, len(rows))
 	for _, r := range rows {
 		var p models.Principal
-		if err := db.First(&p, "id = ?", r.PrincipalID).Error; err != nil {
+		if err := db.Table(s.principalTableExpr).First(&p, "id = ?", r.PrincipalID).Error; err != nil {
 			continue // principal deleted; skip silently
 		}
 		out = append(out, &p)
@@ -247,7 +259,7 @@ func (s *GormPrincipalStore) ListForPolicy(ctx context.Context, policyID string)
 
 func (s *GormPrincipalStore) CountForPrincipal(ctx context.Context, principalID string) (int64, error) {
 	var count int64
-	if err := s.db.WithContext(ctx).Model(&models.PrincipalPolicy{}).
+	if err := s.db.WithContext(ctx).Table(s.principalPoliciesTableExpr).Model(&models.PrincipalPolicy{}).
 		Where("principal_id = ?", principalID).Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count grants for principal: %w", err)
 	}
@@ -256,7 +268,7 @@ func (s *GormPrincipalStore) CountForPrincipal(ctx context.Context, principalID 
 
 func (s *GormPrincipalStore) CountForPolicy(ctx context.Context, policyID string) (int64, error) {
 	var count int64
-	if err := s.db.WithContext(ctx).Model(&models.PrincipalPolicy{}).
+	if err := s.db.WithContext(ctx).Table(s.principalPoliciesTableExpr).Model(&models.PrincipalPolicy{}).
 		Where("policy_id = ?", policyID).Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count grants for policy: %w", err)
 	}

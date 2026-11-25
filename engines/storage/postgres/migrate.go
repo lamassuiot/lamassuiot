@@ -47,6 +47,10 @@ func MigrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema s
 // migrateSchema skips the schemas already in migrated, so that a dependency shared by several schemas
 // is migrated only once, and adds the ones it migrates.
 func migrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema string, migrated map[string]bool) error {
+	if config.Transport == lconfig.PostgresTransportRDSDataAPI {
+		return fmt.Errorf("schema migrations require direct PostgreSQL; rds_data_api is not supported for migrations")
+	}
+
 	if migrated[schema] {
 		return nil
 	}
@@ -76,7 +80,7 @@ func migrateSchema(logger *log.Entry, config lconfig.PostgresPSEConfig, schema s
 
 	m := NewMigrator(logger, psqlCli)
 	if m == nil {
-		return nil
+		return fmt.Errorf("could not initialize migrator for schema %q", schema)
 	}
 
 	// Get current and target versions

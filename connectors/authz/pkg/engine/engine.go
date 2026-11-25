@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	storagepostgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
@@ -56,6 +57,10 @@ func NewEngine(dbs map[string]*gorm.DB, schemaPaths map[string]string, opts ...E
 		schemas:     schemas,
 		httpSchemas: NewHTTPSchemaRegistry(),
 		logger:      engineNopLogger(),
+	}
+
+	for _, schema := range schemas.GetAll() {
+		schema.defaultTableSchema = storagepostgres.ExplicitPostgresSchema(dbs[schema.ConfigSchema])
 	}
 
 	for _, opt := range opts {

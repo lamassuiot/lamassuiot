@@ -102,10 +102,10 @@ type DeviceGroupFilterOption struct {
 }
 
 type DeviceGroup struct {
-	ID          string                    `json:"id" gorm:"primaryKey"`
+	ID          string                    `json:"id" gorm:"primaryKey;type:uuid"`
 	Name        string                    `json:"name" gorm:"uniqueIndex"`
 	Description string                    `json:"description"`
-	ParentID    *string                   `json:"parent_id,omitempty" gorm:"column:parent_id"`
+	ParentID    *string                   `json:"parent_id,omitempty" gorm:"column:parent_id;type:uuid"`
 	Criteria    []DeviceGroupFilterOption `json:"criteria" gorm:"serializer:json"`
 	CreatedAt   time.Time                 `json:"created_at"`
 	UpdatedAt   time.Time                 `json:"updated_at"`

@@ -265,6 +265,15 @@ func TestSafeColumn(t *testing.T) {
 			t.Errorf("expected error for %q", name)
 		}
 	}
+
+	condition, err := columnEquals("id", "group-id")
+	if err != nil {
+		t.Fatalf("columnEquals returned an error: %v", err)
+	}
+	column, ok := condition.Column.(clause.Column)
+	if !ok || column.Name != "id" || condition.Value != "group-id" {
+		t.Fatalf("unexpected equality condition: %+v", condition)
+	}
 }
 
 func TestPageState_BookmarkRoundTrip(t *testing.T) {

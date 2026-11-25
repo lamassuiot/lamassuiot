@@ -25,10 +25,15 @@ func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error 
 	if err != nil {
 		return fmt.Errorf("failed to connect to authz database: %w", err)
 	}
-
-	sqlDB, err := authzDB.DB()
+	runtimeSQLDB, err := authzDB.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get raw sql.DB: %w", err)
+	}
+	defer runtimeSQLDB.Close()
+
+	sqlDB, err := openPostgresMigrationSQLDB(conf, lDB)
+	if err != nil {
+		return err
 	}
 	defer sqlDB.Close()
 
@@ -69,14 +74,9 @@ func newInitPolicyManager(conf authzconfig.AuthzConfig, policyStore store.Policy
 func RunMigrateCommand(ctx context.Context, conf authzconfig.AuthzConfig, command string, args []string) error {
 	lDB := helpers.SetupLogger(conf.Logs.Level, "AUTHZ", "DB")
 
-	authzDB, err := CreatePostgresDBConnection(lDB, conf.AuthzDB)
+	sqlDB, err := openPostgresMigrationSQLDB(conf, lDB)
 	if err != nil {
-		return fmt.Errorf("failed to connect to authz database: %w", err)
-	}
-
-	sqlDB, err := authzDB.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get raw sql.DB: %w", err)
+		return err
 	}
 	defer sqlDB.Close()
 
