@@ -21,6 +21,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
@@ -601,21 +602,6 @@ func caLatestNotAfter(ca *models.CACertificate) time.Time {
 // migrated settings those are the new one and the old one (/crl/<ski>) of each VA domain, since RFC 5280 6.3.3 requires
 // the IDP to match the CDP of the certificate.
 func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySKI *string) (*pkix.Extension, error) {
-	type DistributionPointName struct { // CHOICE
-		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
-		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
-	}
-
-	// RFC 5280. Section 5.2.5,
-	type IssuingDistributionPoint struct {
-		DistributionPoint          DistributionPointName `asn1:"tag:0,optional"`
-		OnlyContainsUserCerts      bool                  `asn1:"tag:1"`
-		OnlyContainsCACerts        bool                  `asn1:"tag:2"`
-		OnlySomeReasons            asn1.BitString        `asn1:"tag:3,optional"`
-		IndirectCRL                bool                  `asn1:"tag:4"`
-		OnlyContainsAttributeCerts bool                  `asn1:"tag:5"`
-	}
-
 	idpNames := []asn1.RawValue{}
 	for _, name := range svc.vaDomains {
 		ids := []string{caID}
@@ -623,13 +609,12 @@ func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySK
 			ids = append(ids, *legacySKI)
 		}
 		for _, id := range ids {
-			idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(fmt.Sprintf("http://%s/crl/%s", name, url.PathEscape(id)))})
+			idpNames = append(idpNames, revocation.URIGeneralName(fmt.Sprintf("http://%s/crl/%s", name, url.PathEscape(id))))
 		}
 	}
 
-	// Add Issuing Distribution Point
-	idp, err := asn1.Marshal(IssuingDistributionPoint{
-		DistributionPoint: DistributionPointName{
+	idp, err := revocation.MarshalIssuingDistributionPoint(revocation.IssuingDistributionPoint{
+		DistributionPoint: revocation.DistributionPointName{
 			FullName: idpNames,
 		},
 	})
@@ -638,7 +623,7 @@ func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySK
 	}
 
 	return &pkix.Extension{
-		Id:       []int{2, 5, 29, 28},
+		Id:       revocation.OIDExtensionIssuingDistributionPoint,
 		Critical: true,
 		Value:    idp,
 	}, nil

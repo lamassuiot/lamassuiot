@@ -22,6 +22,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	coreservices "github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -337,24 +338,13 @@ func serials(crl *x509.RevocationList) []int64 {
 func idpURLs(t *testing.T, crl *x509.RevocationList) []string {
 	t.Helper()
 	for _, ext := range crl.Extensions {
-		if !ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 28}) {
+		if !ext.Id.Equal(revocation.OIDExtensionIssuingDistributionPoint) {
 			continue
 		}
-		var idp struct {
-			DistributionPoint asn1.RawValue `asn1:"tag:0,optional"`
-		}
-		_, err := asn1.Unmarshal(ext.Value, &idp)
+		idp, err := revocation.ParseIssuingDistributionPoint(ext.Value)
 		require.NoError(t, err)
 		var urls []string
-		rest := idp.DistributionPoint.Bytes // DistributionPointName [0] { fullName [0] { GeneralNames } }
-		var fullName asn1.RawValue
-		_, err = asn1.Unmarshal(rest, &fullName)
-		require.NoError(t, err)
-		names := fullName.Bytes
-		for len(names) > 0 {
-			var name asn1.RawValue
-			names, err = asn1.Unmarshal(names, &name)
-			require.NoError(t, err)
+		for _, name := range idp.DistributionPoint.FullName {
 			urls = append(urls, string(name.Bytes))
 		}
 		slices.Sort(urls)
@@ -362,6 +352,59 @@ func idpURLs(t *testing.T, crl *x509.RevocationList) []string {
 	}
 	t.Fatalf("CRL has no IDP")
 	return nil
+}
+
+// TestCRLIssuingDistributionPointIsDER checks the exact encoding of the IDP of the CRLs published by the VA: DER leaves
+// out the DEFAULT FALSE booleans (X.690 11.5), which the VA used to spell out as 81 01 00 82 01 00 84 01 00 85 01 00.
+func TestCRLIssuingDistributionPointIsDER(t *testing.T) {
+	element := func(class, tag int, compound bool, content []byte) []byte {
+		der, err := asn1.Marshal(asn1.RawValue{Class: class, Tag: tag, IsCompound: compound, Bytes: content})
+		require.NoError(t, err)
+		return der
+	}
+	// SEQUENCE { [0] distributionPoint { [0] fullName { [6] URI ... } } }, and nothing else.
+	expectedIDP := func(uris ...string) []byte {
+		var names []byte
+		for _, uri := range uris {
+			names = append(names, element(asn1.ClassContextSpecific, 6, false, []byte(uri))...)
+		}
+		fullName := element(asn1.ClassContextSpecific, 0, true, names)
+		distributionPoint := element(asn1.ClassContextSpecific, 0, true, fullName)
+		return element(asn1.ClassUniversal, asn1.TagSequence, true, distributionPoint)
+	}
+
+	ski := "3f9a"
+	tests := []struct {
+		name      string
+		vaDomains []string
+		legacySKI *string
+		want      []byte
+	}{
+		{
+			name:      "OneDomain",
+			vaDomains: []string{"va1.example.com"},
+			want:      expectedIDP("http://va1.example.com/crl/ca-a"),
+		},
+		{
+			name:      "TwoDomainsWithLegacySKI",
+			vaDomains: []string{"va1.example.com", "va2.example.com"},
+			legacySKI: &ski,
+			want: expectedIDP(
+				"http://va1.example.com/crl/ca-a", "http://va1.example.com/crl/3f9a",
+				"http://va2.example.com/crl/ca-a", "http://va2.example.com/crl/3f9a",
+			),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ext, err := CRLServiceBackend{vaDomains: tc.vaDomains}.getDistributionPointExtension("ca-a", tc.legacySKI)
+			require.NoError(t, err)
+			require.True(t, ext.Id.Equal(asn1.ObjectIdentifier{2, 5, 29, 28}), "unexpected extension %s", ext.Id)
+			require.True(t, ext.Critical)
+			require.Equal(t, fmt.Sprintf("% x", tc.want), fmt.Sprintf("% x", ext.Value))
+		})
+	}
 }
 
 func TestInitCRLSettings(t *testing.T) {
