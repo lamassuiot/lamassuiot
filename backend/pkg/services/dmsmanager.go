@@ -1207,6 +1207,9 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 					entry := crl.RevokedCertificateEntries[idxClientCrt]
 					lFunc.Warnf("certificate was revoked at %s with %s revocation reason", entry.RevocationTime.String(), models.RevocationReasonMap[entry.ReasonCode])
 					return true, true, nil
+				} else if !crl.NextUpdate.IsZero() && time.Now().After(crl.NextUpdate) {
+					// An expired CRL may predate the revocation, so it cannot prove that the certificate is not revoked.
+					lFunc.Warnf("CRL from %s expired at %s and cannot confirm that certificate %s is not revoked. Checking next CRL server", crlDP, crl.NextUpdate.UTC().Format(time.RFC3339), clientSN)
 				} else {
 					lFunc.Infof("certificate not revoked. Client certificate not in CRL: %s", clientSN)
 					revocationChecked = true

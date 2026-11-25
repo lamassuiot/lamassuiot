@@ -36,10 +36,17 @@ func TestCheckCertificateRevocationWithExternalCRL(t *testing.T) {
 	tests := []struct {
 		name          string
 		revokedSerial int64
+		expiredCRL    bool
+		wantChecked   bool
 		wantRevoked   bool
 	}{
-		{name: "client serial listed in the CRL", revokedSerial: clientSerial, wantRevoked: true},
-		{name: "other serial listed in the CRL", revokedSerial: 0x5678, wantRevoked: false},
+		{name: "client serial listed in the CRL", revokedSerial: clientSerial, wantChecked: true, wantRevoked: true},
+		{name: "other serial listed in the CRL", revokedSerial: 0x5678, wantChecked: true, wantRevoked: false},
+		// An expired CRL may predate the revocation (e.g. an old CRL replayed on the network), so it cannot prove
+		// that the certificate is not revoked.
+		{name: "other serial listed in an expired CRL", revokedSerial: 0x5678, expiredCRL: true, wantChecked: false},
+		// A revocation listed in an expired CRL still happened.
+		{name: "client serial listed in an expired CRL", revokedSerial: clientSerial, expiredCRL: true, wantChecked: true, wantRevoked: true},
 	}
 
 	for _, tc := range tests {
@@ -60,10 +67,14 @@ func TestCheckCertificateRevocationWithExternalCRL(t *testing.T) {
 			ca, err := x509.ParseCertificate(caDER)
 			require.NoError(t, err)
 
+			thisUpdate, nextUpdate := time.Now().Add(-time.Minute), time.Now().Add(time.Hour)
+			if tc.expiredCRL {
+				thisUpdate, nextUpdate = time.Now().Add(-2*time.Hour), time.Now().Add(-time.Hour)
+			}
 			crlDER, err := x509.CreateRevocationList(rand.Reader, &x509.RevocationList{
 				Number:     big.NewInt(1),
-				ThisUpdate: time.Now().Add(-time.Minute),
-				NextUpdate: time.Now().Add(time.Hour),
+				ThisUpdate: thisUpdate,
+				NextUpdate: nextUpdate,
 				RevokedCertificateEntries: []x509.RevocationListEntry{
 					{SerialNumber: big.NewInt(tc.revokedSerial), RevocationTime: time.Now().Add(-time.Minute)},
 				},
@@ -94,8 +105,10 @@ func TestCheckCertificateRevocationWithExternalCRL(t *testing.T) {
 
 			checked, revoked, err := svc.checkCertificateRevocation(context.Background(), clientCert, ca)
 			require.NoError(t, err)
-			require.True(t, checked, "the CRL was reachable and signed by the validation CA")
-			require.Equal(t, tc.wantRevoked, revoked)
+			require.Equal(t, tc.wantChecked, checked)
+			if tc.wantChecked {
+				require.Equal(t, tc.wantRevoked, revoked)
+			}
 		})
 	}
 }
