@@ -96,18 +96,16 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 		return nil, fmt.Errorf("could not decode OCSP response: %s", err)
 	}
 
-	ocspIssuer := issuer
-	if !verifyOCSPResponse {
-		ocspIssuer = nil
-	}
-
-	response, err := ocsp.ParseResponse(output, ocspIssuer)
+	// Parsed without the issuer: given one, ocsp.ParseResponse requires an embedded certificate to be signed by the
+	// issuer's key, which rejects an intermediate CA that signs its own responses and embeds its own certificate.
+	// verifyResponseSigner checks the signer instead.
+	response, err := ocsp.ParseResponse(output, nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCSP response: %w", err)
 	}
 
 	if verifyOCSPResponse {
-		if err := checkDelegatedResponder(response, issuer); err != nil {
+		if err := verifyResponseSigner(response, issuer); err != nil {
 			return nil, err
 		}
 	}
@@ -115,16 +113,33 @@ func getOCSPResponse(method string, ocspServerURL string, certificate *x509.Cert
 	return response, nil
 }
 
-// checkDelegatedResponder enforces RFC 6960 4.2.2.2: a response signed by a certificate other than the issuer must
-// come from a delegated responder carrying the id-kp-OCSPSigning EKU and within its validity period.
-// ocsp.ParseResponse only checks that the responder certificate was signed by the issuer, which any end-entity
-// certificate of that CA satisfies, expired ones included.
-func checkDelegatedResponder(response *ocsp.Response, issuer *x509.Certificate) error {
+// verifyResponseSigner checks that response was signed by issuer or by a responder it delegated to (RFC 6960 4.2.2.2).
+// When the response embeds a certificate, ocsp.ParseResponse has already checked the response signature against it.
+func verifyResponseSigner(response *ocsp.Response, issuer *x509.Certificate) error {
 	responder := response.Certificate
-	if responder == nil || responder.Equal(issuer) {
+	if responder == nil {
+		if err := response.CheckSignatureFrom(issuer); err != nil {
+			return fmt.Errorf("bad OCSP signature: %w", err)
+		}
 		return nil
 	}
 
+	// Signed with the issuer's own key: the issuer embedded its certificate, no delegation is involved.
+	if bytes.Equal(responder.RawSubjectPublicKeyInfo, issuer.RawSubjectPublicKeyInfo) {
+		return nil
+	}
+
+	if err := issuer.CheckSignature(responder.SignatureAlgorithm, responder.RawTBSCertificate, responder.Signature); err != nil {
+		return fmt.Errorf("OCSP response signed by %q, whose certificate was not issued by the issuer: %w", responder.Subject.CommonName, err)
+	}
+
+	return checkDelegatedResponder(responder)
+}
+
+// checkDelegatedResponder enforces RFC 6960 4.2.2.2 on a responder certificate issued by the issuer: it must carry the
+// id-kp-OCSPSigning EKU and be within its validity period. Being issued by the issuer is not enough, since any
+// end-entity certificate of that CA satisfies it, expired ones included.
+func checkDelegatedResponder(responder *x509.Certificate) error {
 	if !slices.Contains(responder.ExtKeyUsage, x509.ExtKeyUsageOCSPSigning) {
 		return fmt.Errorf("OCSP response signed by %q, which is not the issuer and is not authorized for OCSP signing", responder.Subject.CommonName)
 	}
