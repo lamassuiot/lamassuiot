@@ -138,7 +138,8 @@ func newProvider(db *sql.DB) (*goose.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("prepare embedded migrations: %w", err)
 	}
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub)
+	// authz has only SQL migrations; the global registry holds the Go migrations of other services linked in the same binary.
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, sub, goose.WithDisableGlobalRegistry(true))
 	if err != nil {
 		return nil, fmt.Errorf("create goose provider: %w", err)
 	}

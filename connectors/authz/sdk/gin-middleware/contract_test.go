@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	authzschemas "github.com/lamassuiot/lamassuiot/v4/connectors/authz"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -638,4 +639,163 @@ func TestOpenAPIRootPathMatchesARouteAtTheServerURL(t *testing.T) {
 	require.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec)))
 	undocumented := strings.Replace(spec, "  /:\n", "  /other:\n", 1)
 	require.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(undocumented)), "OpenAPI operation missing for GET /api/va")
+}
+
+// recordingEngine records what the engine is asked, to prove whose credentials and which entity a check carries.
+type recordingEngine struct {
+	fakeEngine
+	asked []recordedAsk
+}
+
+type recordedAsk struct {
+	authType, material, namespace, schema, action, entity string
+	key                                                   map[string]string
+}
+
+func (e *recordingEngine) MatchAndAuthorize(ctx context.Context, authType, material, namespace, schema, action, entity string, key map[string]string) (bool, []string, error) {
+	e.asked = append(e.asked, recordedAsk{authType, material, namespace, schema, action, entity, key})
+	return e.fakeEngine.MatchAndAuthorize(ctx, authType, material, namespace, schema, action, entity, key)
+}
+
+func grantsMiddleware(t *testing.T, engine core.AuthzEngine) *AuthzMiddleware {
+	t.Helper()
+	schemas, err := authzschemas.AuthzSchemas()
+	require.NoError(t, err)
+	return MustNewAuthzMiddleware(engine, schemas, "authz", "public", "principal_policy", testLogger())
+}
+
+func TestGlobalCheckRejectsWhatIsNotAGlobalActionBeforeServing(t *testing.T) {
+	mw := grantsMiddleware(t, &fakeEngine{})
+
+	assert.Panics(t, func() { mw.GlobalCheck("delete") }, "an atomic action")
+	assert.Panics(t, func() { mw.GlobalCheck("fly") }, "an unknown action")
+	assert.NotPanics(t, func() { mw.GlobalCheck("grant") })
+}
+
+func TestServiceCheckIsBoundToTheCallerOfEachRequest(t *testing.T) {
+	type answer struct {
+		allowed bool
+		err     error
+	}
+	// run sends one request and returns what the service sees when it asks the check later, after the handler returned.
+	run := func(t *testing.T, engine *recordingEngine, router *gin.Engine, header string) answer {
+		t.Helper()
+		var check func(context.Context) (bool, error)
+		contract := NewContractRouter(&router.RouterGroup)
+		contract.POST("/ras", certificateMiddleware(t, &fakeEngine{authorized: true}).Global("create").WithServiceCheck(
+			grantsMiddleware(t, engine).GlobalCheck("grant"),
+			func(c *gin.Context, allowed func(context.Context) (bool, error)) { check = allowed },
+		), func(c *gin.Context) { c.Status(http.StatusOK) })
+		req := httptest.NewRequest(http.MethodPost, "/ras", nil)
+		if header != "" {
+			req.Header.Set("X-Principal-ID", header)
+		}
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		require.Equal(t, http.StatusOK, res.Code)
+		require.NotNil(t, check, "the check reaches the service")
+		allowed, err := check(context.Background())
+		return answer{allowed, err}
+	}
+
+	t.Run("asks the engine for the credentials of the caller", func(t *testing.T) {
+		engine := &recordingEngine{fakeEngine: fakeEngine{authorized: true}}
+		got := run(t, engine, testRouterWithAuthzInputs(), "")
+
+		assert.Equal(t, answer{allowed: true}, got)
+		require.Len(t, engine.asked, 1)
+		assert.Equal(t, recordedAsk{"oidc", "token", "authz", "public", "grant", "principal_policy", nil}, engine.asked[0])
+	})
+	t.Run("a denial is not an error", func(t *testing.T) {
+		assert.Equal(t, answer{}, run(t, &recordingEngine{}, testRouterWithAuthzInputs(), ""))
+	})
+	t.Run("an unavailable authz is an error, not a denial", func(t *testing.T) {
+		got := run(t, &recordingEngine{fakeEngine: fakeEngine{err: fmt.Errorf("authz down")}}, testRouterWithAuthzInputs(), "")
+
+		assert.False(t, got.allowed)
+		assert.Error(t, got.err)
+	})
+	t.Run("a caller without credentials is never allowed and the engine is not asked", func(t *testing.T) {
+		engine := &recordingEngine{fakeEngine: fakeEngine{authorized: true}}
+		bound := grantsMiddleware(t, engine).GlobalCheck("grant").bind(&gin.Context{Request: httptest.NewRequest(http.MethodPost, "/ras", nil)})
+
+		allowed, err := bound(context.Background())
+
+		assert.False(t, allowed)
+		assert.NoError(t, err)
+		assert.Empty(t, engine.asked)
+	})
+	t.Run("internal services are trusted, like with every other guard", func(t *testing.T) {
+		engine := &recordingEngine{fakeEngine: fakeEngine{err: fmt.Errorf("engine must not be consulted")}}
+		got := run(t, engine, testRouterWithAuthzInputs(), "admin-mode")
+
+		assert.Equal(t, answer{allowed: true}, got)
+		assert.Empty(t, engine.asked)
+	})
+	t.Run("a later request is not answered with the credentials of the earlier one", func(t *testing.T) {
+		engine := &recordingEngine{fakeEngine: fakeEngine{authorized: true}}
+		router := testRouterWithAuthzInputs()
+		var checks []func(context.Context) (bool, error)
+		contract := NewContractRouter(&router.RouterGroup)
+		contract.POST("/ras", certificateMiddleware(t, &fakeEngine{authorized: true}).Global("create").WithServiceCheck(
+			grantsMiddleware(t, engine).GlobalCheck("grant"),
+			func(c *gin.Context, allowed func(context.Context) (bool, error)) { checks = append(checks, allowed) },
+		), func(c *gin.Context) { c.Status(http.StatusOK) })
+		for range 2 {
+			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/ras", nil))
+		}
+		require.Len(t, checks, 2)
+
+		_, _ = checks[0](context.Background())
+		_, _ = checks[1](context.Background())
+
+		assert.Equal(t, []string{"token", "token"}, []string{engine.asked[0].material, engine.asked[1].material})
+	})
+}
+
+func TestServiceChecksAreRecordedAndMatchedAgainstTheOpenAPI(t *testing.T) {
+	spec := func(extra string) string {
+		return `openapi: 3.0.3
+servers: [{url: /api}]
+components: {securitySchemes: {bearer: {type: http, scheme: bearer}}}
+security: [{bearer: []}]
+paths:
+  /ras:
+    post:
+      x-authz: {namespace: pki, schema_name: ca, entity_type: certificate, action: create}
+` + extra
+	}
+	const declared = `      x-authz-service-checks:
+        - {namespace: authz, schema_name: public, entity_type: principal_policy, action: grant}
+`
+	build := func(t *testing.T, withCheck bool) *ContractRouter {
+		t.Helper()
+		router := gin.New()
+		contract := NewContractRouter(router.Group("/api"))
+		permission := certificateMiddleware(t, &fakeEngine{}).Global("create")
+		if withCheck {
+			permission = permission.WithServiceCheck(grantsMiddleware(t, &fakeEngine{}).GlobalCheck("grant"), func(*gin.Context, func(context.Context) (bool, error)) {})
+		}
+		contract.POST("/ras", permission, func(c *gin.Context) {})
+		return contract
+	}
+
+	contract := build(t, true)
+	assert.Equal(t, []Declaration{{Namespace: "authz", SchemaName: "public", EntityType: "principal_policy", Action: "grant"}}, contract.Declarations()[0].ServiceChecks)
+	assert.NoError(t, contract.ValidateOpenAPI(strings.NewReader(spec(declared))))
+	assert.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(spec(""))), "service checks mismatch", "a check the spec does not declare")
+	assert.ErrorContains(t, build(t, false).ValidateOpenAPI(strings.NewReader(spec(declared))), "service checks mismatch", "a check the route no longer has")
+	assert.NoError(t, build(t, false).ValidateOpenAPI(strings.NewReader(spec(""))))
+}
+
+func TestServiceCheckNeedsAPermissionThatAuthenticatesTheCaller(t *testing.T) {
+	check := grantsMiddleware(t, &fakeEngine{}).GlobalCheck("grant")
+	install := func(*gin.Context, func(context.Context) (bool, error)) {}
+
+	assert.Panics(t, func() { Public().WithServiceCheck(check, install) })
+	assert.Panics(t, func() { DelegatedAuthorization("est").WithServiceCheck(check, install) })
+	assert.Panics(t, func() {
+		certificateMiddleware(t, &fakeEngine{}).Global("create").WithServiceCheck(ServiceCheck{}, install)
+	})
+	assert.Panics(t, func() { certificateMiddleware(t, &fakeEngine{}).Global("create").WithServiceCheck(check, nil) })
 }

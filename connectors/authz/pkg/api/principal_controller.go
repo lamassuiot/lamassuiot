@@ -60,10 +60,10 @@ func (ctrl *PrincipalController) GetPrincipal(c *gin.Context) {
 
 	principal, err := ctrl.manager.GetPrincipal(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{
-			Error:   "Principal not found",
-			Details: map[string]string{"id": id},
-		})
+		if replyPrincipalNotFound(c, err, id) {
+			return
+		}
+		replyInternalError(c, "Failed to get principal", err)
 		return
 	}
 
@@ -115,10 +115,10 @@ func (ctrl *PrincipalController) UpdatePrincipal(c *gin.Context) {
 
 	principal, err := ctrl.manager.GetPrincipal(c.Request.Context(), id)
 	if err != nil {
-		c.JSON(http.StatusNotFound, dto.ErrorResponse{
-			Error:   "Principal not found",
-			Details: map[string]string{"id": id},
-		})
+		if replyPrincipalNotFound(c, err, id) {
+			return
+		}
+		replyInternalError(c, "Failed to get principal", err)
 		return
 	}
 
@@ -154,6 +154,9 @@ func (ctrl *PrincipalController) DeletePrincipal(c *gin.Context) {
 	id := c.Param("id")
 
 	if err := ctrl.manager.DeletePrincipal(c.Request.Context(), id); err != nil {
+		if replyPrincipalNotFound(c, err, id) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to delete principal",
 			Details: map[string]string{"error": err.Error()},
@@ -175,6 +178,9 @@ func (ctrl *PrincipalController) GrantPolicy(c *gin.Context) {
 	}
 
 	if err := ctrl.manager.GrantPolicy(c.Request.Context(), id, req.PolicyID, req.GrantedBy); err != nil {
+		if replyPrincipalNotFound(c, err, id) {
+			return
+		}
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "Failed to grant policy",
 			Details: map[string]string{"error": err.Error()},

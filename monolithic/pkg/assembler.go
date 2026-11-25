@@ -22,6 +22,7 @@ import (
 	lamassu "github.com/lamassuiot/lamassuiot/v4/backend/pkg/assemblers"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	authzapi "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -214,6 +215,14 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			return sdk.NewHttpDeviceManagerClient(cli, baseURL(devConn))
 		}
 
+		var dmsAuthzSDK *authzsdk.Client
+		if authzPort != 0 {
+			authzConn := localConn(authzPort)
+			cli := buildLocalClient("DMS Manager", models.DMSManagerSource, "LMS SDK - Authz Client", authzConn)
+			cli = sdk.HttpClientWithCustomHeaders(cli, "X-Principal-ID", "admin-mode")
+			dmsAuthzSDK = authzsdk.NewClientWithHTTPClient(cli, baseURL(authzConn))
+		}
+
 		_, dmsPort, err := lamassu.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
 			OpenAPI: cconfig.OpenAPIConfig{Enabled: true},
 			Logs: cconfig.Logging{
@@ -230,7 +239,7 @@ func RunMonolithicLamassuPKI(conf MonolithicConfig) (int, int, error) {
 			DownstreamCertificateFile: "proxy.crt",
 			Storage:                   conf.Storage,
 			AuthzClient:               authzClientConf,
-		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), apiInfo)
+		}, caSDKBuilder("DMS Manager", models.DMSManagerSource), deviceMngrSDKBuilder("DMS Manager", models.DMSManagerSource), dmsAuthzSDK, apiInfo)
 		if err != nil {
 			return -1, -1, fmt.Errorf("could not assemble DMS Manager Service: %s", err)
 		}

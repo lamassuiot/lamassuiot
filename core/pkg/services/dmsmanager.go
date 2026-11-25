@@ -20,6 +20,21 @@ type DMSManagerService interface {
 	BindIdentityToDevice(ctx context.Context, input BindIdentityToDeviceInput) (*models.BindIdentityToDeviceOutput, error)
 }
 
+// PolicyGrantCheck tells whether the caller may grant authz policies itself. The HTTP layer puts it in
+// the context of a DMS create or update; without it, an RA can not ask for more than it already has.
+type PolicyGrantCheck func(ctx context.Context) (bool, error)
+
+type policyGrantCheckKey struct{}
+
+func WithPolicyGrantCheck(ctx context.Context, check PolicyGrantCheck) context.Context {
+	return context.WithValue(ctx, policyGrantCheckKey{}, check)
+}
+
+func PolicyGrantCheckFrom(ctx context.Context) PolicyGrantCheck {
+	check, _ := ctx.Value(policyGrantCheckKey{}).(PolicyGrantCheck)
+	return check
+}
+
 type GetDMSStatsInput struct {
 	QueryParameters *resources.QueryParameters
 }

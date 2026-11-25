@@ -6,18 +6,27 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+	"uuid"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	webhookclient "github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers/webhook-client"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	authzmodels "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
@@ -43,6 +52,8 @@ type DMSManagerServiceBackend struct {
 	caClient         services.CAService
 	logger           *logrus.Entry
 	crlCache         *crlCache
+
+	authz *authzsdk.Client
 }
 
 type DMSManagerBuilder struct {
@@ -57,6 +68,8 @@ type DMSManagerBuilder struct {
 	// CRLCacheMaxTTL bounds how long a downloaded CRL is reused; a CRL is never kept past its nextUpdate. 0 uses the
 	// default of 1 hour.
 	CRLCacheMaxTTL time.Duration
+
+	Authz *authzsdk.Client // nil disables authz_principal_settings
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -67,6 +80,8 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		downstreamCert:   builder.DownstreamCertificate,
 		logger:           builder.Logger,
 		crlCache:         newCRLCache(builder.CRLCacheMaxBytes, builder.CRLCacheMaxTTL),
+
+		authz: builder.Authz,
 	}
 
 	svc.service = svc
@@ -123,9 +138,24 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		Settings:     input.Settings,
 	}
 
+	if dms.Settings.AuthzPrincipalSettings, err = normalizeAuthzPrincipalSettings(dms.Settings.AuthzPrincipalSettings); err != nil {
+		lFunc.Errorf("could not create DMS '%s': %s", input.ID, err)
+		return nil, err
+	}
+	var undoPrincipal func(cause string)
+	if authzPrincipalEnabled(dms.Settings) {
+		if undoPrincipal, err = svc.syncAuthzPrincipal(ctx, dms); err != nil {
+			lFunc.Errorf("could not provision the authz principal of DMS '%s': %s", input.ID, err)
+			return nil, err
+		}
+	}
+
 	dms, err = svc.dmsStorage.Insert(ctx, dms)
 	if err != nil {
-		lFunc.Errorf("could not insert DMS '%s': %s", dms.ID, err)
+		lFunc.Errorf("could not insert DMS '%s': %s", input.ID, err)
+		if undoPrincipal != nil {
+			undoPrincipal("the failed insert")
+		}
 		return nil, err
 	}
 	lFunc.Debugf("DMS '%s' persisted into storage engine", dms.ID)
@@ -155,11 +185,37 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 	if input.Metadata != nil {
 		dms.Metadata = input.Metadata
 	}
+	stored := dms.Settings
+	hadPrincipal := authzPrincipalEnabled(stored)
 	dms.Name = input.Name
 	dms.Settings = *input.Settings
+	// nil means "not provided": keep the stored switch, so a client unaware of it cannot turn it off.
+	if dms.Settings.AuthzPrincipalSettings == nil {
+		dms.Settings.AuthzPrincipalSettings = stored.AuthzPrincipalSettings
+	}
+	if dms.Settings.AuthzPrincipalSettings, err = normalizeAuthzPrincipalSettings(dms.Settings.AuthzPrincipalSettings); err != nil {
+		lFunc.Errorf("could not update DMS '%s': %s", input.ID, err)
+		return nil, err
+	}
+
+	var undoPrincipal func(cause string)
+	if authzPrincipalEnabled(dms.Settings) {
+		undoPrincipal, err = svc.syncAuthzPrincipal(ctx, dms)
+	} else if hadPrincipal {
+		err = svc.deleteAuthzPrincipal(ctx, lFunc, dms.ID)
+	}
+	if err != nil {
+		lFunc.Errorf("could not update the authz principal of DMS '%s': %s", input.ID, err)
+		return nil, err
+	}
 
 	lFunc.Debugf("updating DMS %s", input.ID)
-	return svc.dmsStorage.Update(ctx, dms)
+	updated, err := svc.dmsStorage.Update(ctx, dms)
+	// A principal deleted by turning the switch off is not put back: a failed save never brings trust back.
+	if err != nil && undoPrincipal != nil {
+		undoPrincipal("the failed update")
+	}
+	return updated, err
 }
 
 func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
@@ -206,13 +262,27 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 
 	id := input.ID
 	lFunc.Debugf("checking if DMS '%s' exists", id)
-	exists, _, err := svc.dmsStorage.SelectExists(ctx, id)
+	exists, dms, err := svc.dmsStorage.SelectExists(ctx, id)
 	if err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", id, err)
 		return err
 	} else if !exists {
 		lFunc.Errorf("DMS '%s' does not exist in storage engine", id)
 		return errs.ErrDMSNotFound
+	}
+
+	if authzPrincipalEnabled(dms.Settings) {
+		if err := svc.deleteAuthzPrincipal(ctx, lFunc, id); err != nil {
+			lFunc.Errorf("could not delete the authz principal of DMS '%s': %s", id, err)
+			return err
+		}
+	} else if svc.authz != nil {
+		// A principal can outlive its switch (a crash, a failed undo): remove it, but deleting an RA never depends on it.
+		lookup, cancel := context.WithTimeout(ctx, leftoverLookupTimeout)
+		defer cancel()
+		if err := svc.deleteAuthzPrincipal(lookup, lFunc, id); err != nil {
+			lFunc.Warnf("could not look for a leftover authz principal of DMS '%s': %s", id, err)
+		}
 	}
 
 	err = svc.dmsStorage.Delete(ctx, id)
@@ -222,6 +292,365 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 	}
 
 	return nil
+}
+
+func dmsPrincipalID(dmsID string) string {
+	return "dms:" + dmsID
+}
+
+func authzPrincipalEnabled(settings models.DMSSettings) bool {
+	return settings.AuthzPrincipalSettings != nil && settings.AuthzPrincipalSettings.Enabled
+}
+
+// syncAuthzPrincipal makes the principal of dms trust its enrollment CA and hold the policies the RA asks for.
+// undo puts the principal back as it was before this call, so a failed save does not change which certificates are trusted.
+func (svc DMSManagerServiceBackend) syncAuthzPrincipal(ctx context.Context, dms *models.DMS) (undo func(cause string), err error) {
+	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
+	if svc.authz == nil {
+		return nil, fmt.Errorf("%w: authz principal creation is disabled in the DMS Manager", errs.ErrValidateBadRequest)
+	}
+	// authz addresses the principal by id in a URL path, where a "/" can never be read back or deleted.
+	if strings.Contains(dms.ID, "/") {
+		return nil, fmt.Errorf("%w: an RA with an authz principal can not have a '/' in its id", errs.ErrValidateBadRequest)
+	}
+	caID := dms.Settings.EnrollmentSettings.EnrollmentCA
+	if caID == "" {
+		return nil, fmt.Errorf("%w: an authz principal needs an enrollment CA", errs.ErrValidateBadRequest)
+	}
+	ca, err := svc.caClient.GetCAByID(ctx, services.GetCAByIDInput{CAID: caID})
+	if errors.Is(err, errs.ErrCANotFound) {
+		return nil, fmt.Errorf("%w: enrollment CA %s not found", errs.ErrValidateBadRequest, caID)
+	} else if err != nil {
+		return nil, fmt.Errorf("could not get enrollment CA %s: %w", caID, err)
+	}
+	if ca.Certificate.Status != models.StatusActive {
+		return nil, fmt.Errorf("%w: enrollment CA %s is %s, an authz principal can only trust an active CA", errs.ErrValidateBadRequest, caID, ca.Certificate.Status)
+	}
+	if ca.Certificate.Certificate == nil {
+		return nil, fmt.Errorf("enrollment CA %s has no certificate", caID)
+	}
+
+	settings := dms.Settings.AuthzPrincipalSettings
+	if len(settings.PolicyIDs) == 0 {
+		lFunc.Warnf("authz principal of DMS '%s' has no policies: its devices authenticate but are allowed nothing", dms.ID)
+	}
+	id := dmsPrincipalID(dms.ID)
+	caCert := (*x509.Certificate)(ca.Certificate.Certificate)
+	existing, err := svc.authz.Principals.Get(ctx, id)
+	var granted []dto.PrincipalPolicyResponse
+	switch {
+	case err == nil && (existing.Type != "x509" || managedDMS(existing.AuthConfig) != dms.ID):
+		return nil, fmt.Errorf("%w: authz principal %s already exists and is not managed by the DMS Manager for this RA", errs.ErrValidateBadRequest, id)
+	case err == nil:
+		if granted, err = svc.authzGrants(ctx, id); err != nil {
+			return nil, fmt.Errorf("could not read the policies of authz principal %s: %w", id, err)
+		}
+	case isAuthzNotFound(err):
+		existing = nil
+	default:
+		return nil, fmt.Errorf("could not read authz principal %s: %w", id, err)
+	}
+	// Compared with what authz grants now, not with the stored RA, which a stale write can rewrite.
+	if widensAuthzPrincipal(existing, granted, caCert, settings) {
+		if err := requirePolicyGrant(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// authz grants unknown policy ids silently, so check them before writing anything. After the permission check:
+	// a caller who may not grant is not told which policies exist.
+	for _, policyID := range settings.PolicyIDs {
+		if _, err := svc.authz.Policies.Get(ctx, policyID); isAuthzNotFound(err) {
+			return nil, fmt.Errorf("%w: authz policy %s does not exist", errs.ErrValidateBadRequest, policyID)
+		} else if err != nil {
+			return nil, fmt.Errorf("could not check policy %s of the RA: %w", policyID, err)
+		}
+	}
+
+	authConfig := dmsPrincipalAuthConfig(caCert, settings.SubjectAttributeMappings)
+	// The revision tells this request's write apart from any other, so recovery only ever undoes its own.
+	revision := uuid.NewV7().String()
+	authConfig[dmsManagerMarker] = map[string]any{"dms_id": dms.ID, "revision": revision}
+	name := fmt.Sprintf("RA %s", dms.Name)
+	description := fmt.Sprintf("Managed by the DMS Manager for RA %s: trusts every certificate signed by %q. Edit the RA, not this principal.", dms.ID, caCert.Subject.CommonName)
+
+	// Restoring after a failure is only safe while the principal still holds this request's write.
+	ownsPrincipal := func(uctx context.Context, cause string) bool {
+		current, getErr := svc.authz.Principals.Get(uctx, id)
+		if getErr != nil || managedRevision(current.AuthConfig) != revision {
+			lFunc.Warnf("authz principal of DMS '%s' left as is after %s: it can not be confirmed as this request's", dms.ID, cause)
+			return false
+		}
+		return true
+	}
+
+	var added []string // grants this request made, taken back if the save fails
+	if existing != nil {
+		_, err = svc.authz.Principals.Update(ctx, id, &dto.UpdatePrincipalRequest{Name: &name, Description: &description, AuthConfig: &authConfig})
+		undo = func(cause string) {
+			uctx := context.WithoutCancel(ctx)
+			if !ownsPrincipal(uctx, cause) {
+				return
+			}
+			// Grants this request revoked stay revoked: a failed save never brings access back.
+			for _, policyID := range added {
+				if revokeErr := svc.authz.Principals.RevokePolicy(uctx, id, policyID); revokeErr != nil {
+					lFunc.Errorf("could not revoke policy %s from authz principal of DMS '%s' after %s: %s", policyID, dms.ID, cause, revokeErr)
+				}
+			}
+			restore := &dto.UpdatePrincipalRequest{Name: &existing.Name, Description: &existing.Description, AuthConfig: existing.AuthConfig}
+			if _, restoreErr := svc.authz.Principals.Update(uctx, id, restore); restoreErr != nil {
+				lFunc.Errorf("could not restore authz principal of DMS '%s' after %s: %s", dms.ID, cause, restoreErr)
+			}
+		}
+	} else {
+		_, err = svc.authz.Principals.Create(ctx, &dto.CreatePrincipalRequest{ID: id, Name: name, Description: &description, Type: "x509", AuthConfig: &authConfig})
+		undo = func(cause string) {
+			if ownsPrincipal(context.WithoutCancel(ctx), cause) {
+				svc.rollbackAuthzPrincipal(ctx, lFunc, dms.ID, cause)
+			}
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("could not save authz principal %s: %w", id, err)
+	}
+
+	added, err = svc.syncAuthzPolicies(ctx, id, granted, settings.PolicyIDs)
+	if err != nil {
+		undo("the failed policy sync")
+		return nil, err
+	}
+	return undo, nil
+}
+
+// syncAuthzPolicies grants the wanted policies and revokes the other grants made by the DMS Manager.
+// It returns the policies it granted, also when it fails half way, so the caller can take them back.
+func (svc DMSManagerServiceBackend) syncAuthzPolicies(ctx context.Context, id string, granted []dto.PrincipalPolicyResponse, wanted []string) (added []string, err error) {
+	for _, policyID := range wanted {
+		if holdsPolicy(granted, policyID) {
+			continue
+		}
+		if err := svc.authz.Principals.GrantPolicy(ctx, id, &dto.GrantPolicyRequest{PolicyID: policyID, GrantedBy: models.DMSManagerSource}); err != nil {
+			return added, fmt.Errorf("could not grant policy %s to authz principal %s: %w", policyID, id, err)
+		}
+		added = append(added, policyID)
+	}
+	for _, g := range granted {
+		if g.GrantedBy != models.DMSManagerSource || slices.Contains(wanted, g.PolicyID) {
+			continue
+		}
+		if err := svc.authz.Principals.RevokePolicy(ctx, id, g.PolicyID); err != nil {
+			return added, fmt.Errorf("could not revoke policy %s from authz principal %s: %w", g.PolicyID, id, err)
+		}
+	}
+	return added, nil
+}
+
+func holdsPolicy(granted []dto.PrincipalPolicyResponse, policyID string) bool {
+	return slices.ContainsFunc(granted, func(g dto.PrincipalPolicyResponse) bool { return g.PolicyID == policyID })
+}
+
+// authzGrants returns every grant of the principal; authz lists them in pages.
+func (svc DMSManagerServiceBackend) authzGrants(ctx context.Context, id string) ([]dto.PrincipalPolicyResponse, error) {
+	var grants []dto.PrincipalPolicyResponse
+	query := map[string]string{}
+	for {
+		page, err := svc.authz.Principals.GetPolicies(ctx, id, query)
+		if err != nil {
+			return nil, err
+		}
+		grants = append(grants, page.List...)
+		if page.NextBookmark == "" || page.NextBookmark == query["bookmark"] {
+			return grants, nil
+		}
+		query["bookmark"] = page.NextBookmark
+	}
+}
+
+// deleteAuthzPrincipal removes the principal of a DMS, and a missing one is not an error.
+// With the feature disabled the principal is left behind and logged.
+func (svc DMSManagerServiceBackend) deleteAuthzPrincipal(ctx context.Context, lFunc *logrus.Entry, dmsID string) error {
+	id := dmsPrincipalID(dmsID)
+	if svc.authz == nil {
+		lFunc.Warnf("authz principal %s left behind: authz principal creation is disabled in the DMS Manager", id)
+		return nil
+	}
+	// Get first: an authz older than this DMS Manager answers 500 when deleting a missing principal.
+	current, err := svc.authz.Principals.Get(ctx, id)
+	if isAuthzNotFound(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("could not read authz principal %s: %w", id, err)
+	}
+	if managedDMS(current.AuthConfig) != dmsID {
+		lFunc.Warnf("authz principal %s left as is: it is not managed by the DMS Manager for this RA", id)
+		return nil
+	}
+	if err := svc.authz.Principals.Delete(ctx, id); err != nil && !isAuthzNotFound(err) {
+		return fmt.Errorf("could not delete authz principal %s: %w", id, err)
+	}
+	return nil
+}
+
+// rollbackAuthzPrincipal deletes a principal created by this request after a later step failed.
+func (svc DMSManagerServiceBackend) rollbackAuthzPrincipal(ctx context.Context, lFunc *logrus.Entry, dmsID, cause string) {
+	if rollbackErr := svc.deleteAuthzPrincipal(context.WithoutCancel(ctx), lFunc, dmsID); rollbackErr != nil {
+		lFunc.Errorf("could not rollback authz principal of DMS '%s' after %s: %s", dmsID, cause, rollbackErr)
+	}
+}
+
+// requirePolicyGrant asks whether the caller may grant authz policies itself; without a check
+// in the context (a call that did not come through the HTTP layer) the answer is no.
+func requirePolicyGrant(ctx context.Context) error {
+	check := services.PolicyGrantCheckFrom(ctx)
+	if check == nil {
+		return errs.ErrDMSAuthzPolicyGrantForbidden
+	}
+	allowed, err := check(ctx)
+	if err != nil {
+		return fmt.Errorf("could not check whether the caller may grant authz policies: %w", err)
+	}
+	if !allowed {
+		return errs.ErrDMSAuthzPolicyGrantForbidden
+	}
+	return nil
+}
+
+// widensAuthzPrincipal tells whether saving settings makes the principal grant more than it does now:
+// a policy it does not hold, or its grants handed to other certificates by another CA or mapping.
+func widensAuthzPrincipal(existing *dto.PrincipalResponse, granted []dto.PrincipalPolicyResponse, ca *x509.Certificate, settings *models.AuthzPrincipalSettings) bool {
+	if existing == nil {
+		return len(settings.PolicyIDs) > 0
+	}
+	if !isPlainCATrust(existing.AuthConfig) || !trustsSameCA(existing.AuthConfig, ca) || !maps.Equal(principalMappings(existing.AuthConfig), settings.SubjectAttributeMappings) {
+		return true
+	}
+	return slices.ContainsFunc(settings.PolicyIDs, func(policyID string) bool { return !holdsPolicy(granted, policyID) })
+}
+
+// isPlainCATrust tells whether a principal config is what the DMS Manager writes: any certificate of a CA, with
+// nothing narrowed by hand. Rewriting a narrowed config would hand its grants to more certificates.
+func isPlainCATrust(config *authzmodels.AuthConfig) bool {
+	if config == nil || (*config)["match_mode"] != "any_from_ca" {
+		return false
+	}
+	for key := range *config {
+		if !slices.Contains([]string{"match_mode", "ca_trust", "subject_attribute_mappings", dmsManagerMarker}, key) {
+			return false
+		}
+	}
+	return true
+}
+
+// trustsSameCA tells whether a principal config pins ca, or a reissue of it with the same key and subject,
+// which validates the same certificates.
+func trustsSameCA(config *authzmodels.AuthConfig, ca *x509.Certificate) bool {
+	if config == nil {
+		return false
+	}
+	trust, _ := (*config)["ca_trust"].(map[string]any)
+	encoded, _ := trust["pem"].(string)
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return false
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return false
+	}
+	pinned, err := x509.ParseCertificate(block.Bytes)
+	return err == nil && bytes.Equal(pinned.RawSubjectPublicKeyInfo, ca.RawSubjectPublicKeyInfo) && bytes.Equal(pinned.RawSubject, ca.RawSubject)
+}
+
+// principalMappings reads the subject attribute mappings of a principal config, nil when it has none.
+func principalMappings(config *authzmodels.AuthConfig) map[string]string {
+	if config == nil {
+		return nil
+	}
+	raw, _ := (*config)["subject_attribute_mappings"].(map[string]any)
+	mappings := make(map[string]string, len(raw))
+	for name, source := range raw {
+		mappings[name], _ = source.(string)
+	}
+	return mappings
+}
+
+// leftoverLookupTimeout bounds the best-effort search of a leftover principal when an RA is deleted.
+const leftoverLookupTimeout = 5 * time.Second
+
+// maxAuthzPolicies bounds the policies of one RA, as each costs a call to authz.
+const maxAuthzPolicies = 100
+
+// normalizeAuthzPrincipalSettings returns a checked copy: authz could not use what it rejects, repeated policy ids
+// are removed and lists and maps are never nil. It runs on every save, as settings stored with the switch off are
+// granted as they are when it is turned on.
+func normalizeAuthzPrincipalSettings(settings *models.AuthzPrincipalSettings) (*models.AuthzPrincipalSettings, error) {
+	if settings == nil {
+		return nil, nil
+	}
+	for name, source := range settings.SubjectAttributeMappings {
+		if name == "" || strings.ContainsFunc(name, unicode.IsSpace) || !slices.Contains(authzmodels.X509SubjectAttributeSources, source) {
+			return nil, fmt.Errorf("%w: subject attribute %q maps from %q; it needs a name without spaces and one of %v", errs.ErrValidateBadRequest, name, source, authzmodels.X509SubjectAttributeSources)
+		}
+	}
+	if slices.Contains(settings.PolicyIDs, "") {
+		return nil, fmt.Errorf("%w: an authz policy id can not be empty", errs.ErrValidateBadRequest)
+	}
+	// A repeated id would be granted twice, which authz rejects.
+	policyIDs := slices.Compact(slices.Sorted(slices.Values(settings.PolicyIDs)))
+	if len(policyIDs) > maxAuthzPolicies {
+		return nil, fmt.Errorf("%w: an RA principal can hold at most %d policies", errs.ErrValidateBadRequest, maxAuthzPolicies)
+	}
+	mappings := map[string]string{}
+	maps.Copy(mappings, settings.SubjectAttributeMappings)
+	return &models.AuthzPrincipalSettings{Enabled: settings.Enabled, PolicyIDs: append([]string{}, policyIDs...), SubjectAttributeMappings: mappings}, nil
+}
+
+// dmsPrincipalAuthConfig matches any certificate signed by ca, pinned by its SHA-256 fingerprint.
+func dmsPrincipalAuthConfig(ca *x509.Certificate, mappings map[string]string) authzmodels.AuthConfig {
+	sum := sha256.Sum256(ca.Raw)
+	cfg := authzmodels.AuthConfig{
+		"match_mode": "any_from_ca",
+		"ca_trust": map[string]any{
+			"identity_type": "fingerprint",
+			"value":         "SHA256:" + strings.ToUpper(hex.EncodeToString(sum[:])),
+			"pem":           base64.StdEncoding.EncodeToString([]byte(chelpers.CertificateToPEM(ca))),
+		},
+	}
+	if len(mappings) > 0 {
+		m := make(map[string]any, len(mappings))
+		for k, v := range mappings {
+			m[k] = v
+		}
+		cfg["subject_attribute_mappings"] = m
+	}
+	return cfg
+}
+
+// dmsManagerMarker is the auth_config key that marks a principal as kept by the DMS Manager.
+const dmsManagerMarker = "dms_manager"
+
+// managedDMS is the RA a principal config is kept for, empty when the DMS Manager does not manage it.
+func managedDMS(config *authzmodels.AuthConfig) string {
+	return managedField(config, "dms_id")
+}
+
+// managedRevision identifies the request that last wrote a principal config.
+func managedRevision(config *authzmodels.AuthConfig) string {
+	return managedField(config, "revision")
+}
+
+func managedField(config *authzmodels.AuthConfig, field string) string {
+	if config == nil {
+		return ""
+	}
+	marker, _ := (*config)[dmsManagerMarker].(map[string]any)
+	value, _ := marker[field].(string)
+	return value
+}
+
+func isAuthzNotFound(err error) bool {
+	var apiErr *authzsdk.APIError
+	return errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound
 }
 
 func (svc DMSManagerServiceBackend) GetDMSByID(ctx context.Context, input services.GetDMSByIDInput) (*models.DMS, error) {

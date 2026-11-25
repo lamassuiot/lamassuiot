@@ -943,6 +943,13 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdatePolicies(ctx context.C
 	return nil
 }
 
+// settingsForWriteBack leaves the authz principal out of the connector's write-back of an event snapshot:
+// a missing field keeps the stored one, so a late write can not bring back what was removed meanwhile.
+func settingsForWriteBack(settings models.DMSSettings) models.DMSSettings {
+	settings.AuthzPrincipalSettings = nil
+	return settings
+}
+
 type RegisterUpdateJITPProvisionerInput struct {
 	DMS           *models.DMS
 	AwsJITPConfig IotAWSDMSMetadata
@@ -1021,16 +1028,25 @@ func (svc *AWSCloudConnectorServiceBackend) RegisterUpdateJITPProvisioner(ctx co
 		lFunc.Warnf("not updating any AWS CA Certificate for JITP '%s' template", input.DMS.ID)
 	}
 
-	dms := input.DMS
+	// The RA is read again: the event snapshot can be older than a change made while AWS was called.
+	dms, err := svc.DmsSDK.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.DMS.ID})
+	if err != nil {
+		lFunc.Errorf("could not read DMS %s to store its JITP configuration: %s", input.DMS.ID, err)
+		return err
+	}
 	updatedJitpConf := input.AwsJITPConfig
 	updatedJitpConf.JITPProvisioningTemplate.ARN = *cpTemplate.TemplateArn
+	if dms.Metadata == nil {
+		dms.Metadata = map[string]any{}
+	}
 	dms.Metadata[AWSIoTMetadataKey(svc.ConnectorID)] = updatedJitpConf
 
+	settings := settingsForWriteBack(dms.Settings)
 	_, err = svc.DmsSDK.UpdateDMS(ctx, services.UpdateDMSInput{
 		ID:       dms.ID,
 		Name:     dms.Name,
 		Metadata: dms.Metadata,
-		Settings: &dms.Settings,
+		Settings: &settings,
 	})
 	if err != nil {
 		lFunc.Errorf("something went wrong while updating DMS metadata: %s", err)

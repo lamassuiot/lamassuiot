@@ -38,6 +38,18 @@ func replyPolicyNotFound(c *gin.Context, err error, policyID string) bool {
 	return true
 }
 
+// replyPrincipalNotFound writes a 404 when err matches "principal not found: {id}" and returns true if it did.
+func replyPrincipalNotFound(c *gin.Context, err error, principalID string) bool {
+	if err == nil || err.Error() != "principal not found: "+principalID {
+		return false
+	}
+	c.JSON(http.StatusNotFound, dto.ErrorResponse{
+		Error:   "Principal not found",
+		Details: map[string]string{"id": principalID},
+	})
+	return true
+}
+
 // decodeJWTPayload extracts claims from a JWT token for log context enrichment.
 // No signature verification is performed — auth uses OIDCMatcher with full verification.
 func decodeJWTPayload(token string) (map[string]any, error) {

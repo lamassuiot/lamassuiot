@@ -25,6 +25,9 @@ type Principal struct {
 // AuthConfig stores type-specific authentication configuration
 type AuthConfig map[string]any
 
+// X509SubjectAttributeSources are the certificate values an x509 principal can map to a subject attribute.
+var X509SubjectAttributeSources = []string{"x509.subject.cn", "x509.subject.common_name", "x509.serial_number"}
+
 // Value implements the driver.Valuer interface for GORM
 func (a AuthConfig) Value() (driver.Value, error) {
 	return json.Marshal(a)
