@@ -33,7 +33,9 @@ type DMSSettings struct {
 
 // AuthzPrincipalSettings makes the DMS Manager keep the authz principal "dms:<id>" that trusts every certificate of the enrollment CA.
 type AuthzPrincipalSettings struct {
-	Enabled bool `json:"enabled"` //switch-like option that creates, updates and deletes the principal with the DMS
+	Enabled                  bool              `json:"enabled"` //switch-like option that creates, updates and deletes the principal with the DMS
+	PolicyIDs                []string          `json:"policy_ids"`
+	SubjectAttributeMappings map[string]string `json:"subject_attribute_mappings"` // e.g. client_id: x509.subject.cn
 }
 
 type EnrollmentProto string

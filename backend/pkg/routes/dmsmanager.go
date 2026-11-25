@@ -19,6 +19,8 @@ func registerDMSManagerRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, sv
 	routes := controllers.NewDMSManagerHttpRoutes(svc)
 
 	dmsAuthzMw := pkiAuthz(engine, "dmsmanager", "dms", logger)
+	// The policies of an RA principal are granted in authz, so setting them needs the caller to be allowed to grant.
+	grantCheck := policyGrantCheck(engine, logger)
 	idKey := map[string]string{"id": "id"}
 
 	contract := middleware.NewContractRouter(httpGrp)
@@ -28,9 +30,9 @@ func registerDMSManagerRoutes(logger *logrus.Entry, httpGrp *gin.RouterGroup, sv
 
 	rv1.GET("/stats", dmsAuthzMw.List(), routes.GetStats)
 	rv1.GET("/dms", dmsAuthzMw.List(), routes.GetAllDMSs)
-	rv1.POST("/dms", dmsAuthzMw.Global("create"), routes.CreateDMS)
+	rv1.POST("/dms", withPolicyGrantCheck(dmsAuthzMw.Global("create"), grantCheck), routes.CreateDMS)
 	rv1.GET("/dms/:id", dmsAuthzMw.Resource("read", idKey), routes.GetDMSByID)
-	rv1.PUT("/dms/:id", dmsAuthzMw.Resource("update", idKey), routes.UpdateDMS)
+	rv1.PUT("/dms/:id", withPolicyGrantCheck(dmsAuthzMw.Resource("update", idKey), grantCheck), routes.UpdateDMS)
 	rv1.PUT("/dms/:id/metadata", dmsAuthzMw.Resource("update", idKey), routes.UpdateDMSMetadata)
 	rv1.PATCH("/dms/:id/metadata", dmsAuthzMw.Resource("update", idKey), routes.UpdateDMSMetadata)
 	rv1.DELETE("/dms/:id", dmsAuthzMw.Resource("delete", idKey), routes.DeleteDMS)

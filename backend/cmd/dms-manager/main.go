@@ -68,14 +68,12 @@ func main() {
 		fmt.Sprintf("%s://%s:%d%s", conf.DevManagerClient.Protocol, conf.DevManagerClient.Hostname, conf.DevManagerClient.Port, conf.DevManagerClient.BasePath),
 	)
 
+	// Only the RAs that ask for an authz principal need this client, so a failure to build it must not stop the service.
 	var authzSDK *authzsdk.Client
-	if conf.AuthzPrincipals.Enabled {
-		lAuthzClient := helpers.SetupLogger(conf.AuthzClient.LogLevel, "DMS Manager", "LMS SDK - Authz Client")
-		authzHttpCli, err := sdk.BuildHTTPClient(conf.AuthzClient.HTTPClient, lAuthzClient)
-		if err != nil {
-			log.Fatalf("could not build HTTP Authz Client: %s", err)
-		}
-
+	lAuthzClient := helpers.SetupLogger(conf.AuthzClient.LogLevel, "DMS Manager", "LMS SDK - Authz Client")
+	if authzHttpCli, err := sdk.BuildHTTPClient(conf.AuthzClient.HTTPClient, lAuthzClient); err != nil {
+		log.Warnf("could not build HTTP Authz Client, RAs can not ask for an authz principal: %s", err)
+	} else {
 		authzSDK = authzsdk.NewClientWithHTTPClient(
 			sdk.HttpClientWithCustomHeaders(sdk.HttpClientWithSourceHeaderInjector(authzHttpCli, models.DMSManagerSource), "X-Principal-ID", "admin-mode"),
 			fmt.Sprintf("%s://%s:%d%s", conf.AuthzClient.Protocol, conf.AuthzClient.Hostname, conf.AuthzClient.Port, conf.AuthzClient.BasePath),

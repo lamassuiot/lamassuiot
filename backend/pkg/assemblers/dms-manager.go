@@ -3,7 +3,6 @@ package assemblers
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/eventbus"
@@ -47,7 +46,7 @@ func AssembleDMSManagerServiceWithHTTPServer(conf config.DMSconfig, caService se
 	return service, port, nil
 }
 
-// authz is only used when authz_principals is enabled, and then it is required.
+// authz keeps the principals of the RAs that ask for one; nil rejects those RAs.
 func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAService, deviceService services.DeviceManagerService, authz *authzsdk.Client) (*services.DMSManagerService, error) {
 	sdk.InitOtelSDK(context.Background(), "DMS Manager Service", conf.OtelConfig)
 
@@ -74,14 +73,6 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("invalid DMS config: %w", err)
 	}
 
-	if !conf.AuthzPrincipals.Enabled {
-		authz = nil
-	} else if authz == nil || len(conf.AuthzPrincipals.PolicyIDs) == 0 {
-		return nil, fmt.Errorf("authz_principals needs an authz client and authz_principals.policy_ids")
-	}
-	// A repeated id would be granted twice, which authz rejects.
-	conf.AuthzPrincipals.PolicyIDs = slices.Compact(slices.Sorted(slices.Values(conf.AuthzPrincipals.PolicyIDs)))
-
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
@@ -91,7 +82,6 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		CRLCacheMaxBytes:      crlCacheMaxBytes,
 		CRLCacheMaxTTL:        crlCacheMaxTTL,
 		Authz:                 authz,
-		AuthzPrincipals:       conf.AuthzPrincipals,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)

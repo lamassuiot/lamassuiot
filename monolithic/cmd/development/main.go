@@ -116,9 +116,6 @@ func main() {
 	authzProxyPrefixes := flag.String("authz-proxy-prefixes", "/api/wfx/nbi/,/api/wfx/sbi/", "comma-separated gateway path prefixes protected by monolithic ext_authz checks")
 	authzPreloadDir := flag.String("authz-preload-dir", "", "directory of policy JSON files to preload into authz service (e.g. ./connectors/authz/cmd/preload)")
 	authzBootstrapJSON := flag.String("authz-bootstrap", "", "inline JSON array of initial principals and policy grants ([]BootstrapEntry)")
-	authzPrincipals := flag.Bool("authz-principals", false, "let an RA create the authz principal of its devices (requires -authz and -authz-principals-policy-ids)")
-	authzPrincipalPolicyIDs := flag.String("authz-principals-policy-ids", "", "comma-separated ids of the policies granted to the principal of an RA")
-	authzPrincipalAttributes := flag.String("authz-principals-subject-attributes", "device_id=x509.subject.cn", "comma-separated name=attribute pairs the principal of an RA derives from the device certificate")
 	flag.Parse()
 
 	fmt.Println("===================== FLAGS ======================")
@@ -551,12 +548,7 @@ func main() {
 		PopulateSampleData: *sampleData,
 		SSEEnabled:         !*disableSSE,
 		AuthzProxyPrefixes: splitCommaSeparated(*authzProxyPrefixes),
-		AuthzPrincipals: config.DMSAuthzPrincipals{
-			Enabled:                  *authzPrincipals,
-			PolicyIDs:                splitCommaSeparated(*authzPrincipalPolicyIDs),
-			SubjectAttributeMappings: splitKeyValues(*authzPrincipalAttributes),
-		},
-		AuthzConfig: buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
+		AuthzConfig:        buildAuthzConfig(*enableAuthz, storageConfig, eventBus, dlqEventBus, *authzSchema, *authzPkiSchema, *authzPreloadDir, *authzBootstrapJSON, *authzHTTPSchemas),
 		AWSIoTManager: pkg.MonolithicAWSIoTManagerConfig{
 			Enabled:     *awsIoTManager,
 			ConnectorID: fmt.Sprintf("aws.%s", *awsIoTManagerID),
@@ -648,16 +640,6 @@ func splitCommaSeparated(value string) []string {
 	for item := range strings.SplitSeq(value, ",") {
 		if item = strings.TrimSpace(item); item != "" {
 			out = append(out, item)
-		}
-	}
-	return out
-}
-
-func splitKeyValues(value string) map[string]string {
-	out := map[string]string{}
-	for _, item := range splitCommaSeparated(value) {
-		if key, val, ok := strings.Cut(item, "="); ok {
-			out[strings.TrimSpace(key)] = strings.TrimSpace(val)
 		}
 	}
 	return out

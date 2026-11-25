@@ -1,7 +1,6 @@
 package pkg
 
 import (
-	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/config"
 	authzconfig "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/config"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	laws "github.com/lamassuiot/lamassuiot/v4/shared/aws"
@@ -39,7 +38,6 @@ type MonolithicConfig struct {
 	PopulateSampleData    bool                           `mapstructure:"populate_sample_data"`
 	SSEEnabled            bool                           `mapstructure:"sse_enabled"`
 	AuthzConfig           *authzconfig.AuthzConfig       `mapstructure:"authz"`
-	AuthzPrincipals       config.DMSAuthzPrincipals      `mapstructure:"authz_principals"`
 }
 
 type MonolithicAWSIoTManagerConfig struct {

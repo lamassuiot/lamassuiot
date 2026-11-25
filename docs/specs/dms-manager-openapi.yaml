@@ -86,6 +86,11 @@ paths:
         schema_name: dmsmanager
         entity_type: dms
         action: create
+      x-authz-service-checks:
+        - namespace: authz
+          schema_name: public
+          entity_type: principal_policy
+          action: grant
       requestBody:
         required: true
         content:
@@ -100,6 +105,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DMS'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/PolicyGrantForbidden' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /v1/dms/{id}:
@@ -132,6 +138,11 @@ paths:
         schema_name: dmsmanager
         entity_type: dms
         action: update
+      x-authz-service-checks:
+        - namespace: authz
+          schema_name: public
+          entity_type: principal_policy
+          action: grant
       parameters:
         - $ref: '#/components/parameters/DmsId'
       requestBody:
@@ -148,6 +159,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/DMS'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/PolicyGrantForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
     delete:
@@ -505,6 +517,12 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Error'
+    PolicyGrantForbidden:
+      description: The save makes the authz principal of the RA grant more than the caller may grant (needs the principal_policy grant permission of authz)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
     InternalError:
       description: Internal server error
       content:
@@ -609,11 +627,25 @@ components:
     AuthzPrincipalSettings:
       type: object
       description: |
-        While enabled, the DMS Manager keeps the authz principal `dms:{id}`, which authenticates any certificate of the enrollment CA. Omitted on update, the current value is kept.
-        A 400 if the DMS Manager has this feature disabled, or the enrollment CA is missing or not active.
+        While enabled, the DMS Manager keeps the authz principal `dms:{id}`. Every certificate signed by the enrollment CA authenticates as it and holds its policies, whichever RA or issuer produced it, so RAs that share a CA share who is let in. Omitted on update, the current value is kept.
+        A 400 if the DMS Manager has no authz client; while enabled, if the enrollment CA is missing or not active, a policy id does not exist in authz, or a principal `dms:{id}` that the DMS Manager does not manage already exists. The policy ids and mappings are checked on every save, enabled or not.
+        A 403 if the save makes the principal grant more than it does now in authz: a policy it does not hold, another enrollment CA, another mapping, or a principal edited by hand in authz. That needs the caller to hold the `principal_policy` grant permission of authz (the `x-authz-service-checks` of the operation). Taking access away, turning the principal off or deleting the RA does not. The comparison is with what authz holds now, not with the stored RA, so a save that changes nothing can still be refused once someone changed the principal in authz; a PUT without `authz_principal_settings` keeps the stored ones and is judged the same way.
       properties:
         enabled:
           type: boolean
+        policy_ids:
+          type: array
+          description: Authz policies granted to the principal, at most 100. Without any, its devices authenticate but are allowed nothing, and the DMS Manager logs a warning.
+          maxItems: 100
+          items:
+            type: string
+            minLength: 1
+        subject_attribute_mappings:
+          type: object
+          description: Subject attributes taken from the device certificate, by name. A name is not empty and has no spaces.
+          additionalProperties:
+            type: string
+            enum: [x509.subject.cn, x509.subject.common_name, x509.serial_number]
 
     ServerKeyGenSettings:
       type: object

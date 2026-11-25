@@ -36,7 +36,10 @@ func (cli *dmsManagerClient) CreateDMS(ctx context.Context, input services.Creat
 		Name:     input.Name,
 		Metadata: input.Metadata,
 		Settings: input.Settings,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+		403: {errs.ErrDMSAuthzPolicyGrantForbidden},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +52,10 @@ func (cli *dmsManagerClient) UpdateDMS(ctx context.Context, input services.Updat
 		Name:     input.Name,
 		Metadata: input.Metadata,
 		Settings: input.Settings,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {errs.ErrValidateBadRequest},
+		403: {errs.ErrDMSAuthzPolicyGrantForbidden},
+	})
 	if err != nil {
 		return nil, err
 	}

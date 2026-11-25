@@ -11,4 +11,6 @@ var (
 	ErrDMSInvalidAuthMode      error = errors.New("DMS invalid auth mode")
 	ErrDMSAuthModeNotSupported error = errors.New("DMS auth mode not supported")
 	ErrDMSEnrollInvalidCert    error = errors.New("invalid certificate")
+
+	ErrDMSAuthzPolicyGrantForbidden error = errors.New("changing what the authz principal of an RA grants (its policies, mappings or Enrollment CA) requires the principal_policy grant permission of authz")
 )

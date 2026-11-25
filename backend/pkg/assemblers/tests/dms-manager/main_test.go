@@ -463,10 +463,19 @@ func createAuthzTestCA(t *testing.T, servers *tests.TestServer, name string) *mo
 	return ca
 }
 
+// grantingCaller is the context of a caller allowed to grant authz policies, as the HTTP layer builds it.
+func grantingCaller() context.Context {
+	return services.WithPolicyGrantCheck(context.Background(), func(context.Context) (bool, error) { return true, nil })
+}
+
 func authzTestSettings(caID string, principal bool) models.DMSSettings {
 	var s models.DMSSettings
 	s.EnrollmentSettings.EnrollmentCA = caID
-	s.AuthzPrincipalSettings = &models.AuthzPrincipalSettings{Enabled: principal}
+	s.AuthzPrincipalSettings = &models.AuthzPrincipalSettings{
+		Enabled:                  principal,
+		PolicyIDs:                append(slices.Clone(tests.AuthzTestPolicyIDs), tests.AuthzTestPolicyIDs[0]), // a repeated id must not break the sync
+		SubjectAttributeMappings: map[string]string{"device_id": "x509.subject.cn"},
+	}
 	return s
 }
 
@@ -519,7 +528,7 @@ func authzTrustedCA(t *testing.T, servers *tests.TestServer, id string) any {
 func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
 	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
-	ctx, authz := context.Background(), servers.Authz.Client
+	ctx, authz := grantingCaller(), servers.Authz.Client
 	ca1, ca2 := createAuthzTestCA(t, servers, "ra-ca-1"), createAuthzTestCA(t, servers, "ra-ca-2")
 	update := func(s models.DMSSettings) {
 		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &s})
@@ -561,7 +570,7 @@ func TestAuthzPrincipalFollowsTheDMS(t *testing.T) {
 func TestAuthzPrincipalTrustsOnlyItsEnrollmentCA(t *testing.T) {
 	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := grantingCaller()
 	ca, otherCA := createAuthzTestCA(t, servers, "ra-ca"), createAuthzTestCA(t, servers, "other-ca")
 	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca.ID, true)})
 	require.NoError(t, err)
@@ -589,7 +598,7 @@ func TestAuthzPrincipalTrustsOnlyItsEnrollmentCA(t *testing.T) {
 }
 
 func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
-	ctx := context.Background()
+	ctx := grantingCaller()
 	isGrant := func(r *http.Request) bool {
 		return r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/policies")
 	}
@@ -715,7 +724,7 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 func TestAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
 	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
-	ctx := context.Background()
+	ctx := grantingCaller()
 	ca1, ca2, ca3 := createAuthzTestCA(t, servers, "ca-1"), createAuthzTestCA(t, servers, "ca-2"), createAuthzTestCA(t, servers, "ca-3")
 	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca1.ID, true)})
 	require.NoError(t, err)
@@ -747,7 +756,7 @@ func TestAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
 func TestAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {
 	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
-	ctx, authz := context.Background(), servers.Authz.Client
+	ctx, authz := grantingCaller(), servers.Authz.Client
 	settings := authzTestSettings(createAuthzTestCA(t, servers, "ra-ca").ID, true)
 	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: settings})
 	require.NoError(t, err)

@@ -112,6 +112,8 @@ func (r *dmsManagerHttpRoutes) CreateDMS(ctx *gin.Context) {
 		switch {
 		case errors.Is(err, errs.ErrValidateBadRequest):
 			ctx.AbortWithStatusJSON(400, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrDMSAuthzPolicyGrantForbidden):
+			ctx.AbortWithStatusJSON(403, gin.H{"err": err.Error()})
 		default:
 			ctx.AbortWithStatusJSON(500, gin.H{"err": err.Error()})
 		}
@@ -145,6 +147,8 @@ func (r *dmsManagerHttpRoutes) UpdateDMS(ctx *gin.Context) {
 		switch {
 		case errors.Is(err, errs.ErrValidateBadRequest):
 			ctx.JSON(400, gin.H{"err": err.Error()})
+		case errors.Is(err, errs.ErrDMSAuthzPolicyGrantForbidden):
+			ctx.JSON(403, gin.H{"err": err.Error()})
 		default:
 			ctx.JSON(500, gin.H{"err": err.Error()})
 		}

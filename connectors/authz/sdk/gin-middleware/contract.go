@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -49,6 +51,33 @@ type Permission struct {
 	handler       gin.HandlerFunc
 	pathParams    []string
 	trustBoundary string
+	serviceChecks []boundServiceCheck
+}
+
+// ServiceCheck is a permission that the service of an endpoint asks for only when the content of a
+// request needs it. Like a route permission, it is validated, recorded and matched against the OpenAPI.
+type ServiceCheck struct {
+	declaration Declaration
+	bind        func(*gin.Context) func(context.Context) (bool, error)
+}
+
+type boundServiceCheck struct {
+	declaration Declaration
+	install     gin.HandlerFunc
+}
+
+// WithServiceCheck hands install a check bound to the caller of each request, after the route permission
+// let the request in; install typically puts it in the request context for the service.
+func (p Permission) WithServiceCheck(check ServiceCheck, install func(c *gin.Context, allowed func(context.Context) (bool, error))) Permission {
+	if check.bind == nil || install == nil {
+		panic("service check requires a validated check and an install function")
+	}
+	if _, delegated := handlerChecks[p.declaration.Check]; delegated || p.declaration.Check == checkPublic {
+		panic("service check requires a permission that authenticates the caller")
+	}
+	bound := boundServiceCheck{declaration: check.declaration, install: func(c *gin.Context) { install(c, check.bind(c)) }}
+	p.serviceChecks = append(slices.Clone(p.serviceChecks), bound)
+	return p
 }
 
 // WithTrustBoundary records an intended caller boundary. Today it is equivalent
@@ -106,6 +135,28 @@ func (m *AuthzMiddleware) Global(action string) Permission {
 		panic(fmt.Sprintf("invalid authz declaration: %s.%s.%s action %q is not global", m.namespace, m.schemaName, m.entityType, action))
 	}
 	return Permission{declaration: Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Action: action}, handler: handler}
+}
+
+// GlobalCheck validates a global action like Global, for a ServiceCheck. The check is bound to the
+// caller's credentials when the request arrives, so it never reads the pooled gin context later.
+func (m *AuthzMiddleware) GlobalCheck(action string) ServiceCheck {
+	if m.definition == nil || !m.definition.IsGlobalAction(action) {
+		panic(fmt.Sprintf("invalid authz global check %q for %s.%s.%s", action, m.namespace, m.schemaName, m.entityType))
+	}
+	declaration := Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Action: action}
+	return ServiceCheck{declaration: declaration, bind: func(c *gin.Context) func(context.Context) (bool, error) {
+		if c.GetHeader("X-Principal-ID") == "admin-mode" {
+			return func(context.Context) (bool, error) { return true, nil }
+		}
+		authType, authMaterial, err := extractAuthInputs(c)
+		if err != nil {
+			return func(context.Context) (bool, error) { return false, nil }
+		}
+		return func(ctx context.Context) (bool, error) {
+			allowed, _, err := m.engine.MatchAndAuthorize(ctx, authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, nil)
+			return allowed, err
+		}
+	}}
 }
 
 // Resource maps every schema primary key to a named Gin path parameter.
@@ -182,6 +233,7 @@ func (m *AuthzMiddleware) List() Permission {
 type RouteDeclaration struct {
 	Method, Path  string
 	Authz         Declaration
+	ServiceChecks []Declaration
 	TrustBoundary string
 }
 
@@ -242,8 +294,14 @@ func (r *ContractRouter) Handle(method, relativePath string, permission Permissi
 			panic(fmt.Sprintf("authz resource parameter %q missing from route %s %s", param, method, relativePath))
 		}
 	}
-	r.group.Handle(method, relativePath, append([]gin.HandlerFunc{permission.handler}, handlers...)...)
-	*r.routes = append(*r.routes, RouteDeclaration{Method: method, Path: fullPath, Authz: permission.declaration, TrustBoundary: permission.trustBoundary})
+	chain := []gin.HandlerFunc{permission.handler}
+	var serviceChecks []Declaration
+	for _, check := range permission.serviceChecks {
+		chain = append(chain, check.install)
+		serviceChecks = append(serviceChecks, check.declaration)
+	}
+	r.group.Handle(method, relativePath, append(chain, handlers...)...)
+	*r.routes = append(*r.routes, RouteDeclaration{Method: method, Path: fullPath, Authz: permission.declaration, ServiceChecks: serviceChecks, TrustBoundary: permission.trustBoundary})
 }
 
 // joinPaths mirrors Gin's own joinPaths so the recorded path is the registered one:
@@ -363,6 +421,7 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		}
 		var op struct {
 			Authz         *Declaration           `yaml:"x-authz"`
+			ServiceChecks []Declaration          `yaml:"x-authz-service-checks"`
 			Security      *[]map[string][]string `yaml:"security"`
 			TrustBoundary string                 `yaml:"x-trust-boundary"`
 		}
@@ -379,6 +438,9 @@ func (r *ContractRouter) ValidateOpenAPI(input io.Reader) error {
 		}
 		if *op.Authz != route.Authz {
 			return fmt.Errorf("authz contract mismatch for %s %s: middleware=%+v; OpenAPI=%+v", route.Method, route.Path, route.Authz, *op.Authz)
+		}
+		if !slices.Equal(op.ServiceChecks, route.ServiceChecks) {
+			return fmt.Errorf("authz service checks mismatch for %s %s: middleware=%+v; OpenAPI x-authz-service-checks=%+v", route.Method, route.Path, route.ServiceChecks, op.ServiceChecks)
 		}
 		if op.TrustBoundary != route.TrustBoundary {
 			return fmt.Errorf("trust boundary mismatch for %s %s: middleware=%q; OpenAPI=%q", route.Method, route.Path, route.TrustBoundary, op.TrustBoundary)

@@ -56,6 +56,14 @@ namespaces. Permissions fail during route construction, before serving requests:
   introspection retains its existing public access.
 - `List` requires atomic `read` and attaches the existing authorization filter
   middleware. Its contract declares `check: filter` rather than an action check.
+- `Permission.WithServiceCheck(grants.GlobalCheck("grant"), install)` adds a second permission that the
+  service of an endpoint asks for only when the content of a request needs it, such as granting policies
+  while saving an RA. `GlobalCheck` validates a global action at registration. The check is bound to the
+  caller of each request when it arrives (admin-mode is trusted like in every guard; missing credentials are
+  never allowed; an unavailable authz is an error, not a denial) and `install` hands it to the service, usually
+  through the request context. The contract records it in `RouteDeclaration.ServiceChecks`, and
+  `ValidateOpenAPI` requires the same list in `x-authz-service-checks`. It needs a permission that
+  authenticates the caller, so it is rejected on `Public` and delegated ones.
 
 The permission's metadata and enforcing handler are private fields in one value.
 `Handle` attaches that handler and records its declaration together.
@@ -72,7 +80,16 @@ x-authz:
   action: create
 ```
 
-For list operations, replace `action: create` with `check: filter`.
+For list operations, replace `action: create` with `check: filter`. An operation whose service asks for
+a second permission lists it beside `x-authz`:
+
+```yaml
+x-authz-service-checks:
+  - namespace: authz
+    schema_name: public
+    entity_type: principal_policy
+    action: grant
+```
 
 Public operations declare `x-authz: {check: public}` and `security: []`.
 The checker rejects public operations inheriting authentication, and protected

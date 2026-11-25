@@ -491,14 +491,8 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	}
 
 	var authzClient *authzsdk.Client
-	var authzPrincipals config.DMSAuthzPrincipals
 	if authzTestServer != nil {
 		authzClient = authzTestServer.Client
-		authzPrincipals = config.DMSAuthzPrincipals{
-			Enabled:                  true,
-			PolicyIDs:                append(slices.Clone(AuthzTestPolicyIDs), AuthzTestPolicyIDs[0]), // a repeated id must not break the sync
-			SubjectAttributeMappings: map[string]string{"device_id": "x509.subject.cn"},
-		}
 	}
 
 	svc, port, err := assemblers.AssembleDMSManagerServiceWithHTTPServer(config.DMSconfig{
@@ -521,7 +515,6 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 		PublisherEventBus:         eventBus.Config,
 		Storage:                   storageEngine.Config,
 		DownstreamCertificateFile: downstreamCertPath,
-		AuthzPrincipals:           authzPrincipals,
 	},
 		caTestServer.HttpCASDK,
 		deviceManagerTestServer.Service,
@@ -548,7 +541,7 @@ func BuildDMSManagerServiceTestServer(storageEngine *TestStorageEngineConfig, ev
 	}, nil
 }
 
-// AuthzTestPolicyIDs are the policies the DMS Manager test server grants to the principal of an RA.
+// AuthzTestPolicyIDs are the policies the authz test server creates, for the principals of the RAs.
 var AuthzTestPolicyIDs = []string{"policy-a", "policy-b"}
 
 type AuthzTestServer struct {
