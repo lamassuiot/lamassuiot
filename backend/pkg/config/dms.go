@@ -30,7 +30,7 @@ type DMSconfig struct {
 
 // CRLCacheConfig configures the in-memory cache of the CRLs downloaded for EST client certificate revocation checks.
 type CRLCacheConfig struct {
-	// MaxSizeMB bounds the estimated memory of the cached CRLs, in megabytes. 0 uses the default of 1024.
+	// MaxSizeMB bounds the estimated memory of the cached CRLs, in megabytes. 0 uses the default of 256.
 	MaxSizeMB int `mapstructure:"max_size_mb"`
 	// MaxTTL bounds how long a downloaded CRL is reused, written as a Go duration such as "1h" or "30m". A CRL is
 	// never kept past its nextUpdate, so the effective TTL is the smaller of the two. 0 uses the default of 1h.

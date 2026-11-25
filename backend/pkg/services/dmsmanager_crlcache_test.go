@@ -356,3 +356,14 @@ func TestCRLCacheSingleDownloadUnderConcurrency(t *testing.T) {
 		})
 	}
 }
+
+// TestCRLCacheDefaults checks the budget and maximum TTL applied when the configuration leaves them unset.
+func TestCRLCacheDefaults(t *testing.T) {
+	c := newCRLCache(0, 0)
+	if c.maxBytes != 256<<20 {
+		t.Fatalf("expected a default budget of 256 MiB. Got %d bytes", c.maxBytes)
+	}
+	if c.maxTTL != time.Hour {
+		t.Fatalf("expected a default maximum TTL of 1h. Got %s", c.maxTTL)
+	}
+}

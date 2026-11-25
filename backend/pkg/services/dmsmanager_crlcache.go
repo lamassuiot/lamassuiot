@@ -14,8 +14,9 @@ const (
 	// defaultCRLCacheMaxTTL bounds how long a downloaded CRL is reused when no maximum is configured, so a newly
 	// published CRL is seen within that time.
 	defaultCRLCacheMaxTTL = time.Hour
-	// defaultCRLCacheMaxBytes is the memory budget of the CRL cache when none is configured.
-	defaultCRLCacheMaxBytes = uint64(1024 << 20)
+	// defaultCRLCacheMaxBytes is the memory budget of the CRL cache when none is configured, small enough for a DMS
+	// container with a modest memory limit. Deployments that check many or large CRLs can raise it.
+	defaultCRLCacheMaxBytes = uint64(256 << 20)
 	// crlEntryMemoryEstimate is the heap a parsed CRL holds per revoked entry on top of its DER encoding. Measured at
 	// 300–400 bytes on Go 1.27, which fills both RevokedCertificateEntries and the deprecated RevokedCertificates.
 	crlEntryMemoryEstimate = 512

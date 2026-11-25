@@ -53,7 +53,7 @@ type DMSManagerBuilder struct {
 	DMSStorage            storage.DMSRepo
 	DownstreamCertificate *x509.Certificate
 	// CRLCacheMaxBytes bounds the estimated memory of the CRLs cached for client certificate revocation checks.
-	// 0 uses the default of 1024 MB.
+	// 0 uses the default of 256 MB.
 	CRLCacheMaxBytes uint64
 	// CRLCacheMaxTTL bounds how long a downloaded CRL is reused; a CRL is never kept past its nextUpdate. 0 uses the
 	// default of 1 hour.
