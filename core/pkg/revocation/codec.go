@@ -20,10 +20,11 @@ var (
 )
 
 // DistributionPointName mirrors the DistributionPointName CHOICE of RFC 5280 4.2.1.13. Being a struct tagged [0] where
-// it is used, it encodes the explicit tagging the CHOICE requires.
+// it is used, it encodes the explicit tagging the CHOICE requires. nameRelativeToCRLIssuer is a single
+// RelativeDistinguishedName, a SET OF that [1] tags implicitly, not an RDNSequence.
 type DistributionPointName struct {
-	FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
-	RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
+	FullName     []asn1.RawValue                   `asn1:"optional,tag:0"`
+	RelativeName pkix.RelativeDistinguishedNameSET `asn1:"optional,tag:1"`
 }
 
 // IssuingDistributionPoint mirrors the IssuingDistributionPoint extension of RFC 5280 5.2.5. Every field is optional,

@@ -518,6 +518,23 @@ func TestCalculateCRL(t *testing.T) {
 		require.Equal(t, []string{"http://va1.example.com/crl/ca-b", "http://va2.example.com/crl/ca-b"}, idpURLs(t, crlB))
 	})
 
+	// RFC 5280 4.2.1.13: fullName holds at least one name, so without VA domains the IDP is left out. A CRL without one
+	// covers every certificate of its CA.
+	t.Run("without VA domains the CRL has no IDP", func(t *testing.T) {
+		for _, domains := range [][]string{nil, {}} {
+			f := newCRLFixture(t)
+			f.svc.vaDomains = domains
+			a := f.addCA("ca-a", "Root A")
+			f.repo.rows["ca-a"] = f.settings(a, nil, models.CRLSettingsActive)
+
+			crl, err := f.svc.CalculateCRL(ctx, coreservices.CalculateCRLInput{CAID: "ca-a"})
+			require.NoError(t, err)
+			for _, ext := range crl.Extensions {
+				require.False(t, ext.Id.Equal(revocation.OIDExtensionIssuingDistributionPoint), "domains %#v: unexpected IDP % x", domains, ext.Value)
+			}
+		}
+	})
+
 	t.Run("a lost update does not publish the file", func(t *testing.T) {
 		f := newCRLFixture(t)
 		a := f.addCA("ca-a", "Root")

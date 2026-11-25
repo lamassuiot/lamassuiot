@@ -154,10 +154,8 @@ func TestCheckCRLScope(t *testing.T) {
 			wantErr: "does not match any CRL distribution point",
 		},
 		{
-			name: "Err/RelativeNameOnly",
-			exts: []pkix.Extension{idpExt(t, IssuingDistributionPoint{DistributionPoint: DistributionPointName{
-				RelativeName: pkix.RDNSequence{{{Type: asn1.ObjectIdentifier{2, 5, 4, 3}, Value: "crl"}}},
-			}})},
+			name:    "Err/RelativeNameOnly",
+			exts:    []pkix.Extension{{Id: OIDExtensionIssuingDistributionPoint, Critical: true, Value: tlv(0x30, relativeNameDP())}},
 			cert:    endEntity,
 			crlDP:   dp,
 			wantErr: "does not match any CRL distribution point",

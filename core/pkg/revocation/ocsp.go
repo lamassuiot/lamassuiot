@@ -15,9 +15,12 @@ import (
 // be issued by issuer, carry the id-kp-OCSPSigning EKU and be within its validity period. Being issued by issuer is not
 // enough, since any end-entity certificate of that CA satisfies it, expired ones included.
 //
-// resp is expected to come from ocsp.ParseResponse, which verifies its signature against the embedded certificate.
-// That signature is verified again here, so that a response built or altered by the caller cannot pass. A response
-// without an embedded certificate is rejected: the caller checks its signature against issuer instead.
+// resp must be the result of ocsp.ParseResponse, unmodified. The parser verifies the signature over TBSResponseData
+// against the embedded certificate and decodes Status, SerialNumber, ThisUpdate, NextUpdate and the other fields from
+// those bytes. They are not decoded again here, so a change to them after parsing goes unnoticed. The signature is
+// checked again only to bind resp.Certificate to TBSResponseData: replacing it, for instance by the issuer's
+// certificate, cannot skip the checks below. A response without an embedded certificate is rejected: the caller checks
+// its signature against issuer instead.
 func CheckDelegatedResponder(resp *ocsp.Response, issuer *x509.Certificate, now time.Time) error {
 	if resp == nil || issuer == nil {
 		return fmt.Errorf("missing OCSP response or issuer")

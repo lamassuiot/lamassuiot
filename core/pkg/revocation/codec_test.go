@@ -32,6 +32,14 @@ func fullNameDP(uris ...string) []byte {
 	return tlv(0xa0, tlv(0xa0, names...))
 }
 
+// relativeNameDP encodes the [0] DistributionPointName of a distribution point holding nameRelativeToCRLIssuer CN=crl.
+// It is a single RelativeDistinguishedName whose SET OF tag the IMPLICIT [1] replaces (RFC 5280 4.2.1.13, A.2): no
+// SEQUENCE OF wraps it, unlike a Name.
+func relativeNameDP() []byte {
+	cn := tlv(0x30, tlv(0x06, []byte{0x55, 0x04, 0x03}), tlv(0x13, []byte("crl")))
+	return tlv(0xa0, tlv(0xa1, cn))
+}
+
 func uris(names []asn1.RawValue) []string {
 	var out []string
 	for _, name := range names {
@@ -56,6 +64,13 @@ func TestMarshalIssuingDistributionPointIsDER(t *testing.T) {
 			name: "Empty",
 			idp:  IssuingDistributionPoint{},
 			want: []byte{0x30, 0x00},
+		},
+		{
+			name: "RelativeName",
+			idp: IssuingDistributionPoint{DistributionPoint: DistributionPointName{
+				RelativeName: pkix.RelativeDistinguishedNameSET{{Type: asn1.ObjectIdentifier{2, 5, 4, 3}, Value: "crl"}},
+			}},
+			want: tlv(0x30, relativeNameDP()),
 		},
 		{
 			name: "AllBooleansTrue",
@@ -124,6 +139,21 @@ func TestParseIssuingDistributionPoint(t *testing.T) {
 		}
 	})
 
+	t.Run("OK/RelativeName", func(t *testing.T) {
+		der := tlv(0x30, relativeNameDP())
+		idp, err := ParseIssuingDistributionPoint(der)
+		if err != nil {
+			t.Fatalf("expected no error. Got %s", err)
+		}
+		got, err := MarshalIssuingDistributionPoint(idp)
+		if err != nil {
+			t.Fatalf("could not marshal: %s", err)
+		}
+		if !bytes.Equal(got, der) {
+			t.Fatalf("expected % x. Got % x", der, got)
+		}
+	})
+
 	for _, tc := range []struct {
 		name string
 		der  []byte
@@ -164,6 +194,12 @@ func TestAllReasonsDistributionPoints(t *testing.T) {
 		{
 			name: "OK/SkipsDistributionPointWithReasons",
 			cert: certWithCDP(tlv(0x30, tlv(0x30, fullNameDP("http://a/crl"), keyCompromiseOnly), tlv(0x30, fullNameDP("http://b/crl")))),
+			want: []string{"http://b/crl"},
+		},
+		{
+			// A distribution point named relative to the CRL issuer has no URI to fetch.
+			name: "OK/SkipsRelativeName",
+			cert: certWithCDP(tlv(0x30, tlv(0x30, relativeNameDP()), tlv(0x30, fullNameDP("http://b/crl")))),
 			want: []string{"http://b/crl"},
 		},
 		{

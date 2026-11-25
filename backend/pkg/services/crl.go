@@ -322,7 +322,9 @@ func (svc CRLServiceBackend) calculateCRL(ctx context.Context, settings *models.
 		return nil, err
 	}
 
-	extensions = append(extensions, *idp)
+	if idp != nil {
+		extensions = append(extensions, *idp)
+	}
 
 	lFunc.Debugf("creating revocation list. CA %s", caID)
 	now := time.Now()
@@ -600,8 +602,13 @@ func caLatestNotAfter(ca *models.CACertificate) time.Time {
 
 // getDistributionPointExtension builds the IDP of the CRL of a CA: the URLs of every certificate it covers. For
 // migrated settings those are the new one and the old one (/crl/<ski>) of each VA domain, since RFC 5280 6.3.3 requires
-// the IDP to match the CDP of the certificate.
+// the IDP to match the CDP of the certificate. Without VA domains it returns nil: fullName must hold at least one name
+// (RFC 5280 4.2.1.13), and a CRL without an IDP covers every certificate of its CA.
 func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySKI *string) (*pkix.Extension, error) {
+	if len(svc.vaDomains) == 0 {
+		return nil, nil
+	}
+
 	idpNames := []asn1.RawValue{}
 	for _, name := range svc.vaDomains {
 		ids := []string{caID}

@@ -187,9 +187,20 @@ func TestCheckDelegatedResponder(t *testing.T) {
 			wantErr: "embeds no responder certificate",
 		},
 		{
-			// ocsp.ParseResponse checks the signature against the embedded certificate, but a caller could hand over a
-			// response it built or altered itself.
-			name: "Err/AlteredAfterParsing",
+			// Replacing the embedded certificate by the issuer's would skip the delegation checks: the signature binds the
+			// embedded certificate to the signed bytes.
+			name: "Err/EmbeddedCertificateReplacedByIssuer",
+			resp: func(t *testing.T) *ocsp.Response {
+				resp := delegated(t, ca, x509.ExtKeyUsageOCSPSigning)
+				resp.Certificate = ca.cert
+				return resp
+			},
+			issuer:  ca.cert,
+			now:     now,
+			wantErr: "bad OCSP signature",
+		},
+		{
+			name: "Err/TBSResponseDataAltered",
 			resp: func(t *testing.T) *ocsp.Response {
 				resp := delegated(t, ca, x509.ExtKeyUsageOCSPSigning)
 				resp.TBSResponseData = slices.Clone(resp.TBSResponseData)
