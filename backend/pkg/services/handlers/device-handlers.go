@@ -32,16 +32,6 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		return err
 	}
 
-	deviceID := cert.Updated.Certificate.Subject.CommonName
-	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
-		ID: deviceID,
-	})
-	if err != nil {
-		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
-		lMessaging.Error(err)
-		return err
-	}
-
 	var attachedBy models.CAAttachedToDevice
 	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
@@ -53,6 +43,19 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 	if !hasKey {
 		lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.DMSAttachedToDeviceKey)
 		return nil
+	}
+
+	deviceID := attachedBy.DeviceID
+	if deviceID == "" {
+		deviceID = cert.Updated.Certificate.Subject.CommonName
+	}
+	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+		ID: deviceID,
+	})
+	if err != nil {
+		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
+		lMessaging.Error(err)
+		return err
 	}
 
 	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
@@ -100,7 +103,17 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return err
 	}
 
-	deviceID := certUpdate.Updated.Subject.CommonName
+	// The device the DMS bound the certificate to. Bindings that recorded none fall back to the CommonName.
+	var attachedBy models.CAAttachedToDevice
+	if _, err := helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy); err != nil {
+		err = fmt.Errorf("could not decode metadata with key %s: %s", models.DMSAttachedToDeviceKey, err)
+		lMessaging.Error(err)
+		return err
+	}
+	deviceID := attachedBy.DeviceID
+	if deviceID == "" {
+		deviceID = certUpdate.Updated.Subject.CommonName
+	}
 	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: deviceID,
 	})

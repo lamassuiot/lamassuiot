@@ -429,9 +429,10 @@ func (svc *AWSCloudConnectorServiceBackend) UpdateCertificateStatus(ctx context.
 
 		defer func() {
 			lFunc.Infof("connecting to IoTCore to force device %s disconnection after cert status update %s", input.Certificate.SerialNumber, status)
-			err = svc.connectThingOverMqttWss(ctx, input.Certificate.Certificate.Subject.CommonName)
+			thingID := boundDeviceID(input.Certificate)
+			err = svc.connectThingOverMqttWss(ctx, thingID)
 			if err != nil {
-				lFunc.Errorf("could not disconnect device %s over MQTT-WSS: %s", input.Certificate.Certificate.Subject.CommonName, err)
+				lFunc.Errorf("could not disconnect device %s over MQTT-WSS: %s", thingID, err)
 			}
 		}()
 
