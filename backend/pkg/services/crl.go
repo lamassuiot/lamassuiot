@@ -21,6 +21,7 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/software"
 	"github.com/sirupsen/logrus"
@@ -321,7 +322,9 @@ func (svc CRLServiceBackend) calculateCRL(ctx context.Context, settings *models.
 		return nil, err
 	}
 
-	extensions = append(extensions, *idp)
+	if idp != nil {
+		extensions = append(extensions, *idp)
+	}
 
 	lFunc.Debugf("creating revocation list. CA %s", caID)
 	now := time.Now()
@@ -599,21 +602,11 @@ func caLatestNotAfter(ca *models.CACertificate) time.Time {
 
 // getDistributionPointExtension builds the IDP of the CRL of a CA: the URLs of every certificate it covers. For
 // migrated settings those are the new one and the old one (/crl/<ski>) of each VA domain, since RFC 5280 6.3.3 requires
-// the IDP to match the CDP of the certificate.
+// the IDP to match the CDP of the certificate. Without VA domains it returns nil: fullName must hold at least one name
+// (RFC 5280 4.2.1.13), and a CRL without an IDP covers every certificate of its CA.
 func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySKI *string) (*pkix.Extension, error) {
-	type DistributionPointName struct { // CHOICE
-		FullName     []asn1.RawValue  `asn1:"optional,tag:0"`
-		RelativeName pkix.RDNSequence `asn1:"optional,tag:1"`
-	}
-
-	// RFC 5280. Section 5.2.5,
-	type IssuingDistributionPoint struct {
-		DistributionPoint          DistributionPointName `asn1:"tag:0,optional"`
-		OnlyContainsUserCerts      bool                  `asn1:"tag:1"`
-		OnlyContainsCACerts        bool                  `asn1:"tag:2"`
-		OnlySomeReasons            asn1.BitString        `asn1:"tag:3,optional"`
-		IndirectCRL                bool                  `asn1:"tag:4"`
-		OnlyContainsAttributeCerts bool                  `asn1:"tag:5"`
+	if len(svc.vaDomains) == 0 {
+		return nil, nil
 	}
 
 	idpNames := []asn1.RawValue{}
@@ -623,13 +616,12 @@ func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySK
 			ids = append(ids, *legacySKI)
 		}
 		for _, id := range ids {
-			idpNames = append(idpNames, asn1.RawValue{Tag: 6, Class: 2, Bytes: []byte(fmt.Sprintf("http://%s/crl/%s", name, url.PathEscape(id)))})
+			idpNames = append(idpNames, revocation.URIGeneralName(fmt.Sprintf("http://%s/crl/%s", name, url.PathEscape(id))))
 		}
 	}
 
-	// Add Issuing Distribution Point
-	idp, err := asn1.Marshal(IssuingDistributionPoint{
-		DistributionPoint: DistributionPointName{
+	idp, err := revocation.MarshalIssuingDistributionPoint(revocation.IssuingDistributionPoint{
+		DistributionPoint: revocation.DistributionPointName{
 			FullName: idpNames,
 		},
 	})
@@ -638,7 +630,7 @@ func (svc CRLServiceBackend) getDistributionPointExtension(caID string, legacySK
 	}
 
 	return &pkix.Extension{
-		Id:       []int{2, 5, 29, 28},
+		Id:       revocation.OIDExtensionIssuingDistributionPoint,
 		Critical: true,
 		Value:    idp,
 	}, nil

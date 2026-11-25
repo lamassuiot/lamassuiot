@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/revocation"
 	external_clients "github.com/lamassuiot/lamassuiot/v4/sdk/external"
 	"golang.org/x/sync/singleflight"
 )
@@ -80,7 +81,7 @@ func (c *crlCache) get(url string, issuer *x509.Certificate) (crl *x509.Revocati
 			now := time.Now()
 			ttl := crlCacheTTL(crl, now, c.maxTTL)
 			if ttl > 0 && crlCost(url, crl) <= c.maxBytes &&
-				checkRevocationFreshness(crl.ThisUpdate, crl.NextUpdate, now) == nil &&
+				revocation.CheckFreshness(crl.ThisUpdate, crl.NextUpdate, now) == nil &&
 				crl.CheckSignatureFrom(issuer) == nil {
 				c.cache.DeleteExpired()
 				c.cache.Set(url, crl, ttl)
@@ -100,11 +101,11 @@ func (c *crlCache) get(url string, issuer *x509.Certificate) (crl *x509.Revocati
 }
 
 // crlCacheTTL returns how long crl may be cached at now: up to maxTTL and never past its nextUpdate, or, when it has
-// none, past thisUpdate plus revocationMaxAgeWithoutNextUpdate. A non-positive result means it must not be cached.
+// none, past thisUpdate plus revocation.MaxAgeWithoutNextUpdate. A non-positive result means it must not be cached.
 func crlCacheTTL(crl *x509.RevocationList, now time.Time, maxTTL time.Duration) time.Duration {
 	expiry := crl.NextUpdate
 	if expiry.IsZero() {
-		expiry = crl.ThisUpdate.Add(revocationMaxAgeWithoutNextUpdate)
+		expiry = crl.ThisUpdate.Add(revocation.MaxAgeWithoutNextUpdate)
 	}
 	return min(maxTTL, expiry.Sub(now))
 }
