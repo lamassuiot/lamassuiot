@@ -18,6 +18,7 @@ import (
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // A key is stored with an id the database assigns and the digest of its public key, and found by either.
@@ -114,6 +115,18 @@ func TestKMSStoreKeyIdentity(t *testing.T) {
 		require.True(t, exists)
 		assert.Equal(t, "renamed", key.Name)
 		assert.Equal(t, digest, key.Digest)
+	})
+
+	t.Run("an update of a key that is not stored reports it missing and stores nothing", func(t *testing.T) {
+		otherPublicKey, _ := realPublicKey(t)
+		missing := newKey("never-stored", "engine-1")
+		missing.PublicKey = otherPublicKey
+		_, err := store.Update(ctx, missing)
+		require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+
+		keys, err := store.SelectByKeyID(ctx, "never-stored")
+		require.NoError(t, err)
+		assert.Empty(t, keys)
 	})
 }
 

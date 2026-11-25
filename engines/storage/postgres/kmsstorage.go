@@ -157,10 +157,13 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
-		// the id and the digest are fixed when the key is stored: the digest is that of its public key
-		Omit("id", "digest").
-		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
+	// An UPDATE rather than Save, which inserts the key when no row matches (one deleted or renamed meanwhile). Every
+	// column is written, zero values included, except the id and the digest, fixed when the key is stored, and the
+	// key_id and engine_id that name the row.
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).
+		Select("*").Omit("id", "digest", "key_id", "engine_id").
+		Updates(kmsKey)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
