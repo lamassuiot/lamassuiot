@@ -62,12 +62,23 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		return nil, fmt.Errorf("could not create dms storage instance: %s", err)
 	}
 
+	crlCacheMaxBytes, err := conf.CRLCache.MaxBytes()
+	if err != nil {
+		return nil, fmt.Errorf("invalid DMS config: %w", err)
+	}
+	crlCacheMaxTTL, err := conf.CRLCache.ValidatedMaxTTL()
+	if err != nil {
+		return nil, fmt.Errorf("invalid DMS config: %w", err)
+	}
+
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
 		DMSStorage:            devStorage,
 		CAClient:              caService,
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
+		CRLCacheMaxBytes:      crlCacheMaxBytes,
+		CRLCacheMaxTTL:        crlCacheMaxTTL,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)

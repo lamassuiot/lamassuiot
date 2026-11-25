@@ -210,6 +210,7 @@ func newRevocationTestService(stored *models.Certificate, lookupErr error) DMSMa
 	return DMSManagerServiceBackend{
 		caClient: caMock,
 		logger:   logrus.NewEntry(logrus.New()),
+		crlCache: newCRLCache(0, 0),
 	}
 }
 
@@ -677,6 +678,24 @@ func TestVerifyCertificateNotRevoked(t *testing.T) {
 	}
 }
 
+// TestCheckCertificateRevocationReusesCachedCRL checks that consecutive revocation checks of certificates not managed
+// by Lamassu download their CRL once.
+func TestCheckCertificateRevocationReusesCachedCRL(t *testing.T) {
+	ca := newRevocationTestCA(t, "cached-crl-ca")
+	srv, requests := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)))
+	leaf := ca.issueLeaf(t, 500, nil, []string{srv.URL})
+	svc := notInLamassu()
+
+	for i := range 2 {
+		if err := svc.verifyCertificateNotRevoked(context.Background(), logrus.NewEntry(logrus.New()), leaf, ca.cert, false, "enrollment"); err != nil {
+			t.Fatalf("check %d: expected no error. Got %s", i+1, err)
+		}
+	}
+	if n := requests.Load(); n != 1 {
+		t.Fatalf("expected 1 CRL download. Got %d", n)
+	}
+}
+
 func TestCheckRevocationFreshness(t *testing.T) {
 	now := time.Now()
 	tests := []struct {
@@ -869,7 +888,7 @@ func TestEnrollmentChainRevocation(t *testing.T) {
 				ID:          "root-ca",
 				Certificate: models.Certificate{Status: rootStatus, Certificate: (*models.X509Certificate)(root.cert)},
 			}, nil)
-			svc := DMSManagerServiceBackend{caClient: caMock, logger: logrus.NewEntry(logrus.New())}
+			svc := DMSManagerServiceBackend{caClient: caMock, logger: logrus.NewEntry(logrus.New()), crlCache: newCRLCache(0, 0)}
 
 			opts := models.EnrollmentOptionsESTRFC7030{
 				AuthOptionsMTLS: models.AuthOptionsClientCertificate{
