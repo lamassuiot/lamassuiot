@@ -118,3 +118,60 @@ func TestValidateCertificates_FutureDated(t *testing.T) {
 	err = ValidateCertificate(ca, futureCert, true)
 	assert.Error(t, err, "future-dated certificate must be rejected when considerExpiration=true")
 }
+
+type testCA struct {
+	cert *x509.Certificate
+	key  *ecdsa.PrivateKey
+}
+
+func issueTestCert(t *testing.T, cn string, isCA bool, parent *testCA) *testCA {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("could not generate key: %s", err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(time.Now().UnixNano()),
+		Subject:               pkix.Name{CommonName: cn},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		BasicConstraintsValid: true,
+		IsCA:                  isCA,
+	}
+	if isCA {
+		tmpl.KeyUsage = x509.KeyUsageCertSign
+		tmpl.SubjectKeyId = []byte(cn)
+	}
+	signerCert, signerKey := tmpl, key
+	if parent != nil {
+		signerCert, signerKey = parent.cert, parent.key
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, signerCert, &key.PublicKey, signerKey)
+	if err != nil {
+		t.Fatalf("could not create certificate %s: %s", cn, err)
+	}
+	cert, _ := x509.ParseCertificate(der)
+	return &testCA{cert: cert, key: key}
+}
+
+func TestValidateCertificatesReturnsVerifiedChain(t *testing.T) {
+	root := issueTestCert(t, "root", true, nil)
+	intermediate := issueTestCert(t, "intermediate", true, root)
+	unrelated := issueTestCert(t, "unrelated", true, nil)
+	leaf := issueTestCert(t, "leaf", false, intermediate)
+
+	chain, err := ValidateCertificates(root.cert, []*x509.Certificate{leaf.cert, unrelated.cert, intermediate.cert}, true)
+	if err != nil {
+		t.Fatalf("expected no error. Got %s", err)
+	}
+
+	expected := []*x509.Certificate{leaf.cert, intermediate.cert, root.cert}
+	if len(chain) != len(expected) {
+		t.Fatalf("expected chain of %d certificates. Got %d", len(expected), len(chain))
+	}
+	for i := range expected {
+		if !chain[i].Equal(expected[i]) {
+			t.Fatalf("chain[%d]: expected %s. Got %s", i, expected[i].Subject.CommonName, chain[i].Subject.CommonName)
+		}
+	}
+}
