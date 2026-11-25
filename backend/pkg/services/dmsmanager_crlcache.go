@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	// crlCacheMaxTTL bounds how long a downloaded CRL is reused, so a newly published CRL is seen within that time.
-	crlCacheMaxTTL = time.Hour
+	// defaultCRLCacheMaxTTL bounds how long a downloaded CRL is reused when no maximum is configured, so a newly
+	// published CRL is seen within that time.
+	defaultCRLCacheMaxTTL = time.Hour
 	// defaultCRLCacheMaxBytes is the memory budget of the CRL cache when none is configured.
 	defaultCRLCacheMaxBytes = uint64(1024 << 20)
 	// crlEntryMemoryEstimate is the heap a parsed CRL holds per revoked entry on top of its DER encoding. Measured at
@@ -25,7 +26,7 @@ const (
 )
 
 // crlCache keeps the CRLs downloaded for client certificate revocation checks, keyed by distribution point URL.
-// An entry expires after crlCacheMaxTTL or at the CRL's nextUpdate, whichever comes first, and reading it does not
+// An entry expires after maxTTL or at the CRL's nextUpdate, whichever comes first, and reading it does not
 // extend its expiry. Concurrent misses for the same URL share a single download. Cached CRLs are shared between
 // goroutines and must not be modified.
 type crlCache struct {
@@ -35,11 +36,14 @@ type crlCache struct {
 	maxBytes uint64
 }
 
-// newCRLCache returns a cache holding at most maxBytes of estimated CRL memory, or defaultCRLCacheMaxBytes when
-// maxBytes is 0.
-func newCRLCache(maxBytes uint64) *crlCache {
+// newCRLCache returns a cache holding at most maxBytes of estimated CRL memory and keeping each CRL for at most
+// maxTTL. A zero value uses defaultCRLCacheMaxBytes or defaultCRLCacheMaxTTL.
+func newCRLCache(maxBytes uint64, maxTTL time.Duration) *crlCache {
 	if maxBytes == 0 {
 		maxBytes = defaultCRLCacheMaxBytes
+	}
+	if maxTTL == 0 {
+		maxTTL = defaultCRLCacheMaxTTL
 	}
 
 	return &crlCache{
@@ -49,7 +53,7 @@ func newCRLCache(maxBytes uint64) *crlCache {
 				return crlCost(item.Key, item.Value)
 			}),
 		),
-		maxTTL:   crlCacheMaxTTL,
+		maxTTL:   maxTTL,
 		maxBytes: maxBytes,
 	}
 }

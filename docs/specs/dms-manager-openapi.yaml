@@ -730,8 +730,9 @@ components:
             the validation CA is checked; on re-enrollment, that of the client certificate. When false (default),
             such certificates are rejected. Certificates whose OCSP/CRL endpoints are unreachable, return invalid
             or stale responses, or report an unknown status are always rejected, and so is a validation CA that
-            is revoked in Lamassu. CRLs downloaded for these checks are cached in memory for up to one hour, and
-            never past their nextUpdate, so a certificate revoked after its CRL was cached may still be accepted
+            is revoked in Lamassu. CRLs downloaded for these checks are cached in memory for up to the maximum set
+            by crl_cache.max_ttl in the DMS Manager service configuration (one hour by default), and never past
+            their nextUpdate, so a certificate revoked after its CRL was cached may still be accepted
             until that CRL expires from the cache, and a certificate released from hold may still be rejected for
             the same time. Certificates managed by Lamassu are not affected: their stored status is used.
 

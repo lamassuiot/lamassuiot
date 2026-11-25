@@ -66,6 +66,10 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 	if err != nil {
 		return nil, fmt.Errorf("invalid DMS config: %w", err)
 	}
+	crlCacheMaxTTL, err := conf.CRLCache.ValidatedMaxTTL()
+	if err != nil {
+		return nil, fmt.Errorf("invalid DMS config: %w", err)
+	}
 
 	svc := lservices.NewDMSManagerService(lservices.DMSManagerBuilder{
 		Logger:                lSvc,
@@ -74,6 +78,7 @@ func AssembleDMSManagerService(conf config.DMSconfig, caService services.CAServi
 		DevManagerCli:         deviceService,
 		DownstreamCertificate: downCert,
 		CRLCacheMaxBytes:      crlCacheMaxBytes,
+		CRLCacheMaxTTL:        crlCacheMaxTTL,
 	})
 
 	dmsSvc := svc.(*lservices.DMSManagerServiceBackend)

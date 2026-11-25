@@ -102,7 +102,7 @@ func TestCRLCost(t *testing.T) {
 func TestCRLCacheBudgetCountsFixedOverhead(t *testing.T) {
 	ca := newRevocationTestCA(t, "overhead-ca")
 	der := crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)
-	c := newCRLCache(5000) // room for two empty CRLs, not three
+	c := newCRLCache(5000, 0) // room for two empty CRLs, not three
 
 	for i := range 3 {
 		srv, _ := countingServer(t, staticBody(der))
@@ -118,7 +118,7 @@ func TestCRLCacheBudgetCountsFixedOverhead(t *testing.T) {
 func TestCRLCacheHitWithinTTL(t *testing.T) {
 	ca := newRevocationTestCA(t, "hit-ca")
 	srv, requests := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)))
-	c := newCRLCache(0)
+	c := newCRLCache(0, 0)
 
 	first, hit, err := c.get(srv.URL, ca.cert)
 	if err != nil || hit {
@@ -139,8 +139,7 @@ func TestCRLCacheHitWithinTTL(t *testing.T) {
 func TestCRLCacheRefetchAfterTTL(t *testing.T) {
 	ca := newRevocationTestCA(t, "refetch-ca")
 	srv, requests := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)))
-	c := newCRLCache(0)
-	c.maxTTL = 50 * time.Millisecond
+	c := newCRLCache(0, 50*time.Millisecond)
 
 	if _, _, err := c.get(srv.URL, ca.cert); err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -158,7 +157,7 @@ func TestCRLCacheRefetchAfterTTL(t *testing.T) {
 func TestCRLCacheTTLCappedByNextUpdate(t *testing.T) {
 	ca := newRevocationTestCA(t, "nextupdate-ca")
 	srv, _ := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(10*time.Minute), 0)))
-	c := newCRLCache(0)
+	c := newCRLCache(0, 0)
 
 	crl, _, err := c.get(srv.URL, ca.cert)
 	if err != nil {
@@ -173,10 +172,43 @@ func TestCRLCacheTTLCappedByNextUpdate(t *testing.T) {
 	}
 }
 
+// TestCRLCacheUsesConfiguredMaxTTL checks that entries expire after the configured maximum TTL, 1 hour when unset,
+// unless the CRL's nextUpdate comes first.
+func TestCRLCacheUsesConfiguredMaxTTL(t *testing.T) {
+	ca := newRevocationTestCA(t, "maxttl-ca")
+	tests := []struct {
+		name       string
+		maxTTL     time.Duration
+		nextUpdate time.Duration
+		want       time.Duration
+	}{
+		{name: "Configured", maxTTL: 10 * time.Minute, nextUpdate: time.Hour, want: 10 * time.Minute},
+		{name: "DefaultWhenUnset", maxTTL: 0, nextUpdate: 3 * time.Hour, want: time.Hour},
+		{name: "NextUpdateFirst", maxTTL: 2 * time.Hour, nextUpdate: 30 * time.Minute, want: 30 * time.Minute},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(tc.nextUpdate), 0)))
+			c := newCRLCache(0, tc.maxTTL)
+
+			if _, _, err := c.get(srv.URL, ca.cert); err != nil {
+				t.Fatalf("unexpected error: %s", err)
+			}
+			item := c.cache.Get(srv.URL)
+			if item == nil {
+				t.Fatalf("expected the CRL to be cached")
+			}
+			if diff := time.Until(item.ExpiresAt()) - tc.want; diff > 2*time.Second || diff < -2*time.Second {
+				t.Fatalf("expected the entry to expire in %s. Expires in %s", tc.want, time.Until(item.ExpiresAt()))
+			}
+		})
+	}
+}
+
 func TestCRLCacheHitDoesNotExtendExpiry(t *testing.T) {
 	ca := newRevocationTestCA(t, "touch-ca")
 	srv, _ := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)))
-	c := newCRLCache(0)
+	c := newCRLCache(0, 0)
 
 	if _, _, err := c.get(srv.URL, ca.cert); err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -212,7 +244,7 @@ func TestCRLCacheDoesNotCache(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			srv, requests := countingServer(t, tc.body)
-			c := newCRLCache(tc.maxBytes)
+			c := newCRLCache(tc.maxBytes, 0)
 
 			for i := range 2 {
 				crl, hit, err := c.get(srv.URL, ca.cert)
@@ -242,7 +274,7 @@ func TestCRLCacheOversizedDoesNotEvictOthers(t *testing.T) {
 	now := time.Now()
 	small, _ := countingServer(t, staticBody(crlDER(t, ca, now.Add(-time.Minute), now.Add(time.Hour), 0)))
 	large, _ := countingServer(t, staticBody(crlDER(t, ca, now.Add(-time.Minute), now.Add(time.Hour), 20)))
-	c := newCRLCache(4096)
+	c := newCRLCache(4096, 0)
 
 	if _, _, err := c.get(small.URL, ca.cert); err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -262,7 +294,7 @@ func TestCRLCacheVerifiesSignatureOnHit(t *testing.T) {
 	ca := newRevocationTestCA(t, "sig-ca")
 	otherCA := newRevocationTestCA(t, "sig-other-ca")
 	srv, requests := countingServer(t, staticBody(crlDER(t, ca, time.Now().Add(-time.Minute), time.Now().Add(time.Hour), 0)))
-	c := newCRLCache(0)
+	c := newCRLCache(0, 0)
 
 	if _, _, err := c.get(srv.URL, ca.cert); err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -297,7 +329,7 @@ func TestCRLCacheSingleDownloadUnderConcurrency(t *testing.T) {
 				<-release
 				return tc.body
 			})
-			c := newCRLCache(0)
+			c := newCRLCache(0, 0)
 
 			const callers = 20
 			errs := make([]error, callers)

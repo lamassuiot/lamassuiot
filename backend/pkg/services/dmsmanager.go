@@ -55,6 +55,9 @@ type DMSManagerBuilder struct {
 	// CRLCacheMaxBytes bounds the estimated memory of the CRLs cached for client certificate revocation checks.
 	// 0 uses the default of 1024 MB.
 	CRLCacheMaxBytes uint64
+	// CRLCacheMaxTTL bounds how long a downloaded CRL is reused; a CRL is never kept past its nextUpdate. 0 uses the
+	// default of 1 hour.
+	CRLCacheMaxTTL time.Duration
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -64,7 +67,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		deviceManagerCli: builder.DevManagerCli,
 		downstreamCert:   builder.DownstreamCertificate,
 		logger:           builder.Logger,
-		crlCache:         newCRLCache(builder.CRLCacheMaxBytes),
+		crlCache:         newCRLCache(builder.CRLCacheMaxBytes, builder.CRLCacheMaxTTL),
 	}
 
 	svc.service = svc

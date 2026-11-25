@@ -210,7 +210,7 @@ func newRevocationTestService(stored *models.Certificate, lookupErr error) DMSMa
 	return DMSManagerServiceBackend{
 		caClient: caMock,
 		logger:   logrus.NewEntry(logrus.New()),
-		crlCache: newCRLCache(0),
+		crlCache: newCRLCache(0, 0),
 	}
 }
 
@@ -888,7 +888,7 @@ func TestEnrollmentChainRevocation(t *testing.T) {
 				ID:          "root-ca",
 				Certificate: models.Certificate{Status: rootStatus, Certificate: (*models.X509Certificate)(root.cert)},
 			}, nil)
-			svc := DMSManagerServiceBackend{caClient: caMock, logger: logrus.NewEntry(logrus.New()), crlCache: newCRLCache(0)}
+			svc := DMSManagerServiceBackend{caClient: caMock, logger: logrus.NewEntry(logrus.New()), crlCache: newCRLCache(0, 0)}
 
 			opts := models.EnrollmentOptionsESTRFC7030{
 				AuthOptionsMTLS: models.AuthOptionsClientCertificate{
