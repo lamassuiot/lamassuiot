@@ -82,7 +82,9 @@ type AuthOptionsClientCertificate struct {
 	AllowExpired         bool     `json:"allow_expired"` // switch-like option that allows the use of expired certificates
 	// switch-like option that accepts certificates of the presented chain (the client certificate and, on
 	// enrollment, its intermediate CAs) whose revocation status cannot be checked because they are not managed by
-	// Lamassu and carry no OCSP/CRL endpoint. Unreachable or invalid endpoints are always rejected.
+	// Lamassu and carry no OCSP/CRL endpoint. Unreachable or invalid endpoints are always rejected. Downloaded CRLs
+	// are cached for up to one hour (never past their nextUpdate), so a revocation, or a release from hold, can take up
+	// to that long to be seen.
 	AllowUnverifiableRevocation bool `json:"allow_unverifiable_revocation"`
 }
 

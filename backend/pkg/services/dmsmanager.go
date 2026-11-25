@@ -43,6 +43,7 @@ type DMSManagerServiceBackend struct {
 	deviceManagerCli services.DeviceManagerService
 	caClient         services.CAService
 	logger           *logrus.Entry
+	crlCache         *crlCache
 }
 
 type DMSManagerBuilder struct {
@@ -51,6 +52,9 @@ type DMSManagerBuilder struct {
 	CAClient              services.CAService
 	DMSStorage            storage.DMSRepo
 	DownstreamCertificate *x509.Certificate
+	// CRLCacheMaxBytes bounds the estimated memory of the CRLs cached for client certificate revocation checks.
+	// 0 uses the default of 1024 MB.
+	CRLCacheMaxBytes uint64
 }
 
 func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService {
@@ -60,6 +64,7 @@ func NewDMSManagerService(builder DMSManagerBuilder) services.DMSManagerService 
 		deviceManagerCli: builder.DevManagerCli,
 		downstreamCert:   builder.DownstreamCertificate,
 		logger:           builder.Logger,
+		crlCache:         newCRLCache(builder.CRLCacheMaxBytes),
 	}
 
 	svc.service = svc
@@ -1426,11 +1431,12 @@ func (svc DMSManagerServiceBackend) checkCertificateRevocation(ctx context.Conte
 
 	crlChecked := false
 	for _, crlDP := range cert.CRLDistributionPoints {
-		crl, err := external_clients.GetCRLResponse(crlDP, issuer, nil, true)
+		crl, cached, err := svc.crlCache.get(crlDP, issuer)
 		if err != nil {
 			lFunc.Warnf("could not get or validate crl from %s for certificate %s: %s. Checking with next revocation source", crlDP, clientSN, err)
 			continue
 		}
+		lFunc.Debugf("crl from %s (cached: %t) thisUpdate=%s nextUpdate=%s", crlDP, cached, crl.ThisUpdate.UTC().Format(time.RFC3339), crl.NextUpdate.UTC().Format(time.RFC3339))
 
 		idxClientCrt := slices.IndexFunc(crl.RevokedCertificateEntries, func(entry x509.RevocationListEntry) bool {
 			return entry.SerialNumber != nil && entry.SerialNumber.Cmp(cert.SerialNumber) == 0
