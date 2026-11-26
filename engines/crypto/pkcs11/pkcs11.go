@@ -38,11 +38,76 @@ type pkcs11EngineContext struct {
 	logger           *logrus.Entry
 }
 
+func resolvePKCS11PIN(conf config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]) (string, error) {
+    if conf.Config.PinEnv != "" && conf.Config.TokenPin != "" {
+        return "", fmt.Errorf(
+            "PKCS#11 engine %q: configure either pin or pin_env, not both",
+            conf.ID,
+        )
+    }
+
+    pin := string(conf.Config.TokenPin)
+
+    if conf.Config.PinEnv != "" {
+        envPin, ok := os.LookupEnv(conf.Config.PinEnv)
+        if !ok || envPin == "" {
+            return "", fmt.Errorf(
+                "PKCS#11 engine %q: PIN environment variable %q is not set or is empty",
+                conf.ID,
+                conf.Config.PinEnv,
+            )
+        }
+
+        pin = envPin
+    }
+
+    if pin == "" {
+        return "", fmt.Errorf(
+            "PKCS#11 engine %q: neither pin nor pin_env provides a PIN",
+            conf.ID,
+        )
+    }
+
+    return pin, nil
+}
+
 func NewPKCS11Engine(logger *logrus.Entry, conf config.CryptoEngineConfigAdapter[pconfig.PKCS11Config]) (cryptoengines.CryptoEngine, error) {
 	lPkcs11 := logger.WithField("subsystem-provider", "PKCS11")
+	
+	pin, err := resolvePKCS11PIN(conf)
+	if err != nil {
+		return nil, err
+	}
+
+	config := &crypto11.Config{
+        Path:       conf.Config.ModulePath,
+        Pin:        pin,
+        TokenLabel: conf.Config.TokenLabel,
+    }
+
+	if conf.Config.PinEnv != "" {
+		envPin, ok := os.LookupEnv(conf.Config.PinEnv)
+		if !ok || envPin == "" {
+			return nil, fmt.Errorf(
+				"PKCS#11 engine %q: PIN environment variable %q is not set or is empty",
+				conf.ID,
+				conf.Config.PinEnv,
+			)
+		}
+
+		pin = envPin
+	}
+
+	if pin == "" {
+		return nil, fmt.Errorf(
+			"PKCS#11 engine %q: neither pin nor pin_env provides a PIN",
+			conf.ID,
+		)
+	}
+
 	config := &crypto11.Config{
 		Path:       conf.Config.ModulePath,
-		Pin:        string(conf.Config.TokenPin),
+		Pin:        pin,
 		TokenLabel: conf.Config.TokenLabel,
 	}
 
