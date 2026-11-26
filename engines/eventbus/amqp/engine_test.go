@@ -103,7 +103,7 @@ func getQueue(t *testing.T, adminPort int, name string) (int, *queueInfo) {
 	}
 	req.SetBasicAuth("user", "user")
 
-	res, err := http.DefaultClient.Do(req)
+	res, err := mgmtClient.Do(req)
 	if err != nil {
 		t.Fatalf("management API request failed: %s", err)
 	}

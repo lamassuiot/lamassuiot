@@ -60,6 +60,10 @@ func TestHttpServerTimeouts(t *testing.T) {
 		{name: "Configured", cfg: HttpServer{ReadTimeout: 5 * time.Second, WriteTimeout: 45 * time.Second}, wantRead: 5 * time.Second, wantWrite: 45 * time.Second},
 		{name: "NegativeRead", cfg: HttpServer{ReadTimeout: -time.Second}, expectedErr: "server.read_timeout"},
 		{name: "NegativeWrite", cfg: HttpServer{WriteTimeout: -time.Second}, expectedErr: "server.write_timeout"},
+		// A YAML integer without a unit decodes as nanoseconds: 30 meant as 30 s must not start a server with 30 ns.
+		{name: "UnitlessRead", cfg: HttpServer{ReadTimeout: 30}, expectedErr: "server.read_timeout must be 0 (default) or at least 1s"},
+		{name: "UnitlessWrite", cfg: HttpServer{WriteTimeout: 30}, expectedErr: "server.write_timeout must be 0 (default) or at least 1s"},
+		{name: "MinimumAccepted", cfg: HttpServer{ReadTimeout: time.Second, WriteTimeout: time.Second}, wantRead: time.Second, wantWrite: time.Second},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

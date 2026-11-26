@@ -303,7 +303,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
         '503':
-          description: SSE subscriber limit reached. Retry after the number of seconds in the `Retry-After` header.
+          description: |
+            SSE subscriber limit reached. Retry after the number of seconds in the `Retry-After` header.
+            The limit (`sse_max_subscribers`, 1000 by default) is a single pool per Device Manager instance,
+            shared by every device, user and tenant, with no per-user quota: one client holding many streams
+            can make this response appear for everyone else.
           headers:
             Retry-After:
               description: Seconds to wait before opening the stream again
