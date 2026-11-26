@@ -128,7 +128,9 @@ func (cli *deviceManagerClient) UpdateDeviceStatus(ctx context.Context, input se
 func (cli *deviceManagerClient) UpdateDeviceIdentitySlot(ctx context.Context, input services.UpdateDeviceIdentitySlotInput) (*models.Device, error) {
 	response, err := cli.put[*models.Device](ctx, "/v1/devices/"+input.ID+"/idslot", resources.UpdateDeviceIdentitySlotBody{
 		Slot: input.Slot,
-	}, map[int][]error{})
+	}, map[int][]error{
+		422: {errs.ErrDeviceInvalidStatus},
+	})
 	if err != nil {
 		return nil, err
 	}

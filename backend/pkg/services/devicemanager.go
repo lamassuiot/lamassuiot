@@ -510,8 +510,8 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	}
 
 	if device.Status == models.DeviceDecommissioned {
-		lFunc.Warnf("device %s is decommissioned", input.ID)
-		return device, nil
+		lFunc.Errorf("cannot update identity slot of device %s: device is decommissioned", input.ID)
+		return nil, errs.ErrDeviceInvalidStatus
 	}
 
 	newSlot := input.Slot

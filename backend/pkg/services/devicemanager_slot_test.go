@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	coreservices "github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -121,4 +122,19 @@ func TestSyncingTheSlotWithAHeldCertificateKeepsTheHold(t *testing.T) {
 	require.Empty(t, ca.updates)
 	require.Equal(t, models.RevocationReason(ocsp.CertificateHold), ca.cert.RevocationReason)
 	require.Equal(t, "ca-1", ca.cert.Metadata[models.CAMetadataSuspendedByCascadeKey])
+}
+
+// A decommissioned device is retired for good: writing its identity slot must fail instead of reporting a success
+// that stored nothing, so that no caller binds a new certificate to it.
+func TestUpdatingTheSlotOfADecommissionedDeviceIsRejected(t *testing.T) {
+	svc, ca := newSlotFixture(t, models.SlotRevoke)
+	repo := svc.devicesStorage.(*slotDevicesRepo)
+	repo.device.Status = models.DeviceDecommissioned
+
+	dev, err := svc.UpdateDeviceIdentitySlot(context.Background(), coreservices.UpdateDeviceIdentitySlotInput{ID: "dev-1", Slot: revokedSlot()})
+	require.ErrorIs(t, err, errs.ErrDeviceInvalidStatus)
+	require.Nil(t, dev)
+
+	require.Empty(t, ca.updates)
+	require.Equal(t, models.DeviceDecommissioned, repo.device.Status)
 }

@@ -362,6 +362,10 @@ func (r *devManagerHttpRoutes) UpdateDeviceIdentitySlot(ctx *gin.Context) {
 	})
 
 	if err != nil {
+		if err == errs.ErrDeviceInvalidStatus {
+			ctx.JSON(422, gin.H{"err": err.Error()})
+			return
+		}
 		ctx.JSON(500, err)
 		return
 	}

@@ -42,6 +42,12 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		return err
 	}
 
+	// Decommissioning revokes the certificate, and that revocation lands here: a retired device has no slot to sync.
+	if dev.Status == models.DeviceDecommissioned {
+		lMessaging.Debugf("skipping event %s, device %s is decommissioned", event.Type(), deviceID)
+		return nil
+	}
+
 	var attachedBy models.CAAttachedToDevice
 	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
@@ -108,6 +114,11 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
 		lMessaging.Error(err)
 		return err
+	}
+
+	if dev.Status == models.DeviceDecommissioned {
+		lMessaging.Debugf("skipping event %s, device %s is decommissioned", event.Type(), deviceID)
+		return nil
 	}
 
 	if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
