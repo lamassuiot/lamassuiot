@@ -77,10 +77,11 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		dev.IdentitySlot.Status = models.SlotRevoke
 	}
 
-	//This should be the case when the certificate is un-revoked/reinstated (from the OnHold revocation reason)
+	//This should be the case when the certificate is un-revoked/reinstated (from the OnHold revocation reason). Its
+	//expiration deltas stay triggered, and the monitoring never reports them again: restore the status they reached.
 	if cert.Updated.Status == models.StatusActive {
 		updated = true
-		dev.IdentitySlot.Status = models.SlotActive
+		dev.IdentitySlot.Status = slotStatusFromDeltas(cert.Updated, lMessaging)
 	}
 
 	if updated {
@@ -126,63 +127,71 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return nil
 	}
 
-	checkIfTriggered := func(crt models.Certificate, key string) bool {
-		var deltas models.CAMetadataMonitoringExpirationDeltas
-		hasKey, err := helpers.GetMetadataToStruct(crt.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &deltas)
-		if err != nil {
-			lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
-			return false
-		}
-
-		if !hasKey {
-			return false
-		}
-
-		idx := slices.IndexFunc(deltas, func(med models.MonitoringExpirationDelta) bool {
-			if med.Name == key && med.Triggered {
-				return true
-			}
-			return false
-		})
-
-		return idx != -1
+	if dev.IdentitySlot == nil {
+		return nil
 	}
 
-	criticalTriggered := checkIfTriggered(certUpdate.Updated, "Critical")
-	if criticalTriggered {
-		prevCriticalTriggered := checkIfTriggered(certUpdate.Previous, "Critical")
-		if !prevCriticalTriggered {
-			//no update
-			dev.IdentitySlot.Status = models.SlotAboutToExpire
-			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-				ID:   deviceID,
-				Slot: *dev.IdentitySlot,
-			})
-			if err != nil {
-				err = fmt.Errorf("could not update ID slot to critical for device %s: %s", deviceID, err)
-				lMessaging.Error(err)
-				return err
-			}
-		}
+	// Act only when a delta triggers. Several can trigger in the same update (the monitoring skips certificates on hold,
+	// and its period may be longer than the gap between deltas): the slot takes the most severe status they reach.
+	newlyTriggered := func(key string) bool {
+		return deltaTriggered(certUpdate.Updated, key, lMessaging) && !deltaTriggered(certUpdate.Previous, key, lMessaging)
+	}
+	if !newlyTriggered(criticalDelta) && !newlyTriggered(preventiveDelta) {
+		return nil
 	}
 
-	preventiveTriggered := checkIfTriggered(certUpdate.Updated, "Preventive")
-	if preventiveTriggered {
-		prevPreventiveTriggered := checkIfTriggered(certUpdate.Previous, "Preventive")
-		if !prevPreventiveTriggered {
-			//no update
-			dev.IdentitySlot.Status = models.SlotRenewalWindow
-			_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
-				ID:   deviceID,
-				Slot: *dev.IdentitySlot,
-			})
-			if err != nil {
-				err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
-				lMessaging.Error(err)
-				return err
-			}
-		}
+	newStatus := slotStatusFromDeltas(certUpdate.Updated, lMessaging)
+	if dev.IdentitySlot.Status == newStatus {
+		return nil
+	}
+
+	dev.IdentitySlot.Status = newStatus
+	_, err = svc.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
+		ID:   deviceID,
+		Slot: *dev.IdentitySlot,
+	})
+	if err != nil {
+		err = fmt.Errorf("could not update ID slot to %s for device %s: %s", newStatus, deviceID, err)
+		lMessaging.Error(err)
+		return err
 	}
 
 	return nil
+}
+
+// Names of the expiration deltas that the DMS sets on the certificates it binds to devices.
+const (
+	preventiveDelta = "Preventive"
+	criticalDelta   = "Critical"
+)
+
+// deltaTriggered reports whether the expiration delta key of the certificate is triggered.
+func deltaTriggered(crt models.Certificate, key string, lMessaging *logrus.Entry) bool {
+	var deltas models.CAMetadataMonitoringExpirationDeltas
+	hasKey, err := helpers.GetMetadataToStruct(crt.Metadata, models.CAMetadataMonitoringExpirationDeltasKey, &deltas)
+	if err != nil {
+		lMessaging.Errorf("could not decode metadata with key %s: %s", models.CAMetadataMonitoringExpirationDeltasKey, err)
+		return false
+	}
+
+	if !hasKey {
+		return false
+	}
+
+	return slices.ContainsFunc(deltas, func(med models.MonitoringExpirationDelta) bool {
+		return med.Name == key && med.Triggered
+	})
+}
+
+// slotStatusFromDeltas returns the status of the identity slot of an active certificate: the most severe one its
+// triggered expiration deltas reach.
+func slotStatusFromDeltas(crt models.Certificate, lMessaging *logrus.Entry) models.SlotStatus {
+	switch {
+	case deltaTriggered(crt, criticalDelta, lMessaging):
+		return models.SlotAboutToExpire
+	case deltaTriggered(crt, preventiveDelta, lMessaging):
+		return models.SlotRenewalWindow
+	default:
+		return models.SlotActive
+	}
 }
