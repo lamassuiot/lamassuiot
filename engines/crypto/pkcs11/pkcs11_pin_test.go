@@ -1,7 +1,6 @@
 //go:build !windows
 // +build !windows
 
-//
 package pkcs11
 
 import (
@@ -52,8 +51,7 @@ func TestResolvePKCS11PIN(t *testing.T) {
 			wantError: true,
 		},
 		{
-			name: "no PIN configured",
-			// Mantén aquí el resto de la configuración del caso
+			name:      "no PIN configured",
 			wantPin:   "",
 			wantError: false,
 		},
