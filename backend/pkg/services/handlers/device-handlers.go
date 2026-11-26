@@ -61,8 +61,8 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		return nil
 	}
 
-	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
-		//event is not for the active certificate. Skip
+	if dev.IdentitySlot == nil || dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != cert.Updated.SerialNumber {
+		//no identity slot, or the event is not for the active certificate. Skip
 		return nil
 	}
 
@@ -91,7 +91,7 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 			SyncCertificateStatus: true,
 		})
 		if err != nil {
-			err = fmt.Errorf("could not update ID slot to preventive for device %s: %s", deviceID, err)
+			err = fmt.Errorf("could not update ID slot to %s for device %s: %s", dev.IdentitySlot.Status, deviceID, err)
 			lMessaging.Error(err)
 			return err
 		}

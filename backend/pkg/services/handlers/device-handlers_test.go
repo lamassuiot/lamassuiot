@@ -206,12 +206,31 @@ func TestBothDeltasTriggeringAtOnceLeaveTheDeviceExpiringSoon(t *testing.T) {
 	require.NotContains(t, writes, models.SlotRenewalWindow)
 }
 
-// A Preventive delta reported after the Critical one must not bring an expiring device back to the renewal window.
+// A Preventive delta that triggers in the same update as an already triggered Critical one must not bring an expiring
+// device back to the renewal window: the slot keeps its status.
 func TestPreventiveDeltaDoesNotDowngradeAnExpiringDevice(t *testing.T) {
 	svc := activeDeviceMock(models.SlotAboutToExpire)
 	require.NoError(t, updateCertMetaHandler(context.Background(), deltasEvent(t, false, true, true, true), svc, discardLogger()))
 
-	require.NotContains(t, slotWrites(svc), models.SlotRenewalWindow)
+	require.Empty(t, slotWrites(svc))
+}
+
+// A device whose certificate is attached but whose identity slot was never written (the bind failed after patching the
+// certificate metadata) has no slot to sync: the handlers skip it instead of panicking.
+func TestHandlersSkipDevicesWithoutIdentitySlot(t *testing.T) {
+	newSvc := func() *svcmock.MockDeviceManagerService {
+		svc := &svcmock.MockDeviceManagerService{}
+		svc.On("GetDeviceByID", mock.Anything, services.GetDeviceByIDInput{ID: "dev-1"}).Return(&models.Device{ID: "dev-1", Status: models.DeviceNoIdentity}, nil)
+		return svc
+	}
+
+	svc := newSvc()
+	require.NoError(t, updateCertStatusHandler(context.Background(), reactivationEvent(t, false, false), svc, discardLogger()))
+	svc.AssertNotCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, mock.Anything)
+
+	svc = newSvc()
+	require.NoError(t, updateCertMetaHandler(context.Background(), deltasEvent(t, false, false, true, false), svc, discardLogger()))
+	svc.AssertNotCalled(t, "UpdateDeviceIdentitySlot", mock.Anything, mock.Anything)
 }
 
 // The usual path keeps working: each delta moves the device one step when it triggers.
