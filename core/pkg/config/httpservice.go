@@ -52,7 +52,12 @@ func CheckDuration(key string, d time.Duration) error {
 		return fmt.Errorf("%s must not be negative, got %s", key, d)
 	}
 	if d > 0 && d < MinConfigDuration {
-		return fmt.Errorf("%s must be 0 (default) or at least %s, got %s; write it with a unit, such as \"30s\"", key, MinConfigDuration, d)
+		err := fmt.Errorf("%s must be 0 (default) or at least %s, got %s", key, MinConfigDuration, d)
+		// Below a millisecond the value almost certainly came from an integer without a unit.
+		if d < time.Millisecond {
+			err = fmt.Errorf("%w; a number without a unit is read as nanoseconds, write it with a unit such as \"30s\"", err)
+		}
+		return err
 	}
 	return nil
 }

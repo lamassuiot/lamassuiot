@@ -55,6 +55,7 @@ func TestHttpServerTimeouts(t *testing.T) {
 		wantRead    time.Duration
 		wantWrite   time.Duration
 		expectedErr string
+		notInErr    string
 	}{
 		{name: "UnsetUsesDefault", cfg: HttpServer{}, wantRead: DefaultHTTPServerTimeout, wantWrite: DefaultHTTPServerTimeout},
 		{name: "Configured", cfg: HttpServer{ReadTimeout: 5 * time.Second, WriteTimeout: 45 * time.Second}, wantRead: 5 * time.Second, wantWrite: 45 * time.Second},
@@ -62,6 +63,9 @@ func TestHttpServerTimeouts(t *testing.T) {
 		{name: "NegativeWrite", cfg: HttpServer{WriteTimeout: -time.Second}, expectedErr: "server.write_timeout"},
 		// A YAML integer without a unit decodes as nanoseconds: 30 meant as 30 s must not start a server with 30 ns.
 		{name: "UnitlessRead", cfg: HttpServer{ReadTimeout: 30}, expectedErr: "server.read_timeout must be 0 (default) or at least 1s"},
+		{name: "UnitlessHint", cfg: HttpServer{ReadTimeout: 30}, expectedErr: "a number without a unit is read as nanoseconds"},
+		// 500ms already has a unit: the error must name the minimum, not send the operator to add a unit.
+		{name: "SubSecondWithUnit", cfg: HttpServer{ReadTimeout: 500 * time.Millisecond}, expectedErr: "server.read_timeout must be 0 (default) or at least 1s, got 500ms", notInErr: "unit"},
 		{name: "UnitlessWrite", cfg: HttpServer{WriteTimeout: 30}, expectedErr: "server.write_timeout must be 0 (default) or at least 1s"},
 		{name: "MinimumAccepted", cfg: HttpServer{ReadTimeout: time.Second, WriteTimeout: time.Second}, wantRead: time.Second, wantWrite: time.Second},
 	}
@@ -71,6 +75,9 @@ func TestHttpServerTimeouts(t *testing.T) {
 			if tc.expectedErr != "" {
 				if err == nil || !strings.Contains(err.Error(), tc.expectedErr) {
 					t.Fatalf("expected error containing %q. Got %v", tc.expectedErr, err)
+				}
+				if tc.notInErr != "" && strings.Contains(err.Error(), tc.notInErr) {
+					t.Fatalf("expected error without %q. Got %v", tc.notInErr, err)
 				}
 				return
 			}
