@@ -32,9 +32,9 @@ func NewDeviceEventSSEHandler(l *logrus.Entry, hub *controllers.DeviceEventSSEHu
 
 func handleAnyDeviceEventForSSE(ctx context.Context, cloudEvent *event.Event, hub *controllers.DeviceEventSSEHub, l *logrus.Entry) error {
 	// Extract device ID from the cloud event subject
-	// Subjects: "device/{deviceID}" or "device/{deviceID}/event"
+	// Subjects: "device/{deviceID}" or, for device events only, "device/{deviceID}/event"
 	subject := cloudEvent.Subject()
-	deviceID := extractDeviceIDFromSubject(subject)
+	deviceID := extractDeviceIDFromSubject(cloudEvent.Type(), subject)
 	if deviceID == "" {
 		l.Warnf("could not extract device ID from event subject: %s", subject)
 		return nil
@@ -51,21 +51,19 @@ func handleAnyDeviceEventForSSE(ctx context.Context, cloudEvent *event.Event, hu
 	return nil
 }
 
-func extractDeviceIDFromSubject(subject string) string {
+func extractDeviceIDFromSubject(eventType, subject string) string {
 	// Subject formats:
 	//   "device/{deviceID}"        - for device create, update, delete
-	//   "device/{deviceID}/event"  - for device event create
+	//   "device/{deviceID}/event"  - for device event create only
+	// The "/event" marker is stripped only for device event create: a device ID may itself end in "/event".
 	const prefix = "device/"
 	if !strings.HasPrefix(subject, prefix) {
 		return ""
 	}
 
 	rest := subject[len(prefix):]
-	// Strip trailing "/event" if present
-	rest = strings.TrimSuffix(rest, "/event")
-
-	if rest == "" {
-		return ""
+	if eventType == string(models.EventCreateDeviceEventKey) {
+		rest = strings.TrimSuffix(rest, "/event")
 	}
 	return rest
 }

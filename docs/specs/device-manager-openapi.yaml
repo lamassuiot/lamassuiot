@@ -254,6 +254,13 @@ paths:
         and filtering. When the client sends `Accept: text/event-stream`, the server
         switches to a Server-Sent Events stream of new events instead of returning a
         paginated JSON list.
+
+        The stream sends a `: keepalive` comment every 15 seconds while idle. Every 15
+        seconds the server also evaluates the `read` permission on the device again and
+        closes the stream when it is no longer granted or cannot be verified. The server
+        closes the stream after its maximum lifetime (10 minutes by default, plus up to
+        10 % jitter), so clients must reconnect. Events are best-effort: the server does
+        not replay events published while a client was disconnected.
       operationId: getDeviceEvents
       x-authz:
         namespace: pki
@@ -281,12 +288,31 @@ paths:
                 When negotiated via `Accept: text/event-stream`, each SSE event's
                 JSON body is a `DeviceSSEMessage` envelope: an `event_type` string
                 (the CloudEvent type, e.g. `device.status.update`) and a `data`
-                field containing the underlying payload (typically a `DeviceEvent`).
+                field containing that event's JSON payload. `data` is a `DeviceEvent`
+                only for `device.event.create`; other event types carry other shapes
+                (for example an update carries the updated and previous device).
+                Clients should treat each message as a change signal and reload
+                through the REST endpoints instead of depending on the payload.
         '400': { $ref: '#/components/responses/BadRequest' }
         '404': { $ref: '#/components/responses/NotFound' }
         '500': { $ref: '#/components/responses/InternalError' }
         '501':
           description: SSE is disabled by configuration or not supported in this deployment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: |
+            SSE subscriber limit reached. Retry after the number of seconds in the `Retry-After` header.
+            The limit (`sse_max_subscribers`, 1000 by default) is a single pool per Device Manager instance,
+            shared by every device, user and tenant, with no per-user quota: one client holding many streams
+            can make this response appear for everyone else.
+          headers:
+            Retry-After:
+              description: Seconds to wait before opening the stream again
+              schema:
+                type: integer
           content:
             application/json:
               schema:
@@ -1204,15 +1230,16 @@ components:
       description: |
         Envelope streamed over Server-Sent Events for `/devices/{id}/events`.
         `event_type` is the underlying CloudEvent type and `data` is the
-        event-specific payload (currently a `DeviceEvent` for device-event
-        streams, but may evolve to other shapes for other event types).
+        event-specific payload: a `DeviceEvent` only for `device.event.create`,
+        other shapes for other event types. Treat each message as a change
+        signal and reload through the REST endpoints.
       required: [event_type, data]
       properties:
         event_type:
           type: string
           description: CloudEvent type, e.g. `device.status.update`.
         data:
-          description: Event payload. For device-event streams this is a DeviceEvent.
+          description: Event payload. A DeviceEvent for `device.event.create`; other shapes otherwise.
           oneOf:
             - $ref: '#/components/schemas/DeviceEvent'
             - type: object

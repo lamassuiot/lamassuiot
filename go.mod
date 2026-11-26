@@ -44,6 +44,7 @@ require (
 	github.com/mocktools/go-smtp-mock/v2 v2.5.4
 	github.com/ory/dockertest/v4 v4.0.1
 	github.com/pressly/goose/v3 v3.30.1
+	github.com/rabbitmq/amqp091-go v1.16.0
 	github.com/robertkrimen/otto v0.5.1
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sirupsen/logrus v1.10.2
@@ -185,7 +186,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20260916203055-22a1a467d9f0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.64.1 // indirect
-	github.com/rabbitmq/amqp091-go v1.16.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect

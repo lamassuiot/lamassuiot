@@ -136,7 +136,14 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 			// SSE hub: only create when SSE is enabled
 			if conf.SSEEnabled {
 				lSSE := helpers.SetupLogger(conf.SubscriberEventBus.LogLevel, "Device Manager", "SSE Hub")
-				sseHub = controllers.NewDeviceEventSSEHub(lSSE)
+				sseMaxSubscribers, sseMaxStreamDuration, err := conf.ValidatedSSELimits()
+				if err != nil {
+					return nil, nil, err
+				}
+				sseHub = controllers.NewDeviceEventSSEHub(lSSE, controllers.DeviceEventSSEHubOptions{
+					MaxSubscribers:    sseMaxSubscribers,
+					MaxStreamDuration: sseMaxStreamDuration,
+				})
 
 				// SSE needs fan-out across instances: every instance with connected
 				// SSE clients must receive every device.* event. With the underlying
@@ -146,11 +153,13 @@ func AssembleDeviceManagerService(conf config.DeviceManagerConfig, caService ser
 				// Append a per-process UUID so each instance binds its own queue
 				// to the exchange and they all receive the broadcast.
 				//
-				// Caveat: queues are declared durable by the eventbus layer, so
-				// queues from crashed/replaced instances linger until cleaned up
-				// out-of-band (operator tooling or RabbitMQ TTL policies).
+				// On AMQP the queue is auto-delete with a 1 h x-expires: after a crash
+				// the broker drops the dead connection (immediately or after the
+				// heartbeat timeout) and auto-delete removes the queue then; x-expires
+				// covers never-consumed queues and broker restarts. On AWS SQS/SNS
+				// it is still left behind per process.
 				sseServiceID := fmt.Sprintf("%s-sse-%s", serviceID, uuid.NewV7().String())
-				sseSubscriber, err := eventbus.NewEventBusSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
+				sseSubscriber, err := eventbus.NewEventBusEphemeralSubscriber(conf.SubscriberEventBus, sseServiceID, lSSE)
 				if err != nil {
 					lSSE.Errorf("could not generate SSE Event Bus Subscriber: %s", err)
 					return nil, nil, err

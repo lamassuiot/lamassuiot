@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/ThreeDotsLabs/watermill-amqp/v2/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/eventbus"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/engines/eventbus/amqp/config"
+	amqp091 "github.com/rabbitmq/amqp091-go"
 	"github.com/sirupsen/logrus"
 )
 
@@ -98,6 +100,41 @@ func NewAMQPPub(conf config.AMQPConnection, serviceID string, logger *logrus.Ent
 	}
 
 	return publisher, nil
+}
+
+// ephemeralQueueExpiry is how long an unused ephemeral queue survives before the broker drops it.
+const ephemeralQueueExpiry = time.Hour
+
+// NewAMQPEphemeralSub builds a subscriber whose queue is removed by the broker once its consumer is
+// gone, for per-process subscribers (the SSE fan-out) whose serviceID is never reused.
+//
+// The queue is Durable + AutoDelete + x-expires, and deliberately not Exclusive:
+//   - Not Exclusive: after an AMQP reconnection watermill re-declares the same queue name, and an
+//     exclusive queue still held by the old connection (not yet detected as dead by the broker) makes
+//     that declaration fail with RESOURCE_LOCKED.
+//   - Still Durable: a non-durable, non-exclusive queue is the RabbitMQ deprecated feature
+//     transient_nonexcl_queues, and a broker that denies deprecated features would refuse the
+//     declaration, so the Device Manager would not start.
+//   - AutoDelete removes the queue when its last consumer goes away, including when the broker detects
+//     a dead connection.
+//   - x-expires (1 h) only covers queues that never had a consumer or were recreated by a broker
+//     restart.
+func NewAMQPEphemeralSub(conf config.AMQPConnection, serviceID string, logger *logrus.Entry) (message.Subscriber, error) {
+	amqpConfig, err := amqpConfig(conf, serviceID, logger)
+	if err != nil {
+		return nil, err
+	}
+
+	amqpConfig.Queue.AutoDelete = true
+	amqpConfig.Queue.Arguments = amqp091.Table{"x-expires": int64(ephemeralQueueExpiry / time.Millisecond)}
+
+	lEventBusSub := eventbus.NewLoggerAdapter(logger.WithField("subsystem-provider", "AMQP - Ephemeral Subscriber"))
+	subscriber, err := amqp.NewSubscriber(*amqpConfig, lEventBusSub)
+	if err != nil {
+		return nil, fmt.Errorf("could not create ephemeral subscriber: %s", err)
+	}
+
+	return subscriber, nil
 }
 
 func NewAMQPSub(conf config.AMQPConnection, serviceID string, logger *logrus.Entry) (message.Subscriber, error) {

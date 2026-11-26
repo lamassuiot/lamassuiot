@@ -14,6 +14,8 @@ func Register() {
 	})
 }
 
+var _ eventbus.EphemeralSubscriberEngine = (*AmqpEngine)(nil)
+
 type AmqpEngine struct {
 	logger     *logrus.Entry
 	config     config.AMQPConnection
@@ -46,6 +48,17 @@ func (e *AmqpEngine) Subscriber() (message.Subscriber, error) {
 		e.subscriber = subscriber
 	}
 	return e.subscriber, nil
+}
+
+// EphemeralSubscriber returns a new subscriber on every call; it is not cached because each one owns
+// its own auto-delete queue.
+func (e *AmqpEngine) EphemeralSubscriber() (message.Subscriber, error) {
+	subscriber, err := NewAMQPEphemeralSub(e.config, e.serviceID, e.logger)
+	if err != nil {
+		e.logger.Errorf("could not generate Event Bus Ephemeral Subscriber: %s", err)
+		return nil, err
+	}
+	return subscriber, nil
 }
 
 func (e *AmqpEngine) Publisher() (message.Publisher, error) {

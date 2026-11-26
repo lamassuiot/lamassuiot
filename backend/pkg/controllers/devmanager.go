@@ -1,7 +1,11 @@
 package controllers
 
 import (
-	"fmt"
+	"context"
+	"errors"
+	"io"
+	"math/rand/v2"
+	"net/http"
 	"strings"
 	"time"
 
@@ -12,9 +16,30 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 )
 
+const (
+	// sseKeepaliveInterval is how often an idle SSE stream gets a comment line, so proxies do not close it.
+	sseKeepaliveInterval = 15 * time.Second
+	// sseWriteWindow is how long a single SSE write may block before the stream is ended.
+	sseWriteWindow = 30 * time.Second
+	// sseRetryAfterSeconds is the Retry-After value sent when the subscriber limit is reached.
+	sseRetryAfterSeconds = "10"
+	// sseReauthorizeTimeout bounds each authorization re-check of an open SSE stream.
+	sseReauthorizeTimeout = 5 * time.Second
+)
+
+// SSEReauthorizer evaluates again the permission that admitted an SSE request. It must not write the response.
+// The stream ends when it returns false or an error.
+type SSEReauthorizer func(ctx context.Context, c *gin.Context) (bool, error)
+
 type devManagerHttpRoutes struct {
 	svc    services.DeviceManagerService
 	sseHub *DeviceEventSSEHub
+
+	sseReauthorize        SSEReauthorizer
+	sseKeepaliveInterval  time.Duration
+	sseWriteWindow        time.Duration
+	sseMaxStreamDuration  time.Duration
+	sseReauthorizeTimeout time.Duration
 }
 
 func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHttpRoutes {
@@ -23,11 +48,24 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 	}
 }
 
-func NewDeviceManagerHttpRoutesWithSSE(svc services.DeviceManagerService, hub *DeviceEventSSEHub) *devManagerHttpRoutes {
-	return &devManagerHttpRoutes{
-		svc:    svc,
-		sseHub: hub,
+// NewDeviceManagerHttpRoutesWithSSE enables the SSE stream when hub is not nil. reauthorize is then required: it
+// re-checks the stream's permission on every keepalive.
+func NewDeviceManagerHttpRoutesWithSSE(svc services.DeviceManagerService, hub *DeviceEventSSEHub, reauthorize SSEReauthorizer) *devManagerHttpRoutes {
+	if hub != nil && reauthorize == nil {
+		panic("SSE device event stream requires an authorization re-check")
 	}
+	r := &devManagerHttpRoutes{
+		svc:                   svc,
+		sseHub:                hub,
+		sseReauthorize:        reauthorize,
+		sseKeepaliveInterval:  sseKeepaliveInterval,
+		sseWriteWindow:        sseWriteWindow,
+		sseReauthorizeTimeout: sseReauthorizeTimeout,
+	}
+	if hub != nil {
+		r.sseMaxStreamDuration = hub.MaxStreamDuration()
+	}
+	return r
 }
 
 func (r *devManagerHttpRoutes) GetStats(ctx *gin.Context) {
@@ -688,14 +726,32 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 
 // streamDeviceEventsSSE handles the SSE streaming path for GetDeviceEvents.
 // Called when the client sends Accept: text/event-stream.
+//
+// The stream outlives the HTTP server's WriteTimeout: before every write the handler moves the write
+// deadline to now + sseWriteWindow, so a client that stops reading ends the stream after that window instead of
+// pinning a goroutine and a hub slot. The authz guard decides once, when the stream opens, so on every keepalive
+// the handler re-checks the permission through sseReauthorize and ends the stream when it is denied or the check
+// fails. The stream is also closed after sseMaxStreamDuration (plus jitter), and the client reconnects.
 func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID string) {
 	if r.sseHub == nil {
 		ctx.JSON(501, gin.H{"err": "SSE is disabled by configuration or not supported in this deployment"})
 		return
 	}
 
+	// Subscribe before the lookup so a refused request costs no database call; the deferred Unsubscribe
+	// releases the slot if the lookup fails.
+	ch, err := r.sseHub.Subscribe(deviceID)
+	if err != nil {
+		if errors.Is(err, ErrSSESubscriberLimit) {
+			ctx.Header("Retry-After", sseRetryAfterSeconds)
+		}
+		ctx.JSON(503, gin.H{"err": err.Error()})
+		return
+	}
+	defer r.sseHub.Unsubscribe(deviceID, ch)
+
 	// Verify device exists
-	_, err := r.svc.GetDeviceByID(ctx.Request.Context(), services.GetDeviceByIDInput{
+	_, err = r.svc.GetDeviceByID(ctx.Request.Context(), services.GetDeviceByIDInput{
 		ID: deviceID,
 	})
 	if err != nil {
@@ -708,38 +764,84 @@ func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID 
 		return
 	}
 
-	ch := r.sseHub.Subscribe(deviceID)
-	defer r.sseHub.Unsubscribe(deviceID, ch)
-
 	ctx.Header("Content-Type", "text/event-stream")
 	ctx.Header("Cache-Control", "no-cache")
 	ctx.Header("Connection", "keep-alive")
 	ctx.Header("X-Accel-Buffering", "no")
 
-	// Flush headers immediately so the client sees the SSE connection is open
-	ctx.Writer.Flush()
+	rc := http.NewResponseController(ctx.Writer)
+	deadlineWarned := false
+	// send writes one frame under a fresh write deadline. The flush error is not checked: gin's writer
+	// implements http.Flusher without an error, so a failed flush shows up on the next write instead.
+	send := func(frame string) error {
+		if err := rc.SetWriteDeadline(time.Now().Add(r.sseWriteWindow)); err != nil && !deadlineWarned {
+			deadlineWarned = true
+			r.sseHub.logger.Warnf("SSE stream for device %s: cannot set write deadline: %s", deviceID, err)
+		}
+		if _, err := io.WriteString(ctx.Writer, frame); err != nil {
+			return err
+		}
+		ctx.Writer.Flush()
+		return nil
+	}
 
-	// Use a ticker to send keepalive comments every 15 seconds.
-	// Without this, idle connections are dropped by proxies or Go's HTTP server.
-	keepalive := time.NewTicker(15 * time.Second)
+	// Flush headers immediately so the client sees the SSE connection is open
+	if err := send(""); err != nil {
+		return
+	}
+
+	// Keepalive comments stop proxies and load balancers from closing an idle stream.
+	keepalive := time.NewTicker(r.sseKeepaliveInterval)
 	defer keepalive.Stop()
+
+	// Jitter keeps streams opened together (for example after a deploy) from all reconnecting at once.
+	lifetime := time.NewTimer(r.sseMaxStreamDuration + rand.N(r.sseMaxStreamDuration/10+1))
+	defer lifetime.Stop()
 
 	clientGone := ctx.Request.Context().Done()
 	for {
 		select {
 		case <-clientGone:
 			return
+		case <-lifetime.C:
+			// The terminating chunk is written after we return, under the deadline of the last write, which
+			// may be a whole keepalive interval old. Renew it so a clean close does not depend on keepalive < window.
+			_ = rc.SetWriteDeadline(time.Now().Add(r.sseWriteWindow))
+			return
 		case data, ok := <-ch:
 			if !ok {
 				return
 			}
 			// SSE data frame
-			fmt.Fprintf(ctx.Writer, "event: device-event\ndata: %s\n\n", data)
-			ctx.Writer.Flush()
+			if err := send("event: device-event\ndata: " + data + "\n\n"); err != nil {
+				return
+			}
 		case <-keepalive.C:
+			if !r.sseStillAuthorized(ctx, deviceID) {
+				// The check may have taken up to sseReauthorizeTimeout: renew the deadline for the clean close.
+				_ = rc.SetWriteDeadline(time.Now().Add(r.sseWriteWindow))
+				return
+			}
 			// SSE comment line — keeps the connection alive without triggering client events
-			fmt.Fprintf(ctx.Writer, ": keepalive\n\n")
-			ctx.Writer.Flush()
+			if err := send(": keepalive\n\n"); err != nil {
+				return
+			}
 		}
 	}
+}
+
+// sseStillAuthorized re-checks the permission of an open SSE stream. It fails closed: an error or a check that
+// does not answer within sseReauthorizeTimeout counts as denied.
+func (r *devManagerHttpRoutes) sseStillAuthorized(ctx *gin.Context, deviceID string) bool {
+	checkCtx, cancel := context.WithTimeout(ctx.Request.Context(), r.sseReauthorizeTimeout)
+	defer cancel()
+	allowed, err := r.sseReauthorize(checkCtx, ctx)
+	if err != nil {
+		r.sseHub.logger.Warnf("SSE stream for device %s: closing, authorization re-check failed: %s", deviceID, err)
+		return false
+	}
+	if !allowed {
+		r.sseHub.logger.Infof("SSE stream for device %s: closing, read permission no longer granted", deviceID)
+	}
+	return allowed
 }

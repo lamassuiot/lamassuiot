@@ -1,8 +1,14 @@
 package routes
 
 import (
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/gin-gonic/gin"
+	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 )
 
@@ -89,5 +95,18 @@ func TestInjectVersionIntoOpenAPI(t *testing.T) {
 				t.Fatalf("version = %q, want %q", got, tc.wantVersion)
 			}
 		})
+	}
+}
+
+func TestRunHttpRouterRejectsNegativeWriteTimeout(t *testing.T) {
+	logger := logrus.NewEntry(logrus.New())
+	cfg := cconfig.HttpServer{ListenAddress: "127.0.0.1", Port: 0, Protocol: cconfig.HTTP, WriteTimeout: -time.Second}
+
+	port, err := RunHttpRouter(logger, gin.New(), cfg, models.APIServiceInfo{}, nil)
+	if port != -1 {
+		t.Fatalf("expected port -1. Got %d", port)
+	}
+	if err == nil || !strings.Contains(err.Error(), "server.write_timeout") {
+		t.Fatalf("expected error containing %q. Got %v", "server.write_timeout", err)
 	}
 }

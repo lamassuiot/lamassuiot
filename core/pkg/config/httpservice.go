@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"time"
 )
 
 type HTTPConnection struct {
@@ -31,6 +32,52 @@ type HttpServer struct {
 	CertFile           string                   `mapstructure:"cert_file"`
 	KeyFile            string                   `mapstructure:"key_file"`
 	Authentication     HttpServerAuthentication `mapstructure:"authentication"`
+	// ReadTimeout and WriteTimeout bound a whole request read and response write, written as Go durations such
+	// as "30s". Zero means DefaultHTTPServerTimeout; nonzero values below MinConfigDuration are rejected.
+	ReadTimeout  time.Duration `mapstructure:"read_timeout"`
+	WriteTimeout time.Duration `mapstructure:"write_timeout"`
+}
+
+// DefaultHTTPServerTimeout is the read and write timeout applied when none is configured.
+const DefaultHTTPServerTimeout = 10 * time.Second
+
+// MinConfigDuration is the smallest nonzero duration accepted by CheckDuration.
+const MinConfigDuration = time.Second
+
+// CheckDuration validates a duration setting where 0 selects the default. It rejects negative values and nonzero
+// values below MinConfigDuration: a YAML integer without a unit decodes as nanoseconds, so a value such as 30
+// (meant as 30 s) would otherwise start the service with a 30 ns setting.
+func CheckDuration(key string, d time.Duration) error {
+	if d < 0 {
+		return fmt.Errorf("%s must not be negative, got %s", key, d)
+	}
+	if d > 0 && d < MinConfigDuration {
+		err := fmt.Errorf("%s must be 0 (default) or at least %s, got %s", key, MinConfigDuration, d)
+		// Below a millisecond the value almost certainly came from an integer without a unit.
+		if d < time.Millisecond {
+			err = fmt.Errorf("%w; a number without a unit is read as nanoseconds, write it with a unit such as \"30s\"", err)
+		}
+		return err
+	}
+	return nil
+}
+
+// ServerTimeouts returns the effective read and write timeouts, applying DefaultHTTPServerTimeout to unset values.
+func (c HttpServer) ServerTimeouts() (read, write time.Duration, err error) {
+	if err := CheckDuration("server.read_timeout", c.ReadTimeout); err != nil {
+		return 0, 0, err
+	}
+	if err := CheckDuration("server.write_timeout", c.WriteTimeout); err != nil {
+		return 0, 0, err
+	}
+	read, write = c.ReadTimeout, c.WriteTimeout
+	if read == 0 {
+		read = DefaultHTTPServerTimeout
+	}
+	if write == 0 {
+		write = DefaultHTTPServerTimeout
+	}
+	return read, write, nil
 }
 
 type HttpServerAuthentication struct {
