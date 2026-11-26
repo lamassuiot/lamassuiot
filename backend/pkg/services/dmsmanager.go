@@ -1337,6 +1337,13 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
+	// The identity slot written below is the one of the device the certificate names. Both checks run before the
+	// certificate metadata is patched, so that a rejected bind leaves no change behind.
+	if crt.Subject.CommonName != input.DeviceID {
+		lFunc.Errorf("cannot bind certificate '%s' to device '%s': the certificate names device '%s'", input.CertificateSerialNumber, input.DeviceID, crt.Subject.CommonName)
+		return nil, fmt.Errorf("%w: certificate '%s' does not belong to device '%s'", errs.ErrValidateBadRequest, input.CertificateSerialNumber, input.DeviceID)
+	}
+
 	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
@@ -1344,7 +1351,6 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
-	// Checked before the certificate metadata is patched, so that a rejected bind leaves no change behind.
 	if device.Status == models.DeviceDecommissioned {
 		lFunc.Errorf("cannot bind certificate '%s' to device '%s': device is decommissioned", input.CertificateSerialNumber, device.ID)
 		return nil, errs.ErrDeviceInvalidStatus
