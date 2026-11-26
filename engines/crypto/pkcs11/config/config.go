@@ -7,6 +7,7 @@ import (
 type PKCS11Config struct {
 	TokenLabel         string                   `mapstructure:"token"`
 	TokenPin           config.Password          `mapstructure:"pin"`
+	PinEnv             string                   `mapstructure:"pin_env"`
 	ModulePath         string                   `mapstructure:"module_path"`
 	ModuleExtraOptions PKCS11ModuleExtraOptions `mapstructure:"module_extra_options"`
 }
