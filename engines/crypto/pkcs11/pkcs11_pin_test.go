@@ -4,6 +4,7 @@
 package pkcs11
 
 import (
+	"os"
 	"testing"
 
 	coreconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
@@ -61,6 +62,11 @@ func TestResolvePKCS11PIN(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.setEnv {
 				t.Setenv(tt.pinEnv, tt.envValue)
+			} else if tt.name == "missing environment variable" {
+				if _, ok := os.LookupEnv(tt.pinEnv); ok {
+					t.Setenv(tt.pinEnv, "")
+					os.Unsetenv(tt.pinEnv)
+				}
 			}
 
 			conf := coreconfig.CryptoEngineConfigAdapter[config.PKCS11Config]{
