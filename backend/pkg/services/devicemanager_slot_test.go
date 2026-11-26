@@ -38,11 +38,14 @@ func (slotEventsRepo) Insert(_ context.Context, event *models.DeviceEventRecord)
 	return event, nil
 }
 
-// slotCA holds the identity certificate of the device and records its status updates.
+// slotCA holds the identity certificate of the device and records its status updates, with the status the stored
+// device had when each update arrived.
 type slotCA struct {
 	coreservices.CAService
-	cert    models.Certificate
-	updates []coreservices.UpdateCertificateStatusInput
+	cert             models.Certificate
+	updates          []coreservices.UpdateCertificateStatusInput
+	repo             *slotDevicesRepo
+	statusesAtUpdate []models.DeviceStatus
 }
 
 func (ca *slotCA) GetCertificateBySerialNumber(context.Context, coreservices.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
@@ -52,6 +55,9 @@ func (ca *slotCA) GetCertificateBySerialNumber(context.Context, coreservices.Get
 
 func (ca *slotCA) UpdateCertificateStatus(_ context.Context, input coreservices.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	ca.updates = append(ca.updates, input)
+	if ca.repo != nil {
+		ca.statusesAtUpdate = append(ca.statusesAtUpdate, ca.repo.device.Status)
+	}
 	ca.cert.Status = input.NewStatus
 	ca.cert.RevocationReason = input.RevocationReason
 	delete(ca.cert.Metadata, models.CAMetadataSuspendedByCascadeKey)
@@ -74,6 +80,7 @@ func newSlotFixture(t *testing.T, slotStatus models.SlotStatus) (*DeviceManagerS
 		ID: "dev-1", Status: models.DeviceActive,
 		IdentitySlot: &models.Slot[string]{Status: slotStatus, ActiveVersion: 0, Secrets: map[int]string{0: "sn-1"}},
 	}}
+	ca.repo = repo
 	logger := logrus.New()
 	logger.SetOutput(io.Discard)
 	svc := &DeviceManagerServiceBackend{devicesStorage: repo, caClient: ca, logger: logrus.NewEntry(logger)}
@@ -137,4 +144,53 @@ func TestUpdatingTheSlotOfADecommissionedDeviceIsRejected(t *testing.T) {
 
 	require.Empty(t, ca.updates)
 	require.Equal(t, models.DeviceDecommissioned, repo.device.Status)
+}
+
+func decommission(t *testing.T, svc *DeviceManagerServiceBackend) {
+	t.Helper()
+	_, err := svc.UpdateDeviceStatus(context.Background(), coreservices.UpdateDeviceStatusInput{ID: "dev-1", NewStatus: models.DeviceDecommissioned})
+	require.NoError(t, err)
+	require.Equal(t, models.DeviceDecommissioned, svc.devicesStorage.(*slotDevicesRepo).device.Status)
+}
+
+// A revoked slot can hide a certificate on hold. Decommissioning must revoke it for good: otherwise releasing the CA
+// that put it on hold reactivates the certificate of a device that is retired.
+func TestDecommissioningADeviceWhoseCertificateIsOnHoldRevokesItForGood(t *testing.T) {
+	svc, ca := newSlotFixture(t, models.SlotRevoke)
+
+	decommission(t, svc)
+
+	require.Len(t, ca.updates, 1)
+	require.Equal(t, "sn-1", ca.updates[0].SerialNumber)
+	require.Equal(t, models.StatusRevoked, ca.cert.Status)
+	require.Equal(t, models.RevocationReason(ocsp.CessationOfOperation), ca.cert.RevocationReason)
+	require.NotContains(t, ca.cert.Metadata, models.CAMetadataSuspendedByCascadeKey)
+	// The device is stored as decommissioned before the revocation, whose event the device handler must skip.
+	require.Equal(t, []models.DeviceStatus{models.DeviceDecommissioned}, ca.statusesAtUpdate)
+}
+
+// The slot may still read revoked while its certificate is already active again (the release of a hold whose event
+// has not reached the device yet). Decommissioning revokes that certificate too.
+func TestDecommissioningADeviceWithARevokedSlotButAnActiveCertificateRevokesIt(t *testing.T) {
+	svc, ca := newSlotFixture(t, models.SlotRevoke)
+	ca.cert = models.Certificate{SerialNumber: "sn-1", Status: models.StatusActive, Metadata: map[string]any{}}
+
+	decommission(t, svc)
+
+	require.Len(t, ca.updates, 1)
+	require.Equal(t, "sn-1", ca.updates[0].SerialNumber)
+	require.Equal(t, models.StatusRevoked, ca.cert.Status)
+	require.Equal(t, models.RevocationReason(ocsp.CessationOfOperation), ca.cert.RevocationReason)
+	require.Equal(t, []models.DeviceStatus{models.DeviceDecommissioned}, ca.statusesAtUpdate)
+}
+
+// A certificate already revoked for good stays as it is: the CA could not change it anyway.
+func TestDecommissioningADeviceWhoseCertificateIsRevokedForGoodLeavesIt(t *testing.T) {
+	svc, ca := newSlotFixture(t, models.SlotRevoke)
+	ca.cert = models.Certificate{SerialNumber: "sn-1", Status: models.StatusRevoked, RevocationReason: ocsp.KeyCompromise, Metadata: map[string]any{}}
+
+	decommission(t, svc)
+
+	require.Empty(t, ca.updates)
+	require.Equal(t, models.RevocationReason(ocsp.KeyCompromise), ca.cert.RevocationReason)
 }

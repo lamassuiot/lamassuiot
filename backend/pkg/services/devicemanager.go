@@ -404,7 +404,33 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 			if idSlot.Status == models.SlotExpired {
 				lFunc.Debugf("skipping slot update. Identity slot already expired")
 			} else if idSlot.Status == models.SlotRevoke {
-				lFunc.Debugf("skipping slot update. Identity slot already revoked")
+				lFunc.Debugf("skipping slot update. Identity slot already revoked, checking its certificate is revoked for good")
+				// A revoked slot can hide a certificate on hold, or one active again whose event has not arrived yet:
+				// releasing the hold would hand a valid certificate back to a retired device. Revoke it for good.
+				defer func() {
+					certSN := idSlot.Secrets[idSlot.ActiveVersion]
+					crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+						SerialNumber: certSN,
+					})
+					if err != nil {
+						lFunc.Errorf("could not check certificate %s of decommissioned device %s: %s", certSN, device.ID, err)
+						return
+					}
+
+					onHold := crt.Status == models.StatusRevoked && crt.RevocationReason == ocsp.CertificateHold
+					if crt.Status != models.StatusActive && !onHold {
+						return
+					}
+
+					_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+						SerialNumber:     certSN,
+						NewStatus:        models.StatusRevoked,
+						RevocationReason: ocsp.CessationOfOperation,
+					})
+					if err != nil {
+						lFunc.Errorf("could not revoke certificate %s of decommissioned device %s: %s", certSN, device.ID, err)
+					}
+				}()
 			} else {
 
 				idSlot.Status = models.SlotRevoke
