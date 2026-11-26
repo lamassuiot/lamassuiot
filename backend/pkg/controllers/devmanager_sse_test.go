@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,7 +49,7 @@ func newSSETestServer(t *testing.T, svc services.DeviceManagerService, hub *Devi
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 
-	r := NewDeviceManagerHttpRoutesWithSSE(svc, hub)
+	r := NewDeviceManagerHttpRoutesWithSSE(svc, hub, func(context.Context, *gin.Context) (bool, error) { return true, nil })
 	if tune != nil {
 		tune(r)
 	}
@@ -325,4 +327,102 @@ func TestSSELookupFailureReleasesSlot(t *testing.T) {
 	respOK := openSSE(t, ctx, srv.URL+"/devices/dev-1/events")
 	defer respOK.Body.Close()
 	assert.Equal(t, http.StatusOK, respOK.StatusCode)
+}
+
+// The authz guard runs once, when the stream opens. A permission revoked while the stream is open must end it
+// within one keepalive interval, not at the end of its lifetime.
+func TestSSEStreamEndsWhenPermissionIsRevoked(t *testing.T) {
+	hub := newQuietHub(DeviceEventSSEHubOptions{})
+	var revoked, unbounded atomic.Bool
+	srv := newSSETestServer(t, newSSEMockService(), hub, 0, func(r *devManagerHttpRoutes) {
+		r.sseKeepaliveInterval = 50 * time.Millisecond
+		r.sseWriteWindow = time.Second
+		r.sseMaxStreamDuration = time.Hour
+		r.sseReauthorize = func(ctx context.Context, _ *gin.Context) (bool, error) {
+			if _, ok := ctx.Deadline(); !ok {
+				unbounded.Store(true)
+			}
+			return !revoked.Load(), nil
+		}
+	})
+
+	start := time.Now()
+	resp := openSSE(t, context.Background(), srv.URL+"/devices/dev-1/events")
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	time.AfterFunc(300*time.Millisecond, func() { revoked.Store(true) })
+
+	lines, eofAt, endErr := readSSELines(resp, start)
+	keepalives := 0
+	timeout := time.After(5 * time.Second)
+loop:
+	for {
+		select {
+		case l, ok := <-lines:
+			if !ok {
+				break loop
+			}
+			if l.text == ": keepalive" {
+				keepalives++
+			}
+		case <-timeout:
+			t.Fatal("stream did not end after the permission was revoked")
+		}
+	}
+
+	assert.Positive(t, keepalives, "the stream must stay open while the permission holds")
+	end := eofAt()
+	assert.GreaterOrEqual(t, end, 300*time.Millisecond, "stream ended before the permission was revoked")
+	assert.Less(t, end, time.Second, "stream outlived the revocation by more than a keepalive interval")
+	assert.Equal(t, io.EOF, endErr(), "a revoked stream must end with a clean close, not a reset")
+	assert.False(t, unbounded.Load(), "the re-check must run under a deadline")
+	waitForSubscribers(t, hub, 0, time.Second)
+}
+
+// Authorization fails closed: a re-check that errors or does not answer within its timeout ends the stream, even
+// if it also reports the permission as held.
+func TestSSEStreamEndsWhenReauthorizationFails(t *testing.T) {
+	for name, reauthorize := range map[string]SSEReauthorizer{
+		"error": func(context.Context, *gin.Context) (bool, error) { return true, errors.New("authz unavailable") },
+		"timeout": func(ctx context.Context, _ *gin.Context) (bool, error) {
+			<-ctx.Done()
+			return true, ctx.Err()
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hub := newQuietHub(DeviceEventSSEHubOptions{})
+			srv := newSSETestServer(t, newSSEMockService(), hub, 0, func(r *devManagerHttpRoutes) {
+				r.sseKeepaliveInterval = 50 * time.Millisecond
+				r.sseWriteWindow = time.Second
+				r.sseMaxStreamDuration = time.Hour
+				r.sseReauthorize = reauthorize
+				r.sseReauthorizeTimeout = 100 * time.Millisecond
+			})
+
+			resp := openSSE(t, context.Background(), srv.URL+"/devices/dev-1/events")
+			defer resp.Body.Close()
+			require.Equal(t, http.StatusOK, resp.StatusCode)
+
+			lines, _, endErr := readSSELines(resp, time.Now())
+			timeout := time.After(3 * time.Second)
+			for done := false; !done; {
+				select {
+				case l, ok := <-lines:
+					done = !ok
+					assert.NotEqual(t, ": keepalive", l.text, "no keepalive may follow a failed re-check")
+				case <-timeout:
+					t.Fatal("stream did not end after the re-check failed")
+				}
+			}
+			assert.Equal(t, io.EOF, endErr())
+			waitForSubscribers(t, hub, 0, time.Second)
+		})
+	}
+}
+
+func TestSSERequiresAReauthorizer(t *testing.T) {
+	assert.Panics(t, func() {
+		NewDeviceManagerHttpRoutesWithSSE(newSSEMockService(), newQuietHub(DeviceEventSSEHubOptions{}), nil)
+	})
+	assert.NotPanics(t, func() { NewDeviceManagerHttpRoutesWithSSE(newSSEMockService(), nil, nil) })
 }

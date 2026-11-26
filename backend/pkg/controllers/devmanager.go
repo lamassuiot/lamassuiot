@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"errors"
 	"io"
 	"math/rand/v2"
@@ -22,15 +23,23 @@ const (
 	sseWriteWindow = 30 * time.Second
 	// sseRetryAfterSeconds is the Retry-After value sent when the subscriber limit is reached.
 	sseRetryAfterSeconds = "10"
+	// sseReauthorizeTimeout bounds each authorization re-check of an open SSE stream.
+	sseReauthorizeTimeout = 5 * time.Second
 )
+
+// SSEReauthorizer evaluates again the permission that admitted an SSE request. It must not write the response.
+// The stream ends when it returns false or an error.
+type SSEReauthorizer func(ctx context.Context, c *gin.Context) (bool, error)
 
 type devManagerHttpRoutes struct {
 	svc    services.DeviceManagerService
 	sseHub *DeviceEventSSEHub
 
-	sseKeepaliveInterval time.Duration
-	sseWriteWindow       time.Duration
-	sseMaxStreamDuration time.Duration
+	sseReauthorize        SSEReauthorizer
+	sseKeepaliveInterval  time.Duration
+	sseWriteWindow        time.Duration
+	sseMaxStreamDuration  time.Duration
+	sseReauthorizeTimeout time.Duration
 }
 
 func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHttpRoutes {
@@ -39,12 +48,19 @@ func NewDeviceManagerHttpRoutes(svc services.DeviceManagerService) *devManagerHt
 	}
 }
 
-func NewDeviceManagerHttpRoutesWithSSE(svc services.DeviceManagerService, hub *DeviceEventSSEHub) *devManagerHttpRoutes {
+// NewDeviceManagerHttpRoutesWithSSE enables the SSE stream when hub is not nil. reauthorize is then required: it
+// re-checks the stream's permission on every keepalive.
+func NewDeviceManagerHttpRoutesWithSSE(svc services.DeviceManagerService, hub *DeviceEventSSEHub, reauthorize SSEReauthorizer) *devManagerHttpRoutes {
+	if hub != nil && reauthorize == nil {
+		panic("SSE device event stream requires an authorization re-check")
+	}
 	r := &devManagerHttpRoutes{
-		svc:                  svc,
-		sseHub:               hub,
-		sseKeepaliveInterval: sseKeepaliveInterval,
-		sseWriteWindow:       sseWriteWindow,
+		svc:                   svc,
+		sseHub:                hub,
+		sseReauthorize:        reauthorize,
+		sseKeepaliveInterval:  sseKeepaliveInterval,
+		sseWriteWindow:        sseWriteWindow,
+		sseReauthorizeTimeout: sseReauthorizeTimeout,
 	}
 	if hub != nil {
 		r.sseMaxStreamDuration = hub.MaxStreamDuration()
@@ -713,8 +729,9 @@ func (r *devManagerHttpRoutes) GetDeviceGroupStats(ctx *gin.Context) {
 //
 // The stream outlives the HTTP server's WriteTimeout: before every write the handler moves the write
 // deadline to now + sseWriteWindow, so a client that stops reading ends the stream after that window instead of
-// pinning a goroutine and a hub slot. The stream is closed after sseMaxStreamDuration (plus jitter) so that
-// permission changes are picked up when the client reconnects.
+// pinning a goroutine and a hub slot. The authz guard decides once, when the stream opens, so on every keepalive
+// the handler re-checks the permission through sseReauthorize and ends the stream when it is denied or the check
+// fails. The stream is also closed after sseMaxStreamDuration (plus jitter), and the client reconnects.
 func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID string) {
 	if r.sseHub == nil {
 		ctx.JSON(501, gin.H{"err": "SSE is disabled by configuration or not supported in this deployment"})
@@ -800,10 +817,31 @@ func (r *devManagerHttpRoutes) streamDeviceEventsSSE(ctx *gin.Context, deviceID 
 				return
 			}
 		case <-keepalive.C:
+			if !r.sseStillAuthorized(ctx, deviceID) {
+				// The check may have taken up to sseReauthorizeTimeout: renew the deadline for the clean close.
+				_ = rc.SetWriteDeadline(time.Now().Add(r.sseWriteWindow))
+				return
+			}
 			// SSE comment line — keeps the connection alive without triggering client events
 			if err := send(": keepalive\n\n"); err != nil {
 				return
 			}
 		}
 	}
+}
+
+// sseStillAuthorized re-checks the permission of an open SSE stream. It fails closed: an error or a check that
+// does not answer within sseReauthorizeTimeout counts as denied.
+func (r *devManagerHttpRoutes) sseStillAuthorized(ctx *gin.Context, deviceID string) bool {
+	checkCtx, cancel := context.WithTimeout(ctx.Request.Context(), r.sseReauthorizeTimeout)
+	defer cancel()
+	allowed, err := r.sseReauthorize(checkCtx, ctx)
+	if err != nil {
+		r.sseHub.logger.Warnf("SSE stream for device %s: closing, authorization re-check failed: %s", deviceID, err)
+		return false
+	}
+	if !allowed {
+		r.sseHub.logger.Infof("SSE stream for device %s: closing, read permission no longer granted", deviceID)
+	}
+	return allowed
 }

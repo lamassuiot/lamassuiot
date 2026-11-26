@@ -639,3 +639,107 @@ func TestOpenAPIRootPathMatchesARouteAtTheServerURL(t *testing.T) {
 	undocumented := strings.Replace(spec, "  /:\n", "  /other:\n", 1)
 	require.ErrorContains(t, contract.ValidateOpenAPI(strings.NewReader(undocumented)), "OpenAPI operation missing for GET /api/va")
 }
+
+type reauthorizeCtxKey struct{}
+
+// ctxRecordingEngine also records the context of the last decision, to prove Reauthorize uses the caller's context.
+type ctxRecordingEngine struct {
+	recordingCreateEngine
+	ctx context.Context
+}
+
+func (e *ctxRecordingEngine) MatchAndAuthorize(ctx context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, key map[string]string) (bool, []string, error) {
+	e.ctx = ctx
+	return e.recordingCreateEngine.MatchAndAuthorize(ctx, authType, authMaterial, namespace, schemaName, action, entityType, key)
+}
+
+// A long-lived handler, such as an SSE stream, re-evaluates the permission that admitted the request: same
+// declaration, same key, the caller's context, and nothing written to the response.
+func TestResourcePermissionReauthorizesTheEnforcedDecision(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	engine := &ctxRecordingEngine{}
+	engine.authorized = true
+	schemas, err := authzschemas.PKISchemas()
+	require.NoError(t, err)
+	permission := MustNewAuthzMiddleware(engine, schemas, "pki", "devicemanager", "device", testLogger()).Resource("read", map[string]string{"id": "id"})
+	contract := NewContractRouter(router.Group("/v1"))
+	var decisions []bool
+	var sawCallerCtx []bool
+	contract.GET("/devices/:id/events", permission, func(c *gin.Context) {
+		for _, allowed := range []bool{true, false} {
+			engine.authorized = allowed
+			ctx := context.WithValue(context.Background(), reauthorizeCtxKey{}, allowed)
+			ok, err := permission.Reauthorize(ctx, c)
+			require.NoError(t, err)
+			decisions = append(decisions, ok)
+			sawCallerCtx = append(sawCallerCtx, engine.ctx.Value(reauthorizeCtxKey{}) == allowed)
+		}
+		c.Status(http.StatusOK)
+	})
+
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/v1/devices/dev-1/events", nil))
+
+	assert.Equal(t, http.StatusOK, response.Code, "Reauthorize must not write the response")
+	assert.Equal(t, []bool{true, false}, decisions)
+	assert.Equal(t, []bool{true, true}, sawCallerCtx)
+	assert.Equal(t, 3, engine.calls, "one decision for the guard and one per Reauthorize")
+	assert.Equal(t, map[string]string{"id": "dev-1"}, engine.entityKey)
+	assert.Equal(t, contract.Declarations()[0].Authz, engine.declaration)
+}
+
+// Reauthorize decides like the guard: admin-mode is admitted without the engine, and missing credentials or an
+// engine failure are errors, never an allow.
+func TestResourcePermissionReauthorizeMirrorsTheGuard(t *testing.T) {
+	schemas, err := authzschemas.PKISchemas()
+	require.NoError(t, err)
+	for _, test := range []struct {
+		name        string
+		credentials bool
+		adminMode   bool
+		engineErr   error
+		allowed     bool
+		wantErr     bool
+	}{
+		{name: "admin-mode bypass", adminMode: true, engineErr: fmt.Errorf("engine must not be consulted"), allowed: true},
+		{name: "missing credentials", wantErr: true},
+		{name: "engine failure", credentials: true, engineErr: fmt.Errorf("authz unavailable"), wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			permission := MustNewAuthzMiddleware(&fakeEngine{authorized: true, err: test.engineErr}, schemas, "pki", "devicemanager", "device", testLogger()).
+				Resource("read", map[string]string{"id": "id"})
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest(http.MethodGet, "/v1/devices/dev-1/events", nil)
+			c.Params = gin.Params{{Key: "id", Value: "dev-1"}}
+			if test.adminMode {
+				c.Request.Header.Set("X-Principal-ID", "admin-mode")
+			}
+			if test.credentials {
+				c.Set("lamassu.io/ctx/auth-type", "jwt")
+				c.Set("lamassu.io/ctx/auth-credential-string", "token")
+			}
+
+			allowed, err := permission.Reauthorize(context.Background(), c)
+
+			assert.Equal(t, test.allowed, allowed)
+			if test.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// Only a single-resource decision can be re-evaluated; any other permission fails closed.
+func TestReauthorizeFailsClosedForPermissionsWithoutAResourceDecision(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Request.Header.Set("X-Principal-ID", "admin-mode")
+	mw := certificateMiddleware(t, &fakeEngine{authorized: true})
+	for name, permission := range map[string]Permission{"list": mw.List(), "public": Public()} {
+		allowed, err := permission.Reauthorize(context.Background(), c)
+		assert.False(t, allowed, name)
+		assert.Error(t, err, name)
+	}
+}

@@ -255,7 +255,9 @@ paths:
         switches to a Server-Sent Events stream of new events instead of returning a
         paginated JSON list.
 
-        The stream sends a `: keepalive` comment every 15 seconds while idle. The server
+        The stream sends a `: keepalive` comment every 15 seconds while idle. Every 15
+        seconds the server also evaluates the `read` permission on the device again and
+        closes the stream when it is no longer granted or cannot be verified. The server
         closes the stream after its maximum lifetime (10 minutes by default, plus up to
         10 % jitter), so clients must reconnect. Events are best-effort: the server does
         not replay events published while a client was disconnected.

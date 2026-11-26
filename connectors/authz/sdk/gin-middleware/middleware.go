@@ -91,6 +91,25 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 	}
 }
 
+// reauthorizer returns the decision of AuthzCheckCustom as a function that reports it instead of aborting the
+// request. entityKeyFunc must not abort the request either.
+func (m *AuthzMiddleware) reauthorizer(action string, entityKeyFunc func(*gin.Context) map[string]string) func(context.Context, *gin.Context) (bool, error) {
+	return func(ctx context.Context, c *gin.Context) (bool, error) {
+		if c.GetHeader("X-Principal-ID") == "admin-mode" {
+			return true, nil
+		}
+		authType, authMaterial, err := extractAuthInputs(c)
+		if err != nil {
+			return false, err
+		}
+		allowed, _, err := m.engine.MatchAndAuthorize(ctx, authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKeyFunc(c))
+		if err != nil {
+			return false, err
+		}
+		return allowed, nil
+	}
+}
+
 // AuthzCheckCustomField extracts the entity key from the named URL path params.
 func (m *AuthzMiddleware) AuthzCheckCustomField(action string, paramFields []string) gin.HandlerFunc {
 	return m.AuthzCheckCustom(action, func(c *gin.Context) map[string]string {

@@ -21,10 +21,12 @@ func NewDeviceManagerHTTPLayerWithSSE(router *gin.RouterGroup, svc services.Devi
 
 // REST and SSE requests share the same validated device permissions.
 func registerDeviceManagerRoutes(router *gin.RouterGroup, svc services.DeviceManagerService, sseHub *controllers.DeviceEventSSEHub, engine authzcore.AuthzEngine, logger *logrus.Entry) *middleware.ContractRouter {
-	routes := controllers.NewDeviceManagerHttpRoutesWithSSE(svc, sseHub)
 	authzMw := pkiAuthz(engine, "devicemanager", "device", logger)
 	deviceGroupAuthzMw := pkiAuthz(engine, "devicemanager", "device_group", logger)
 	idKey := map[string]string{"id": "id"}
+	// The SSE stream on this route outlives the guard's single decision, so it re-checks the same permission.
+	readDeviceEvents := authzMw.Resource("read", idKey)
+	routes := controllers.NewDeviceManagerHttpRoutesWithSSE(svc, sseHub, readDeviceEvents.Reauthorize)
 
 	rv1 := middleware.NewContractRouter(router.Group("/v1"))
 
@@ -32,7 +34,7 @@ func registerDeviceManagerRoutes(router *gin.RouterGroup, svc services.DeviceMan
 	rv1.GET("/devices", authzMw.List(), routes.GetAllDevices)
 	rv1.POST("/devices", authzMw.Global("create"), routes.CreateDevice)
 	rv1.GET("/devices/:id", authzMw.Resource("read", idKey), routes.GetDeviceByID)
-	rv1.GET("/devices/:id/events", authzMw.Resource("read", idKey), routes.GetDeviceEvents)
+	rv1.GET("/devices/:id/events", readDeviceEvents, routes.GetDeviceEvents)
 	rv1.POST("/devices/:id/events", authzMw.Resource("metadata-update", idKey), routes.CreateDeviceEvent)
 	rv1.DELETE("/devices/:id", authzMw.Resource("delete", idKey), routes.DeleteDevice)
 	rv1.PUT("/devices/:id/idslot", authzMw.Resource("provision", idKey), routes.UpdateDeviceIdentitySlot)

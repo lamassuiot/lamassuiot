@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -49,6 +51,17 @@ type Permission struct {
 	handler       gin.HandlerFunc
 	pathParams    []string
 	trustBoundary string
+	reauthorize   func(context.Context, *gin.Context) (bool, error)
+}
+
+// Reauthorize evaluates the permission again for a request it already admitted, for handlers that outlive a single
+// decision such as event streams. It decides like the guard but never writes the response; ctx bounds the engine
+// call. Only Resource permissions support it: any other permission returns an error, so callers fail closed.
+func (p Permission) Reauthorize(ctx context.Context, c *gin.Context) (bool, error) {
+	if p.reauthorize == nil {
+		return false, errors.New("permission cannot be re-evaluated")
+	}
+	return p.reauthorize(ctx, c)
 }
 
 // WithTrustBoundary records an intended caller boundary. Today it is equivalent
@@ -130,18 +143,23 @@ func (m *AuthzMiddleware) Resource(action string, keyParams map[string]string) P
 		boundTo[param] = key
 		bindings[key] = param
 	}
-	handler := m.AuthzCheckCustom(action, func(c *gin.Context) map[string]string {
+	entityKey := func(c *gin.Context) map[string]string {
 		key := make(map[string]string, len(bindings))
 		for column, param := range bindings {
 			key[column] = c.Param(param)
 		}
 		return key
-	})
+	}
 	params := make([]string, 0, len(bindings))
 	for _, column := range m.definition.PrimaryKeys {
 		params = append(params, bindings[column])
 	}
-	return Permission{declaration: Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Action: action}, handler: handler, pathParams: params}
+	return Permission{
+		declaration: Declaration{Namespace: m.namespace, SchemaName: m.schemaName, EntityType: m.entityType, Action: action},
+		handler:     m.AuthzCheckCustom(action, entityKey),
+		pathParams:  params,
+		reauthorize: m.reauthorizer(action, entityKey),
+	}
 }
 
 // ResourceCustom resolves a path identifier into a composite key, such as a KMS URI or alias.
