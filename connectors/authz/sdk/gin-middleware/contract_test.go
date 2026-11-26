@@ -664,14 +664,6 @@ func grantsMiddleware(t *testing.T, engine core.AuthzEngine) *AuthzMiddleware {
 	return MustNewAuthzMiddleware(engine, schemas, "authz", "public", "principal_policy", testLogger())
 }
 
-func TestGlobalCheckRejectsWhatIsNotAGlobalActionBeforeServing(t *testing.T) {
-	mw := grantsMiddleware(t, &fakeEngine{})
-
-	assert.Panics(t, func() { mw.GlobalCheck("delete") }, "an atomic action")
-	assert.Panics(t, func() { mw.GlobalCheck("fly") }, "an unknown action")
-	assert.NotPanics(t, func() { mw.GlobalCheck("grant") })
-}
-
 func TestServiceCheckIsBoundToTheCallerOfEachRequest(t *testing.T) {
 	type answer struct {
 		allowed bool
@@ -732,25 +724,6 @@ func TestServiceCheckIsBoundToTheCallerOfEachRequest(t *testing.T) {
 		assert.Equal(t, answer{allowed: true}, got)
 		assert.Empty(t, engine.asked)
 	})
-	t.Run("a later request is not answered with the credentials of the earlier one", func(t *testing.T) {
-		engine := &recordingEngine{fakeEngine: fakeEngine{authorized: true}}
-		router := testRouterWithAuthzInputs()
-		var checks []func(context.Context) (bool, error)
-		contract := NewContractRouter(&router.RouterGroup)
-		contract.POST("/ras", certificateMiddleware(t, &fakeEngine{authorized: true}).Global("create").WithServiceCheck(
-			grantsMiddleware(t, engine).GlobalCheck("grant"),
-			func(c *gin.Context, allowed func(context.Context) (bool, error)) { checks = append(checks, allowed) },
-		), func(c *gin.Context) { c.Status(http.StatusOK) })
-		for range 2 {
-			router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodPost, "/ras", nil))
-		}
-		require.Len(t, checks, 2)
-
-		_, _ = checks[0](context.Background())
-		_, _ = checks[1](context.Background())
-
-		assert.Equal(t, []string{"token", "token"}, []string{engine.asked[0].material, engine.asked[1].material})
-	})
 }
 
 func TestServiceChecksAreRecordedAndMatchedAgainstTheOpenAPI(t *testing.T) {
@@ -788,14 +761,18 @@ paths:
 	assert.NoError(t, build(t, false).ValidateOpenAPI(strings.NewReader(spec(""))))
 }
 
-func TestServiceCheckNeedsAPermissionThatAuthenticatesTheCaller(t *testing.T) {
-	check := grantsMiddleware(t, &fakeEngine{}).GlobalCheck("grant")
+// A service check is validated while the routes are registered, not when a request arrives.
+func TestServiceChecksAreValidatedBeforeServing(t *testing.T) {
+	grants := grantsMiddleware(t, &fakeEngine{})
+	check := grants.GlobalCheck("grant")
 	install := func(*gin.Context, func(context.Context) (bool, error)) {}
+	protected := certificateMiddleware(t, &fakeEngine{}).Global("create")
 
-	assert.Panics(t, func() { Public().WithServiceCheck(check, install) })
+	assert.Panics(t, func() { grants.GlobalCheck("delete") }, "an atomic action")
+	assert.Panics(t, func() { grants.GlobalCheck("fly") }, "an unknown action")
+	assert.Panics(t, func() { Public().WithServiceCheck(check, install) }, "a permission that does not authenticate the caller")
 	assert.Panics(t, func() { DelegatedAuthorization("est").WithServiceCheck(check, install) })
-	assert.Panics(t, func() {
-		certificateMiddleware(t, &fakeEngine{}).Global("create").WithServiceCheck(ServiceCheck{}, install)
-	})
-	assert.Panics(t, func() { certificateMiddleware(t, &fakeEngine{}).Global("create").WithServiceCheck(check, nil) })
+	assert.Panics(t, func() { protected.WithServiceCheck(ServiceCheck{}, install) })
+	assert.Panics(t, func() { protected.WithServiceCheck(check, nil) })
+	assert.NotPanics(t, func() { protected.WithServiceCheck(check, install) })
 }

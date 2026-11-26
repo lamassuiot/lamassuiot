@@ -121,6 +121,11 @@ func (svc DMSManagerServiceBackend) CreateDMS(ctx context.Context, input service
 		lFunc.Errorf("webhook validation error: %s", err)
 		return nil, err
 	}
+	return locked(ctx, svc.dmsStorage, input.ID, func() (*models.DMS, error) { return svc.createDMS(ctx, lFunc, input) })
+}
+
+func (svc DMSManagerServiceBackend) createDMS(ctx context.Context, lFunc *logrus.Entry, input services.CreateDMSInput) (*models.DMS, error) {
+	var err error
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	if exists, _, err := svc.dmsStorage.SelectExists(ctx, input.ID); err != nil {
 		lFunc.Errorf("something went wrong while checking if DMS '%s' exists in storage engine: %s", input.ID, err)
@@ -175,7 +180,10 @@ func (svc DMSManagerServiceBackend) UpdateDMS(ctx context.Context, input service
 		lFunc.Errorf("webhook validation error: %s", err)
 		return nil, err
 	}
+	return locked(ctx, svc.dmsStorage, input.ID, func() (*models.DMS, error) { return svc.updateDMS(ctx, lFunc, input) })
+}
 
+func (svc DMSManagerServiceBackend) updateDMS(ctx context.Context, lFunc *logrus.Entry, input services.UpdateDMSInput) (*models.DMS, error) {
 	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{ID: input.ID})
 	if err != nil {
 		return nil, err
@@ -226,7 +234,10 @@ func (svc DMSManagerServiceBackend) UpdateDMSMetadata(ctx context.Context, input
 		lFunc.Errorf("UpdateDMSMetadata struct validation error: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
+	return locked(ctx, svc.dmsStorage, input.ID, func() (*models.DMS, error) { return svc.updateDMSMetadata(ctx, lFunc, input) })
+}
 
+func (svc DMSManagerServiceBackend) updateDMSMetadata(ctx context.Context, lFunc *logrus.Entry, input services.UpdateDMSMetadataInput) (*models.DMS, error) {
 	lFunc.Debugf("checking if DMS '%s' exists", input.ID)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, input.ID)
 	if err != nil {
@@ -259,7 +270,11 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 		lFunc.Errorf("struct validation error: %s", err)
 		return errs.ErrValidateBadRequest
 	}
+	_, err = locked(ctx, svc.dmsStorage, input.ID, func() (struct{}, error) { return struct{}{}, svc.deleteDMS(ctx, lFunc, input) })
+	return err
+}
 
+func (svc DMSManagerServiceBackend) deleteDMS(ctx context.Context, lFunc *logrus.Entry, input services.DeleteDMSInput) error {
 	id := input.ID
 	lFunc.Debugf("checking if DMS '%s' exists", id)
 	exists, dms, err := svc.dmsStorage.SelectExists(ctx, id)
@@ -292,6 +307,13 @@ func (svc DMSManagerServiceBackend) DeleteDMS(ctx context.Context, input service
 	}
 
 	return nil
+}
+
+// locked runs fn holding the lock of the RA: its saves, and those of its authz principal, never interleave, on any instance.
+func locked[T any](ctx context.Context, repo storage.DMSRepo, id string, fn func() (T, error)) (T, error) {
+	var out T
+	err := repo.WithLock(ctx, id, func() (err error) { out, err = fn(); return })
+	return out, err
 }
 
 func dmsPrincipalID(dmsID string) string {

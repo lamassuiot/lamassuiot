@@ -1,15 +1,19 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/x509"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -27,14 +31,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Unit tests (no Docker) of the authz principal that follows an RA. The integration suite in
-// assemblers/tests/dms-manager runs the same flows against the real authz, but Codecov only counts what runs here.
+// Unit tests (no Docker) of the authz principal that follows an RA; the integration suite in
+// assemblers/tests/dms-manager runs the same flows against the real authz.
 
 type dmsRepo struct {
 	storage.DMSRepo
 	dms                    map[string]*models.DMS
 	failInsert, failUpdate bool
 	failDelete             bool
+	beforeUpdate           func() // runs before Update stores, to pause a save
+	locks                  sync.Map
 }
 
 func (r *dmsRepo) SelectExists(_ context.Context, id string) (bool, *models.DMS, error) {
@@ -55,11 +61,21 @@ func (r *dmsRepo) Insert(_ context.Context, d *models.DMS) (*models.DMS, error) 
 }
 
 func (r *dmsRepo) Update(_ context.Context, d *models.DMS) (*models.DMS, error) {
+	if r.beforeUpdate != nil {
+		r.beforeUpdate()
+	}
 	if r.failUpdate {
 		return nil, fmt.Errorf("update failed")
 	}
 	r.dms[d.ID] = d
 	return d, nil
+}
+
+func (r *dmsRepo) WithLock(_ context.Context, id string, fn func() error) error {
+	lock, _ := r.locks.LoadOrStore(id, &sync.Mutex{})
+	lock.(*sync.Mutex).Lock()
+	defer lock.(*sync.Mutex).Unlock()
+	return fn()
 }
 
 func (r *dmsRepo) Delete(_ context.Context, id string) error {
@@ -304,6 +320,32 @@ func (e *dmsAuthzEnv) snapshot(t *testing.T, id string) string {
 	return string(raw)
 }
 
+// saveAs creates the RA, or updates it when it exists, with the context of a caller.
+func (e *dmsAuthzEnv) saveAs(ctx context.Context, id string, s models.DMSSettings) error {
+	if _, exists := e.repo.dms[id]; !exists {
+		_, err := e.svc.CreateDMS(ctx, services.CreateDMSInput{ID: id, Name: "Field devices", Settings: s})
+		return err
+	}
+	_, err := e.svc.UpdateDMS(ctx, services.UpdateDMSInput{ID: id, Name: "Field devices", Settings: &s})
+	return err
+}
+
+func (e *dmsAuthzEnv) deleteRA(id string) error {
+	return e.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: id})
+}
+
+// pinned is the fingerprint a principal config holds for the certificate of a CA.
+func pinned(ca *models.CACertificate) any {
+	return dmsPrincipalAuthConfig((*x509.Certificate)(ca.Certificate.Certificate), nil)["ca_trust"].(map[string]any)["value"]
+}
+
+// logged tells whether a warning with the text was logged.
+func (e *dmsAuthzEnv) logged(text string) bool {
+	return slices.ContainsFunc(e.logs.AllEntries(), func(l *logrus.Entry) bool {
+		return l.Level == logrus.WarnLevel && strings.Contains(l.Message, text)
+	})
+}
+
 func (e *dmsAuthzEnv) grantedPolicies(id string) []string {
 	var ids []string
 	for _, g := range e.authz.grants["dms:"+id] {
@@ -313,7 +355,7 @@ func (e *dmsAuthzEnv) grantedPolicies(id string) []string {
 }
 
 func TestDMSAuthzPrincipalFollowsTheDMS(t *testing.T) {
-	env, ctx := newDMSAuthzEnv(t, true), context.Background()
+	env := newDMSAuthzEnv(t, true)
 
 	require.NoError(t, env.create("ra-1", "ca-1", true))
 	require.NoError(t, env.create("ra-2", "ca-1", false))
@@ -331,56 +373,132 @@ func TestDMSAuthzPrincipalFollowsTheDMS(t *testing.T) {
 	assert.Contains(t, env.authz.principals, "dms:ra-1", "an update that omits the switch keeps it")
 	assert.Contains(t, env.grantedPolicies("ra-1"), "by-hand", "grants made by others are kept")
 
+	require.NoError(t, env.update("ra-1", principalSettings("ca-2", []string{"policy-b"}, map[string]string{"client_id": "x509.serial_number"})))
+	assert.ElementsMatch(t, []string{"policy-b", "by-hand"}, env.grantedPolicies("ra-1"), "policies taken out of the RA are revoked")
+	assert.Equal(t, map[string]any{"client_id": "x509.serial_number"}, (*env.authz.principals["dms:ra-1"].AuthConfig)["subject_attribute_mappings"])
+
 	require.NoError(t, env.update("ra-1", dmsSettings("ca-2", ptr(false))))
 	assert.NotContains(t, env.authz.principals, "dms:ra-1", "turning the switch off deletes the principal")
 	require.NoError(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
 	assert.Contains(t, env.authz.principals, "dms:ra-1")
-
-	require.NoError(t, env.svc.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-1"}))
-	assert.NotContains(t, env.authz.principals, "dms:ra-1", "deleting the RA deletes the principal")
-	require.NoError(t, env.svc.DeleteDMS(ctx, services.DeleteDMSInput{ID: "ra-2"}), "an RA without a principal deletes fine")
 }
 
-func TestDMSAuthzPrincipalTakesPoliciesAndMappingsFromTheRA(t *testing.T) {
+func TestDMSAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {
 	env := newDMSAuthzEnv(t, true)
-	mappings := func(id string) any {
-		return (*env.authz.principals["dms:"+id].AuthConfig)["subject_attribute_mappings"]
+	require.NoError(t, env.create("ra-1", "ca-1", true))
+	for i := range 5 {
+		env.authz.grants["dms:ra-1"] = append([]dto.PrincipalPolicyResponse{{PolicyID: fmt.Sprintf("obsolete-%d", i), GrantedBy: models.DMSManagerSource}}, env.authz.grants["dms:ra-1"]...)
 	}
 
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", []string{"policy-a"}, map[string]string{"client_id": "x509.serial_number"})})
-	require.NoError(t, err)
-	assert.Equal(t, []string{"policy-a"}, env.grantedPolicies("ra-1"))
-	assert.Equal(t, map[string]any{"client_id": "x509.serial_number"}, mappings("ra-1"))
+	require.NoError(t, env.update("ra-1", dmsSettings("ca-1", ptr(true))), "a wanted policy on a later page is not granted again")
 
-	require.NoError(t, env.update("ra-1", principalSettings("ca-1", []string{"policy-b", "policy-b"}, nil)), "a repeated id is granted once")
-	assert.Equal(t, []string{"policy-b"}, env.grantedPolicies("ra-1"), "policies taken out of the RA are revoked")
-	assert.Nil(t, mappings("ra-1"))
-	assert.Equal(t, []string{"policy-b"}, env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings.PolicyIDs)
-
-	require.NoError(t, env.update("ra-1", principalSettings("ca-1", nil, nil)), "a principal without policies is allowed")
-	assert.Contains(t, env.authz.principals, "dms:ra-1")
-	assert.Empty(t, env.grantedPolicies("ra-1"))
+	assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"), "obsolete grants on every page are revoked")
 }
 
-func TestDMSAuthzPrincipalRejectsAnUnsupportedMapping(t *testing.T) {
+func TestDMSAuthzPrincipalIsOnlyKeptWhenTheFeatureIsOn(t *testing.T) {
+	env := newDMSAuthzEnv(t, false)
+
+	assert.ErrorIs(t, env.create("ra-1", "ca-1", true), errs.ErrValidateBadRequest)
+	require.NoError(t, env.create("ra-2", "ca-1", false))
+	assert.NoError(t, env.deleteRA("ra-2"))
+}
+
+// What authz could not use is refused, and a failed save leaves neither an RA nor a principal behind.
+func TestDMSAuthzPrincipalSaveFailures(t *testing.T) {
+	badMapping := func(name, source string) func() models.DMSSettings {
+		return func() models.DMSSettings { return principalSettings("ca-1", nil, map[string]string{name: source}) }
+	}
+	tooMany := make([]string, 101)
+	for i := range tooMany {
+		tooMany[i] = fmt.Sprintf("policy-%03d", i)
+	}
+	cases := []struct {
+		name     string
+		id       string
+		settings func() models.DMSSettings // dmsSettings("ca-1", on) when nil
+		prepare  func(e *dmsAuthzEnv)
+		badInput bool // a 400, and not another error
+	}{
+		{name: "no Enrollment CA", settings: func() models.DMSSettings { return dmsSettings("", ptr(true)) }, badInput: true},
+		{name: "unknown Enrollment CA", settings: func() models.DMSSettings { return dmsSettings("nope", ptr(true)) }, badInput: true},
+		{name: "revoked Enrollment CA", prepare: func(e *dmsAuthzEnv) { e.ca1.Certificate.Status = models.StatusRevoked }, badInput: true},
+		{name: "id with a slash", id: "ra/x", badInput: true},
+		{name: "unknown policy", prepare: func(e *dmsAuthzEnv) { delete(e.authz.policies, "policy-b") }, badInput: true},
+		{name: "unsupported mapping source", settings: badMapping("client_id", "x509.subject.ou"), badInput: true},
+		{name: "mapping without a name", settings: badMapping(" ", "x509.subject.cn"), badInput: true},
+		{name: "mapping name with a space", settings: badMapping("client id", "x509.subject.cn"), badInput: true},
+		{name: "mapping name with surrounding space", settings: badMapping("client_id ", "x509.subject.cn"), badInput: true},
+		{name: "empty policy id", settings: func() models.DMSSettings { return principalSettings("ca-1", []string{""}, nil) }, badInput: true},
+		{name: "empty policy id, switch off", settings: func() models.DMSSettings {
+			s := principalSettings("ca-1", []string{""}, nil)
+			s.AuthzPrincipalSettings.Enabled = false
+			return s
+		}, badInput: true},
+		{name: "more than 100 policies", settings: func() models.DMSSettings { return principalSettings("ca-1", tooMany, nil) }, badInput: true},
+		{name: "principal of another type", prepare: func(e *dmsAuthzEnv) {
+			e.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "oidc"}
+		}, badInput: true},
+		{name: "x509 principal not managed for this RA", prepare: func(e *dmsAuthzEnv) {
+			e.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "x509", AuthConfig: &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}}
+		}, badInput: true},
+		{name: "a grant fails after the principal is created", prepare: func(e *dmsAuthzEnv) { e.authz.failGrant = true }},
+		{name: "storing the RA fails", prepare: func(e *dmsAuthzEnv) { e.repo.failInsert = true }},
+		{name: "authz can not tell whether a policy exists", prepare: func(e *dmsAuthzEnv) { e.policyErr = &authzsdk.APIError{StatusCode: 503} }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newDMSAuthzEnv(t, true)
+			foreign := map[string]*dto.PrincipalResponse{}
+			if tc.prepare != nil {
+				tc.prepare(env)
+			}
+			maps.Copy(foreign, env.authz.principals)
+			settings, id := dmsSettings("ca-1", ptr(true)), cmp.Or(tc.id, "ra-1")
+			if tc.settings != nil {
+				settings = tc.settings()
+			}
+
+			err := env.saveAs(env.ctx, id, settings)
+
+			require.Error(t, err)
+			assert.Equal(t, tc.badInput, errors.Is(err, errs.ErrValidateBadRequest), "a 400 only for what the caller got wrong")
+			assert.Empty(t, env.repo.dms, "the RA is not stored")
+			assert.Equal(t, foreign, env.authz.principals, "authz keeps what was there and gets nothing more")
+		})
+	}
+}
+
+// The settings of the caller are not rewritten, a response never carries null for a list or a map, and
+// a principal without policies is allowed, with a warning.
+func TestDMSAuthzPrincipalNormalizesTheSettings(t *testing.T) {
 	env := newDMSAuthzEnv(t, true)
+	given := principalSettings("ca-1", []string{"policy-b", "policy-a", "policy-b"}, nil)
+	given.AuthzPrincipalSettings.Enabled = false // stored as they are, and granted when the switch is turned on
 
-	_, err := env.svc.CreateDMS(context.Background(), services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", nil, map[string]string{"client_id": "x509.subject.ou"})})
+	require.NoError(t, env.saveAs(env.ctx, "ra-1", given))
 
-	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
-	assert.Empty(t, env.authz.principals)
+	assert.Equal(t, []string{"policy-b", "policy-a", "policy-b"}, given.AuthzPrincipalSettings.PolicyIDs, "the caller's value is untouched")
+	raw, err := json.Marshal(env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"enabled":false,"policy_ids":["policy-a","policy-b"],"subject_attribute_mappings":{}}`, string(raw))
+
+	require.NoError(t, env.update("ra-1", principalSettings("ca-1", nil, nil)))
+	assert.Contains(t, env.authz.principals, "dms:ra-1")
+	assert.Empty(t, env.grantedPolicies("ra-1"))
+	assert.True(t, env.logged("has no policies"))
 }
 
 // Setting what the principal of an RA grants is granting policies in authz, so it needs that permission.
 // Taking grants away never does: turning the switch off, dropping policies or deleting the RA.
 func TestDMSAuthzPrincipalNeedsThePermissionToGrantMore(t *testing.T) {
-	// Settings are built afresh on every use: the service normalizes them in place.
+	// Settings are built afresh on every use: the service works on copies, but a test must not depend on it.
 	withPolicies := func(caID string, policyIDs ...string) func() models.DMSSettings {
 		return func() models.DMSSettings {
 			return principalSettings(caID, policyIDs, map[string]string{"device_id": "x509.subject.cn"})
 		}
 	}
 	off := func() models.DMSSettings { return dmsSettings("ca-1", ptr(false)) }
+	empty := func() models.DMSSettings { return principalSettings("ca-1", []string{}, map[string]string{}) } // what the dashboard sends for null
 	cases := []struct {
 		name          string
 		before, after func() models.DMSSettings // a nil before creates the RA
@@ -391,6 +509,7 @@ func TestDMSAuthzPrincipalNeedsThePermissionToGrantMore(t *testing.T) {
 		{name: "create with policies", after: withPolicies("ca-1", "policy-a"), needed: true},
 		{name: "update that keeps everything", before: withPolicies("ca-1", "policy-a", "policy-b"), after: withPolicies("ca-1", "policy-b", "policy-a", "policy-a")},
 		{name: "update that omits the principal", before: withPolicies("ca-1", "policy-a"), after: func() models.DMSSettings { return dmsSettings("ca-1", nil) }},
+		{name: "update with empty lists where there were none", before: func() models.DMSSettings { return principalSettings("ca-1", nil, nil) }, after: empty},
 		{name: "update that drops a policy", before: withPolicies("ca-1", "policy-a", "policy-b"), after: withPolicies("ca-1", "policy-a")},
 		{name: "update that turns the switch off", before: withPolicies("ca-1", "policy-a"), after: off},
 		{name: "update that adds a policy", before: withPolicies("ca-1", "policy-a"), after: withPolicies("ca-1", "policy-a", "policy-b"), needed: true},
@@ -406,20 +525,11 @@ func TestDMSAuthzPrincipalNeedsThePermissionToGrantMore(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/allowed=%v", tc.name, allowed), func(t *testing.T) {
 				env := newDMSAuthzEnv(t, true)
 				if tc.before != nil {
-					_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: tc.before()})
-					require.NoError(t, err)
+					require.NoError(t, env.saveAs(env.ctx, "ra-1", tc.before()))
 				}
-				before := env.snapshot(t, "ra-1")
-				calls := 0
-				ctx := services.WithPolicyGrantCheck(context.Background(), grantCheck(allowed, &calls))
+				before, calls := env.snapshot(t, "ra-1"), 0
 
-				var err error
-				if tc.before == nil {
-					_, err = env.svc.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: tc.after()})
-				} else {
-					after := tc.after()
-					_, err = env.svc.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &after})
-				}
+				err := env.saveAs(services.WithPolicyGrantCheck(context.Background(), grantCheck(allowed, &calls)), "ra-1", tc.after())
 
 				switch {
 				case !tc.needed:
@@ -438,224 +548,54 @@ func TestDMSAuthzPrincipalNeedsThePermissionToGrantMore(t *testing.T) {
 	}
 }
 
-func TestDMSAuthzPrincipalGrantsNothingNewWithoutACaller(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	ctx := context.Background() // an in-process call carries no check: it can not grant on its own
-
-	_, err := env.svc.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", []string{"policy-a"}, nil)})
-	assert.ErrorIs(t, err, errs.ErrDMSAuthzPolicyGrantForbidden)
-
-	_, err = env.svc.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-2", Name: "Field devices", Settings: principalSettings("ca-1", nil, nil)})
-	assert.NoError(t, err, "a principal without policies grants nothing")
-
-	failing := services.WithPolicyGrantCheck(ctx, func(context.Context) (bool, error) { return false, fmt.Errorf("authz down") })
-	_, err = env.svc.CreateDMS(failing, services.CreateDMSInput{ID: "ra-3", Name: "Field devices", Settings: principalSettings("ca-1", []string{"policy-a"}, nil)})
-	require.Error(t, err)
-	assert.NotErrorIs(t, err, errs.ErrDMSAuthzPolicyGrantForbidden, "an unanswered check is an error, not a denial")
-	assert.NotContains(t, env.repo.dms, "ra-3")
-}
-
-func TestDMSAuthzPrincipalIsOnlyKeptWhenTheFeatureIsOn(t *testing.T) {
-	env := newDMSAuthzEnv(t, false)
-
-	assert.ErrorIs(t, env.create("ra-1", "ca-1", true), errs.ErrValidateBadRequest)
-	require.NoError(t, env.create("ra-2", "ca-1", false))
-	assert.NoError(t, env.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-2"}))
-}
-
-func TestDMSAuthzPrincipalCreateFailureLeavesNothingBehind(t *testing.T) {
-	cases := []struct {
-		name    string
-		id, ca  string
-		prepare func(e *dmsAuthzEnv)
-		wantErr error
-	}{
-		{name: "no Enrollment CA", id: "ra-1", ca: "", wantErr: errs.ErrValidateBadRequest},
-		{name: "unknown Enrollment CA", id: "ra-1", ca: "nope", wantErr: errs.ErrValidateBadRequest},
-		{name: "revoked Enrollment CA", id: "ra-1", ca: "ca-1", wantErr: errs.ErrValidateBadRequest, prepare: func(e *dmsAuthzEnv) { e.ca1.Certificate.Status = models.StatusRevoked }},
-		{name: "id with a slash", id: "ra/x", ca: "ca-1", wantErr: errs.ErrValidateBadRequest},
-		{name: "unknown policy", id: "ra-1", ca: "ca-1", wantErr: errs.ErrValidateBadRequest, prepare: func(e *dmsAuthzEnv) { delete(e.authz.policies, "policy-b") }},
-		{name: "a grant fails after the principal is created", id: "ra-1", ca: "ca-1", prepare: func(e *dmsAuthzEnv) { e.authz.failGrant = true }},
-		{name: "storing the RA fails", id: "ra-1", ca: "ca-1", prepare: func(e *dmsAuthzEnv) { e.repo.failInsert = true }},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			env := newDMSAuthzEnv(t, true)
-			if tc.prepare != nil {
-				tc.prepare(env)
-			}
-
-			err := env.create(tc.id, tc.ca, true)
-
-			require.Error(t, err)
-			if tc.wantErr != nil {
-				assert.ErrorIs(t, err, tc.wantErr)
-			}
-			assert.Empty(t, env.repo.dms, "the RA is not stored")
-			assert.Empty(t, env.authz.principals, "no principal is left behind")
-		})
-	}
-
-	t.Run("an x509 principal not managed for this RA is kept", func(t *testing.T) {
-		env := newDMSAuthzEnv(t, true)
-		config := &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}
-		env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "x509", AuthConfig: config}
-
-		assert.ErrorIs(t, env.create("ra-1", "ca-1", true), errs.ErrValidateBadRequest)
-		assert.Equal(t, config, env.authz.principals["dms:ra-1"].AuthConfig)
-	})
-
-	t.Run("principal of another type is kept", func(t *testing.T) {
-		env := newDMSAuthzEnv(t, true)
-		env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "oidc"}
-
-		require.Error(t, env.create("ra-1", "ca-1", true))
-		assert.Equal(t, "oidc", env.authz.principals["dms:ra-1"].Type)
-	})
-}
-
-func TestDMSAuthzPrincipalFailedUpdateRestoresThePrincipal(t *testing.T) {
-	cases := []struct {
-		name    string
-		prepare func(e *dmsAuthzEnv)
-	}{
-		{name: "storing the RA fails", prepare: func(e *dmsAuthzEnv) { e.repo.failUpdate = true }},
-		{name: "a grant fails", prepare: func(e *dmsAuthzEnv) {
-			e.authz.grants["dms:ra-1"] = e.authz.grants["dms:ra-1"][:1]
-			e.authz.failGrant = true
-		}},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			env := newDMSAuthzEnv(t, true)
-			require.NoError(t, env.create("ra-1", "ca-1", true))
-			tc.prepare(env)
-			before := env.authz.principals["dms:ra-1"].AuthConfig
-
-			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
-
-			assert.Equal(t, before, env.authz.principals["dms:ra-1"].AuthConfig, "the principal does not trust the CA that was never saved")
-			assert.Equal(t, "ca-1", env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA)
-		})
-	}
-}
-
-func TestDMSAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
+// Without a check in the context (a call that did not come through the HTTP layer) a caller can not grant, a check
+// that fails is an error and not a denial, and a caller who may not grant is not told which policies exist.
+func TestDMSAuthzPrincipalWithoutAnAnswerFromTheCheck(t *testing.T) {
+	failing := func(context.Context) (bool, error) { return false, fmt.Errorf("authz down") }
+	deny := func(context.Context) (bool, error) { return false, nil }
 	cases := []struct {
 		name     string
-		newerCA  string
-		failRead bool // the first request can not read the principal back
+		ctx      context.Context
+		policies []string
+		want     error // nil: any error that is not a denial
 	}{
-		{name: "another CA", newerCA: "ca-3"},
-		{name: "the same CA", newerCA: "ca-2"},
-		{name: "another CA and a failed read", newerCA: "ca-3", failRead: true},
+		{name: "no check", ctx: context.Background(), policies: []string{"policy-a"}, want: errs.ErrDMSAuthzPolicyGrantForbidden},
+		{name: "a check that fails", ctx: services.WithPolicyGrantCheck(context.Background(), failing), policies: []string{"policy-a"}},
+		{name: "an unknown policy, without the permission", ctx: services.WithPolicyGrantCheck(context.Background(), deny), policies: []string{"no-such-policy"}, want: errs.ErrDMSAuthzPolicyGrantForbidden},
+		{name: "no policies need no check", ctx: context.Background(), want: errors.ErrUnsupported},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			env := newDMSAuthzEnv(t, true)
-			require.NoError(t, env.create("ra-1", "ca-1", true))
-			env.authz.grants["dms:ra-1"] = env.authz.grants["dms:ra-1"][:1]
-			// While the first update grants the missing policy, the second one saves. Then the first one fails.
-			env.authz.onGrant = func() {
-				require.NoError(t, env.update("ra-1", dmsSettings(tc.newerCA, ptr(true))))
-				env.authz.failGet = tc.failRead
+
+			err := env.saveAs(tc.ctx, "ra-1", principalSettings("ca-1", tc.policies, nil))
+
+			switch {
+			case errors.Is(tc.want, errors.ErrUnsupported):
+				assert.NoError(t, err)
+			case tc.want != nil:
+				assert.ErrorIs(t, err, tc.want)
+				assert.NotErrorIs(t, err, errs.ErrValidateBadRequest)
+			default:
+				require.Error(t, err)
+				assert.NotErrorIs(t, err, errs.ErrDMSAuthzPolicyGrantForbidden)
 			}
-
-			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
-
-			env.authz.failGet = false
-			saved := env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA
-			assert.Equal(t, tc.newerCA, saved, "the newer update was saved")
-			cfg := dmsPrincipalAuthConfig((*x509.Certificate)(env.cas[saved].Certificate.Certificate), nil)
-			assert.Equal(t, cfg["ca_trust"].(map[string]any)["value"], env.trusts("ra-1"), "the principal trusts the CA that was saved")
+			if err != nil {
+				assert.Empty(t, env.repo.dms)
+			}
 		})
 	}
-}
-
-// A failed delete, or a second one racing a successful delete, must never bring the CA trust back.
-func TestDMSAuthzPrincipalIsNotRecreatedWhenSavingFailsAfterDeletingIt(t *testing.T) {
-	cases := map[string]func(e *dmsAuthzEnv) error{
-		"deleting the RA": func(e *dmsAuthzEnv) error {
-			e.repo.failDelete = true
-			return e.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"})
-		},
-		"turning the switch off": func(e *dmsAuthzEnv) error {
-			e.repo.failUpdate = true
-			return e.update("ra-1", dmsSettings("ca-1", ptr(false)))
-		},
-	}
-	for name, fail := range cases {
-		t.Run(name, func(t *testing.T) {
-			env := newDMSAuthzEnv(t, true)
-			require.NoError(t, env.create("ra-1", "ca-1", true))
-
-			require.Error(t, fail(env))
-
-			assert.NotContains(t, env.authz.principals, "dms:ra-1")
-		})
-	}
-}
-
-// Someone else's principal under the id of an RA is theirs: neither deleting the RA nor turning its switch off removes it.
-func TestDMSAuthzPrincipalKeepsAPrincipalItDoesNotManage(t *testing.T) {
-	cases := map[string]func(e *dmsAuthzEnv) error{
-		"deleting the RA": func(e *dmsAuthzEnv) error {
-			return e.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"})
-		},
-		"turning the switch off": func(e *dmsAuthzEnv) error { return e.update("ra-1", dmsSettings("ca-1", ptr(false))) },
-	}
-	for name, remove := range cases {
-		t.Run(name, func(t *testing.T) {
-			env := newDMSAuthzEnv(t, true)
-			require.NoError(t, env.create("ra-1", "ca-1", true))
-			own := &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}
-			env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "x509", AuthConfig: own}
-
-			require.NoError(t, remove(env))
-
-			assert.Equal(t, own, env.authz.principals["dms:ra-1"].AuthConfig)
-		})
-	}
-}
-
-func TestDMSAuthzPrincipalDeleteFailsWhenAuthzFails(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	require.NoError(t, env.create("ra-1", "ca-1", true))
-	env.authz.failDelete = true
-
-	require.Error(t, env.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"}))
-
-	assert.Contains(t, env.repo.dms, "ra-1", "the RA is kept")
-	assert.Contains(t, env.authz.principals, "dms:ra-1", "and so is its principal")
-}
-
-func TestDMSAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	require.NoError(t, env.create("ra-1", "ca-1", true))
-	grants := []dto.PrincipalPolicyResponse{}
-	for i := range 5 {
-		grants = append(grants, dto.PrincipalPolicyResponse{PolicyID: fmt.Sprintf("obsolete-%d", i), GrantedBy: models.DMSManagerSource})
-	}
-	env.authz.grants["dms:ra-1"] = append(grants, env.authz.grants["dms:ra-1"]...)
-
-	require.NoError(t, env.update("ra-1", dmsSettings("ca-1", ptr(true))), "a wanted policy on a later page is not granted again")
-
-	assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"), "obsolete grants on every page are revoked")
-}
-
-func TestDMSAuthzPrincipalAuthConfigPinsTheCA(t *testing.T) {
-	crt := (*x509.Certificate)(newDMSAuthzEnv(t, true).ca1.Certificate.Certificate)
-
-	cfg := dmsPrincipalAuthConfig(crt, map[string]string{"device_id": "x509.subject.cn"})
-
-	assert.Equal(t, "any_from_ca", cfg["match_mode"])
-	assert.Equal(t, map[string]any{"device_id": "x509.subject.cn"}, cfg["subject_attribute_mappings"])
-	assert.Contains(t, cfg["ca_trust"].(map[string]any)["value"], "SHA256:")
-	assert.NotContains(t, dmsPrincipalAuthConfig(crt, nil), "subject_attribute_mappings")
 }
 
 // The check compares with what authz grants now: a stale stored RA can not grant again what authz no longer gives.
 func TestDMSAuthzPrincipalComparesWithWhatAuthzGrantsNow(t *testing.T) {
+	reissue := func(subject string) func(t *testing.T, e *dmsAuthzEnv) {
+		return func(t *testing.T, e *dmsAuthzEnv) {
+			crt, err := chelpers.GenerateSelfSignedCertificate(e.keys["ca-1"], subject)
+			require.NoError(t, err)
+			e.ca1.Certificate.Certificate = (*models.X509Certificate)(crt)
+		}
+	}
 	cases := []struct {
 		name   string
 		drift  func(t *testing.T, e *dmsAuthzEnv)
@@ -670,27 +610,15 @@ func TestDMSAuthzPrincipalComparesWithWhatAuthzGrantsNow(t *testing.T) {
 			delete(e.authz.grants, "dms:ra-1")
 		}},
 		{name: "the principal trusts another CA in authz", needed: true, drift: func(_ *testing.T, e *dmsAuthzEnv) {
-			p := e.authz.principals["dms:ra-1"]
 			moved := dmsPrincipalAuthConfig((*x509.Certificate)(e.ca2.Certificate.Certificate), map[string]string{"device_id": "x509.subject.cn"})
-			moved[dmsManagerMarker] = (*p.AuthConfig)[dmsManagerMarker]
-			p.AuthConfig = &moved
+			moved[dmsManagerMarker] = (*e.authz.principals["dms:ra-1"].AuthConfig)[dmsManagerMarker]
+			e.authz.principals["dms:ra-1"].AuthConfig = &moved
 		}},
 		{name: "the principal was narrowed by hand in authz", needed: true, drift: func(_ *testing.T, e *dmsAuthzEnv) {
 			(*e.authz.principals["dms:ra-1"].AuthConfig)["match_mode"] = "cn_and_ca"
-			(*e.authz.principals["dms:ra-1"].AuthConfig)["subject_cn"] = "device-1"
 		}},
-		{name: "the Enrollment CA was reissued with the same key but another subject", needed: true, drift: func(t *testing.T, e *dmsAuthzEnv) {
-			crt, err := chelpers.GenerateSelfSignedCertificate(e.keys["ca-1"], "another-subject")
-			require.NoError(t, err)
-			e.ca1.Certificate.Certificate = (*models.X509Certificate)(crt)
-		}},
-		{name: "the Enrollment CA was reissued with the same key", drift: func(t *testing.T, e *dmsAuthzEnv) {
-			old := e.trusts("ra-1")
-			crt, err := chelpers.GenerateSelfSignedCertificate(e.keys["ca-1"], "ca-1")
-			require.NoError(t, err)
-			e.ca1.Certificate.Certificate = (*models.X509Certificate)(crt)
-			require.NotEqual(t, old, dmsPrincipalAuthConfig(crt, nil)["ca_trust"].(map[string]any)["value"], "a new certificate")
-		}},
+		{name: "the Enrollment CA was reissued with the same key", drift: reissue("ca-1")},
+		{name: "the Enrollment CA was reissued with the same key but another subject", needed: true, drift: reissue("another-subject")},
 	}
 	for _, tc := range cases {
 		for _, allowed := range []bool{true, false} {
@@ -699,10 +627,8 @@ func TestDMSAuthzPrincipalComparesWithWhatAuthzGrantsNow(t *testing.T) {
 				require.NoError(t, env.create("ra-1", "ca-1", true))
 				tc.drift(t, env)
 				calls := 0
-				ctx := services.WithPolicyGrantCheck(context.Background(), grantCheck(allowed, &calls))
 
-				same := dmsSettings("ca-1", ptr(true))
-				_, err := env.svc.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &same})
+				err := env.saveAs(services.WithPolicyGrantCheck(context.Background(), grantCheck(allowed, &calls)), "ra-1", dmsSettings("ca-1", ptr(true)))
 
 				if tc.needed && !allowed {
 					assert.ErrorIs(t, err, errs.ErrDMSAuthzPolicyGrantForbidden)
@@ -711,8 +637,7 @@ func TestDMSAuthzPrincipalComparesWithWhatAuthzGrantsNow(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, map[bool]int{true: 1, false: 0}[tc.needed], calls)
 				assert.ElementsMatch(t, []string{"policy-a", "policy-b"}, env.grantedPolicies("ra-1"))
-				current := dmsPrincipalAuthConfig((*x509.Certificate)(env.ca1.Certificate.Certificate), nil)
-				assert.Equal(t, current["ca_trust"].(map[string]any)["value"], env.trusts("ra-1"), "the principal pins the current certificate")
+				assert.Equal(t, pinned(env.ca1), env.trusts("ra-1"), "the principal pins the current certificate")
 			})
 		}
 	}
@@ -721,37 +646,37 @@ func TestDMSAuthzPrincipalComparesWithWhatAuthzGrantsNow(t *testing.T) {
 // Listing a policy the principal already holds, granted by someone else, grants nothing new.
 func TestDMSAuthzPrincipalCanListAPolicyItAlreadyHolds(t *testing.T) {
 	env := newDMSAuthzEnv(t, true)
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", []string{"policy-a"}, nil)})
-	require.NoError(t, err)
+	require.NoError(t, env.saveAs(env.ctx, "ra-1", principalSettings("ca-1", []string{"policy-a"}, nil)))
 	env.authz.grants["dms:ra-1"] = append(env.authz.grants["dms:ra-1"], dto.PrincipalPolicyResponse{PolicyID: "policy-b", GrantedBy: "admin"})
 	calls := 0
 
-	both := principalSettings("ca-1", []string{"policy-a", "policy-b"}, nil)
-	_, err = env.svc.UpdateDMS(services.WithPolicyGrantCheck(context.Background(), grantCheck(false, &calls)), services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &both})
+	err := env.saveAs(services.WithPolicyGrantCheck(context.Background(), grantCheck(false, &calls)), "ra-1", principalSettings("ca-1", []string{"policy-a", "policy-b"}, nil))
 
 	require.NoError(t, err)
 	assert.Zero(t, calls)
 	assert.Equal(t, []dto.PrincipalPolicyResponse{{PolicyID: "policy-a", GrantedBy: models.DMSManagerSource}, {PolicyID: "policy-b", GrantedBy: "admin"}}, env.authz.grants["dms:ra-1"])
 }
 
-// A failed save takes back the grants it made; those it revoked stay revoked, so a failure never adds access.
-func TestDMSAuthzPrincipalFailedSaveTakesBackItsGrants(t *testing.T) {
-	t.Run("storing the RA fails", func(t *testing.T) {
+// A failed save takes back what it did in authz: the CA the principal trusts and the grants it made. Grants it
+// revoked stay revoked, so a failure never adds access, and a change made by someone else in authz stays.
+func TestDMSAuthzPrincipalFailedSaveTakesBackWhatItDid(t *testing.T) {
+	newEnv := func(t *testing.T, s models.DMSSettings) *dmsAuthzEnv {
 		env := newDMSAuthzEnv(t, true)
-		_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", []string{"policy-a"}, nil)})
-		require.NoError(t, err)
+		require.NoError(t, env.saveAs(env.ctx, "ra-1", s))
+		return env
+	}
+	t.Run("storing the RA fails", func(t *testing.T) {
+		env := newEnv(t, principalSettings("ca-1", []string{"policy-a"}, nil))
 		trusted := env.trusts("ra-1")
 		env.repo.failUpdate = true
 
 		require.Error(t, env.update("ra-1", principalSettings("ca-2", []string{"policy-a", "policy-b"}, nil)))
 
+		assert.Equal(t, trusted, env.trusts("ra-1"), "the principal does not trust the CA that was never saved")
 		assert.Equal(t, []string{"policy-a"}, env.grantedPolicies("ra-1"))
-		assert.Equal(t, trusted, env.trusts("ra-1"))
 	})
 	t.Run("a grant fails half way", func(t *testing.T) {
-		env := newDMSAuthzEnv(t, true)
-		_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", nil, nil)})
-		require.NoError(t, err)
+		env := newEnv(t, principalSettings("ca-1", nil, nil))
 		env.authz.grantsLeft = ptr(1)
 
 		require.Error(t, env.update("ra-1", principalSettings("ca-1", []string{"policy-a", "policy-b"}, nil)))
@@ -759,8 +684,7 @@ func TestDMSAuthzPrincipalFailedSaveTakesBackItsGrants(t *testing.T) {
 		assert.Empty(t, env.grantedPolicies("ra-1"), "the grant made before the failure is taken back")
 	})
 	t.Run("a revoked grant stays revoked", func(t *testing.T) {
-		env := newDMSAuthzEnv(t, true)
-		require.NoError(t, env.create("ra-1", "ca-1", true))
+		env := newEnv(t, dmsSettings("ca-1", ptr(true)))
 		env.repo.failUpdate = true
 
 		require.Error(t, env.update("ra-1", principalSettings("ca-1", []string{"policy-a"}, nil)))
@@ -768,161 +692,144 @@ func TestDMSAuthzPrincipalFailedSaveTakesBackItsGrants(t *testing.T) {
 		assert.Equal(t, []string{"policy-a"}, env.grantedPolicies("ra-1"))
 		assert.Equal(t, []string{"policy-a", "policy-b"}, env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings.PolicyIDs, "the stored RA did not change")
 	})
-}
+	for _, failRead := range []bool{false, true} { // the failed save can not read the principal back to confirm it is its own
+		t.Run(fmt.Sprintf("a change made in authz stays, failed read=%v", failRead), func(t *testing.T) {
+			env := newEnv(t, dmsSettings("ca-1", ptr(true)))
+			env.authz.grants["dms:ra-1"] = env.authz.grants["dms:ra-1"][:1]
+			// While the update grants the missing policy, an admin re-pins the principal in authz. Then the update fails.
+			env.authz.onGrant = func() {
+				cfg := dmsPrincipalAuthConfig((*x509.Certificate)(env.ca3.Certificate.Certificate), nil)
+				cfg[dmsManagerMarker] = map[string]any{"dms_id": "ra-1", "revision": "admin"}
+				env.authz.principals["dms:ra-1"].AuthConfig = &cfg
+				env.authz.failGet = failRead
+			}
 
-// The settings are stored even with the switch off, and granted as they are when it is turned on.
-func TestDMSAuthzPrincipalSettingsAreCheckedOnEverySave(t *testing.T) {
-	cases := map[string]models.AuthzPrincipalSettings{
-		"an unsupported mapping source":         {SubjectAttributeMappings: map[string]string{"client_id": "x509.subject.ou"}},
-		"a mapping without a name":              {SubjectAttributeMappings: map[string]string{" ": "x509.subject.cn"}},
-		"a mapping name with a space":           {SubjectAttributeMappings: map[string]string{"client id": "x509.subject.cn"}},
-		"a mapping name with surrounding space": {SubjectAttributeMappings: map[string]string{"client_id ": "x509.subject.cn"}},
-		"an empty policy id":                    {PolicyIDs: []string{""}},
-		"an empty policy id with the switch on": {Enabled: true, PolicyIDs: []string{""}},
-	}
-	for name, principal := range cases {
-		t.Run(name, func(t *testing.T) {
-			env := newDMSAuthzEnv(t, true)
-			s := dmsSettings("ca-1", nil)
-			s.AuthzPrincipalSettings = &principal
+			require.Error(t, env.update("ra-1", dmsSettings("ca-2", ptr(true))))
 
-			_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: s})
-
-			assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
-			assert.Empty(t, env.repo.dms)
-			assert.Empty(t, env.authz.principals)
+			env.authz.failGet = false
+			assert.Equal(t, pinned(env.ca3), env.trusts("ra-1"), "the admin's change stays")
 		})
 	}
-	t.Run("repeated policy ids are stored once, also with the switch off", func(t *testing.T) {
+}
+
+// Deleting an RA, or turning its switch off, takes its principal and the grants of it; what it can not decide stays.
+func TestDMSAuthzPrincipalWhenTheRAIsDeleted(t *testing.T) {
+	newEnv := func(t *testing.T, on bool) *dmsAuthzEnv {
 		env := newDMSAuthzEnv(t, true)
-		s := principalSettings("ca-1", []string{"policy-b", "policy-a", "policy-b"}, nil)
-		s.AuthzPrincipalSettings.Enabled = false
+		require.NoError(t, env.create("ra-1", "ca-1", on))
+		return env
+	}
+	t.Run("the principal and its grants go with the RA", func(t *testing.T) {
+		env := newEnv(t, true)
 
-		_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: s})
+		require.NoError(t, env.deleteRA("ra-1"))
 
-		require.NoError(t, err)
-		assert.Equal(t, []string{"policy-a", "policy-b"}, env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings.PolicyIDs)
+		assert.NotContains(t, env.authz.principals, "dms:ra-1")
+		assert.Empty(t, env.authz.grants["dms:ra-1"])
+		assert.Empty(t, env.repo.dms)
 	})
-}
+	t.Run("an RA that never had a principal is deleted", func(t *testing.T) {
+		env := newEnv(t, false)
 
-func TestDMSAuthzPrincipalWarnsWithoutPolicies(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
+		require.NoError(t, env.deleteRA("ra-1"))
 
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", nil, nil)})
-
-	require.NoError(t, err)
-	warned := slices.ContainsFunc(env.logs.AllEntries(), func(e *logrus.Entry) bool {
-		return e.Level == logrus.WarnLevel && strings.Contains(e.Message, "has no policies")
+		assert.Empty(t, env.repo.dms)
 	})
-	assert.True(t, warned, "a principal without policies is logged")
+	for name, setup := range map[string]func(a *authzStub){"reading": func(a *authzStub) { a.failGet = true }, "deleting": func(a *authzStub) { a.failDelete = true }} {
+		t.Run("an authz that fails "+name+" the principal keeps the RA and its principal", func(t *testing.T) {
+			env := newEnv(t, true)
+			setup(env.authz)
+
+			require.Error(t, env.deleteRA("ra-1"))
+
+			assert.Contains(t, env.repo.dms, "ra-1")
+			assert.Contains(t, env.authz.principals, "dms:ra-1")
+		})
+	}
+	for name, fail := range map[string]func(e *dmsAuthzEnv) error{
+		"deleting the RA": func(e *dmsAuthzEnv) error { e.repo.failDelete = true; return e.deleteRA("ra-1") },
+		"turning the switch off": func(e *dmsAuthzEnv) error {
+			e.repo.failUpdate = true
+			return e.update("ra-1", dmsSettings("ca-1", ptr(false)))
+		},
+	} {
+		t.Run("a failed save does not bring the trust back when "+name, func(t *testing.T) {
+			env := newEnv(t, true)
+
+			require.Error(t, fail(env))
+
+			assert.NotContains(t, env.authz.principals, "dms:ra-1")
+		})
+	}
+	t.Run("a principal kept while the switch is off goes too", func(t *testing.T) {
+		env := newEnv(t, true)
+		env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings = &models.AuthzPrincipalSettings{}
+
+		require.NoError(t, env.deleteRA("ra-1"))
+
+		assert.NotContains(t, env.authz.principals, "dms:ra-1")
+	})
+	for name, remove := range map[string]func(e *dmsAuthzEnv) error{
+		"deleting the RA":        func(e *dmsAuthzEnv) error { return e.deleteRA("ra-1") },
+		"turning the switch off": func(e *dmsAuthzEnv) error { return e.update("ra-1", dmsSettings("ca-1", ptr(false))) },
+	} {
+		t.Run("a principal it does not manage stays when "+name, func(t *testing.T) {
+			env := newEnv(t, true)
+			own := &authzmodels.AuthConfig{"match_mode": "serial_and_ca"}
+			env.authz.principals["dms:ra-1"] = &dto.PrincipalResponse{ID: "dms:ra-1", Type: "x509", AuthConfig: own}
+
+			require.NoError(t, remove(env))
+
+			assert.Equal(t, own, env.authz.principals["dms:ra-1"].AuthConfig)
+		})
+	}
+	// Looking for a leftover principal is best effort and bounded: authz down or hung does not hold up the delete.
+	for name, setup := range map[string]func(a *authzStub){"is down": func(a *authzStub) { a.failGet = true }, "hangs": func(a *authzStub) { a.hang = true }} {
+		t.Run("an RA without a principal is deleted when authz "+name, func(t *testing.T) {
+			env := newEnv(t, false)
+			setup(env.authz)
+			done := make(chan error, 1)
+
+			go func() { done <- env.deleteRA("ra-1") }()
+
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(10 * time.Second):
+				t.Fatal("deleting an RA waited for authz")
+			}
+			assert.Empty(t, env.repo.dms)
+			assert.True(t, env.logged("leftover authz principal"), "the failed look is logged")
+		})
+	}
 }
 
-func TestDMSAuthzPrincipalPolicyLookupFailureIsNotABadRequest(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	env.policyErr = &authzsdk.APIError{StatusCode: 503}
-
-	err := env.create("ra-1", "ca-1", true)
-
-	require.Error(t, err)
-	assert.NotErrorIs(t, err, errs.ErrValidateBadRequest, "authz being down is not the caller's fault")
-	assert.Empty(t, env.repo.dms)
-	assert.Empty(t, env.authz.principals)
-}
-
-// A principal can outlive its switch (a crash, a failed undo); deleting the RA still removes it.
-func TestDMSDeleteRemovesAPrincipalKeptWhileTheSwitchIsOff(t *testing.T) {
+// Two overlapping saves of the CA of an RA must leave authz trusting the CA that the RA names.
+func TestDMSAuthzPrincipalFollowsTheLastSavedCAWhenSavesOverlap(t *testing.T) {
 	env := newDMSAuthzEnv(t, true)
 	require.NoError(t, env.create("ra-1", "ca-1", true))
-	env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings = &models.AuthzPrincipalSettings{}
-
-	require.NoError(t, env.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"}))
-
-	assert.NotContains(t, env.authz.principals, "dms:ra-1")
-}
-
-// Looking for a leftover principal is best effort: an RA without a principal is deleted even when authz is down.
-func TestDMSDeleteDoesNotDependOnAuthzWhenTheRAHasNoPrincipal(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	require.NoError(t, env.create("ra-1", "ca-1", false))
-	env.authz.failGet = true
-
-	require.NoError(t, env.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"}))
-
-	assert.Empty(t, env.repo.dms)
-	warned := slices.ContainsFunc(env.logs.AllEntries(), func(e *logrus.Entry) bool {
-		return e.Level == logrus.WarnLevel && strings.Contains(e.Message, "leftover authz principal")
-	})
-	assert.True(t, warned, "the failed look is logged")
-}
-
-// The dashboard sends [] and {} for what an older client stored as null: neither widens the principal.
-func TestDMSAuthzPrincipalTreatsMissingAndEmptyAlike(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", nil, nil)})
-	require.NoError(t, err)
-	calls := 0
-
-	empty := principalSettings("ca-1", []string{}, map[string]string{})
-	_, err = env.svc.UpdateDMS(services.WithPolicyGrantCheck(context.Background(), grantCheck(false, &calls)), services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &empty})
-
-	require.NoError(t, err)
-	assert.Zero(t, calls)
-}
-
-// Whether a policy exists is not told to a caller who may not grant policies.
-func TestDMSAuthzPrincipalDoesNotTellACallerWithoutThePermissionWhichPoliciesExist(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	calls := 0
-	ctx := services.WithPolicyGrantCheck(context.Background(), grantCheck(false, &calls))
-
-	_, err := env.svc.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", []string{"no-such-policy"}, nil)})
-
-	assert.ErrorIs(t, err, errs.ErrDMSAuthzPolicyGrantForbidden)
-	assert.NotErrorIs(t, err, errs.ErrValidateBadRequest)
-}
-
-func TestDMSAuthzPrincipalRejectsTooManyPolicies(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	ids := make([]string, 101)
-	for i := range ids {
-		ids[i] = fmt.Sprintf("policy-%03d", i)
+	paused, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	env.repo.beforeUpdate = func() { // the first save to reach the store waits there
+		once.Do(func() { close(paused); <-release })
+	}
+	save := func(caID string) chan error {
+		done := make(chan error, 1)
+		go func() { done <- env.update("ra-1", dmsSettings(caID, ptr(true))) }()
+		return done
 	}
 
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: principalSettings("ca-1", ids, nil)})
-
-	assert.ErrorIs(t, err, errs.ErrValidateBadRequest)
-}
-
-// The settings of the caller are not rewritten, and a response never carries null for a list or a map.
-func TestDMSAuthzPrincipalNormalizesACopyAndNeverStoresNull(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	given := principalSettings("ca-1", []string{"policy-b", "policy-a", "policy-b"}, nil)
-
-	_, err := env.svc.CreateDMS(env.ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: given})
-
-	require.NoError(t, err)
-	assert.Equal(t, []string{"policy-b", "policy-a", "policy-b"}, given.AuthzPrincipalSettings.PolicyIDs, "the caller's value is untouched")
-	stored := env.repo.dms["ra-1"].Settings.AuthzPrincipalSettings
-	assert.Equal(t, []string{"policy-a", "policy-b"}, stored.PolicyIDs)
-	raw, err := json.Marshal(stored)
-	require.NoError(t, err)
-	assert.JSONEq(t, `{"enabled":true,"policy_ids":["policy-a","policy-b"],"subject_attribute_mappings":{}}`, string(raw))
-}
-
-// Looking for a leftover principal is bounded: a hung authz does not hold up deleting an RA.
-func TestDMSDeleteGivesUpLookingForALeftoverPrincipal(t *testing.T) {
-	env := newDMSAuthzEnv(t, true)
-	require.NoError(t, env.create("ra-1", "ca-1", false))
-	env.authz.hang = true
-	done := make(chan error, 1)
-
-	go func() { done <- env.svc.DeleteDMS(context.Background(), services.DeleteDMSInput{ID: "ra-1"}) }()
-
+	a := save("ca-2")
+	<-paused // A has written the principal and waits to store the RA
+	b := save("ca-3")
 	select {
-	case err := <-done:
-		require.NoError(t, err)
-	case <-time.After(10 * time.Second):
-		t.Fatal("deleting an RA waited for a hung authz")
+	case <-b: // B ran entirely while A waited
+	case <-time.After(300 * time.Millisecond): // B waits for A
 	}
-	assert.Empty(t, env.repo.dms)
+	close(release)
+
+	require.NoError(t, <-a)
+	require.NoError(t, <-b)
+	stored := env.repo.dms["ra-1"].Settings.EnrollmentSettings.EnrollmentCA
+	assert.Equal(t, pinned(env.cas[stored]), env.trusts("ra-1"), "the RA names %s, so authz must trust %s", stored, stored)
 }

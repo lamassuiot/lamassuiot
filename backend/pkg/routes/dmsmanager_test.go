@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var grantDeclaration = middleware.Declaration{Namespace: "authz", SchemaName: "public", EntityType: "principal_policy", Action: "grant"}
+
 // grantEngine lets the caller create and update RAs, and grant policies only when grant is set.
 type grantEngine struct {
 	authzcore.AuthzEngine
@@ -28,151 +31,113 @@ type grantEngine struct {
 
 func (e *grantEngine) MatchAndAuthorize(_ context.Context, _, _, namespace, schema, action, entity string, _ map[string]string) (bool, []string, error) {
 	e.asked = append(e.asked, middleware.Declaration{Namespace: namespace, SchemaName: schema, EntityType: entity, Action: action})
-	if namespace == "authz" {
-		return e.grant, nil, nil
-	}
-	return true, []string{"user"}, nil
+	return namespace != "authz" || e.grant, []string{"user"}, nil
 }
 
-// grantCheckRecorder runs the policy grant check it gets, as the service does when an RA asks for more.
-type grantCheckRecorder struct {
+// saves answers a create and an update: it asks the check of the caller, as the service does when an RA asks for more, and fails with err.
+type saves struct {
 	services.DMSManagerService
+	err     error
 	allowed []bool
 }
 
-func (s *grantCheckRecorder) run(ctx context.Context) {
+func (s *saves) answer(ctx context.Context, id string) (*models.DMS, error) {
+	check := services.PolicyGrantCheckFrom(ctx)
 	allowed := false
-	if check := services.PolicyGrantCheckFrom(ctx); check != nil {
+	if check != nil {
 		allowed, _ = check(ctx)
 	}
 	s.allowed = append(s.allowed, allowed)
+	return &models.DMS{ID: id}, s.err
 }
 
-func (s *grantCheckRecorder) CreateDMS(ctx context.Context, in services.CreateDMSInput) (*models.DMS, error) {
-	s.run(ctx)
-	return &models.DMS{ID: in.ID}, nil
+func (s *saves) CreateDMS(ctx context.Context, in services.CreateDMSInput) (*models.DMS, error) {
+	return s.answer(ctx, in.ID)
 }
 
-func (s *grantCheckRecorder) UpdateDMS(ctx context.Context, in services.UpdateDMSInput) (*models.DMS, error) {
-	s.run(ctx)
-	return &models.DMS{ID: in.ID}, nil
+func (s *saves) UpdateDMS(ctx context.Context, in services.UpdateDMSInput) (*models.DMS, error) {
+	return s.answer(ctx, in.ID)
+}
+
+// postAndPut sends a create and an update of an RA, as an authenticated user or as an internal service.
+func postAndPut(svc services.DMSManagerService, engine authzcore.AuthzEngine, internal bool) []*httptest.ResponseRecorder {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("lamassu.io/ctx/auth-type", "jwt")
+		c.Set("lamassu.io/ctx/auth-credential-string", "test-credential")
+		c.Next()
+	})
+	registerDMSManagerRoutes(logrus.NewEntry(logrus.New()), router.Group("/api/dmsmanager"), svc, engine)
+
+	var responses []*httptest.ResponseRecorder
+	for _, req := range []*http.Request{
+		httptest.NewRequest(http.MethodPost, "/api/dmsmanager/v1/dms", strings.NewReader(`{"id":"ra-1","name":"RA 1","settings":{}}`)),
+		httptest.NewRequest(http.MethodPut, "/api/dmsmanager/v1/dms/ra-1", strings.NewReader(`{"name":"RA 1","settings":{}}`)),
+	} {
+		if internal {
+			req.Header.Set("X-Principal-ID", "admin-mode")
+		}
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		responses = append(responses, res)
+	}
+	return responses
 }
 
 // Only the HTTP layer knows who calls, so it hands the service the check of that caller's grant permission.
 func TestDMSWritesCarryTheCallersPolicyGrantCheck(t *testing.T) {
-	gin.SetMode(gin.TestMode)
 	cases := []struct {
 		name         string
 		grant, admin bool
-		want         bool
 	}{
-		{name: "caller allowed to grant policies", grant: true, want: true},
+		{name: "caller allowed to grant policies", grant: true},
 		{name: "caller not allowed to grant policies"},
-		{name: "internal service", admin: true, want: true},
+		{name: "internal service", admin: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			router := gin.New()
-			router.Use(func(c *gin.Context) {
-				c.Set("lamassu.io/ctx/auth-type", "jwt")
-				c.Set("lamassu.io/ctx/auth-credential-string", "test-credential")
-				c.Next()
-			})
-			engine, svc := &grantEngine{grant: tc.grant}, &grantCheckRecorder{}
-			registerDMSManagerRoutes(logrus.NewEntry(logrus.New()), router.Group("/api/dmsmanager"), svc, engine)
+			engine, svc := &grantEngine{grant: tc.grant}, &saves{}
 
-			for _, req := range []*http.Request{
-				httptest.NewRequest(http.MethodPost, "/api/dmsmanager/v1/dms", strings.NewReader(`{"id":"ra-1","name":"RA 1","settings":{}}`)),
-				httptest.NewRequest(http.MethodPut, "/api/dmsmanager/v1/dms/ra-1", strings.NewReader(`{"name":"RA 1","settings":{}}`)),
-			} {
-				if tc.admin {
-					req.Header.Set("X-Principal-ID", "admin-mode")
-				}
-				res := httptest.NewRecorder()
-				router.ServeHTTP(res, req)
-				assert.Less(t, res.Code, 300, req.Method)
+			for _, res := range postAndPut(svc, engine, tc.admin) {
+				assert.Less(t, res.Code, 300)
 			}
 
-			assert.Equal(t, []bool{tc.want, tc.want}, svc.allowed)
-			if !tc.admin {
-				assert.Contains(t, engine.asked, middleware.Declaration{Namespace: "authz", SchemaName: "public", EntityType: "principal_policy", Action: "grant"})
-			}
+			want := tc.grant || tc.admin
+			assert.Equal(t, []bool{want, want}, svc.allowed)
+			assert.Equal(t, !tc.admin, slices.Contains(engine.asked, grantDeclaration), "an internal service is trusted, anyone else is asked")
 		})
 	}
-}
-
-// failingSaves answers a save with the given error, as the service does.
-type failingSaves struct {
-	services.DMSManagerService
-	err error
-}
-
-func (s failingSaves) CreateDMS(context.Context, services.CreateDMSInput) (*models.DMS, error) {
-	return nil, s.err
-}
-
-func (s failingSaves) UpdateDMS(context.Context, services.UpdateDMSInput) (*models.DMS, error) {
-	return nil, s.err
 }
 
 func TestDMSSavesMapTheErrorsOfTheServiceToStatusCodes(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-	cases := []struct {
-		name   string
-		err    error
-		status int
-	}{
-		{name: "the caller may not grant", err: errs.ErrDMSAuthzPolicyGrantForbidden, status: http.StatusForbidden},
-		{name: "a bad request with details", err: fmt.Errorf("%w: authz policy p does not exist", errs.ErrValidateBadRequest), status: http.StatusBadRequest},
-		{name: "anything else", err: errors.New("db down"), status: http.StatusInternalServerError},
+	cases := map[int]error{
+		http.StatusForbidden:           errs.ErrDMSAuthzPolicyGrantForbidden,
+		http.StatusBadRequest:          fmt.Errorf("%w: authz policy p does not exist", errs.ErrValidateBadRequest),
+		http.StatusInternalServerError: errors.New("db down"),
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			router := gin.New()
-			router.Use(func(c *gin.Context) {
-				c.Set("lamassu.io/ctx/auth-type", "jwt")
-				c.Set("lamassu.io/ctx/auth-credential-string", "test-credential")
-				c.Next()
-			})
-			registerDMSManagerRoutes(logrus.NewEntry(logrus.New()), router.Group("/api/dmsmanager"), failingSaves{err: tc.err}, &grantEngine{grant: true})
-
-			for _, req := range []*http.Request{
-				httptest.NewRequest(http.MethodPost, "/api/dmsmanager/v1/dms", strings.NewReader(`{"id":"ra-1","name":"RA 1","settings":{}}`)),
-				httptest.NewRequest(http.MethodPut, "/api/dmsmanager/v1/dms/ra-1", strings.NewReader(`{"name":"RA 1","settings":{}}`)),
-			} {
-				res := httptest.NewRecorder()
-				router.ServeHTTP(res, req)
-
-				assert.Equal(t, tc.status, res.Code, req.Method)
-				assert.Contains(t, res.Body.String(), tc.err.Error(), "the body carries the reason")
+	for status, err := range cases {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			for _, res := range postAndPut(&saves{err: err}, &grantEngine{grant: true}, false) {
+				assert.Equal(t, status, res.Code)
+				assert.Contains(t, res.Body.String(), err.Error(), "the body carries the reason")
 			}
 		})
 	}
 }
 
-// The grant check is part of the route contract: the spec must list it, and a route that loses it is caught.
+// The grant check is part of the route contract, and only the saves of the settings ask for it.
 func TestDMSWritesDeclareTheirPolicyGrantCheck(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	router := gin.New()
-	contract := registerDMSManagerRoutes(logrus.NewEntry(logrus.New()), router.Group("/api/dmsmanager"), nil, &grantEngine{})
-	grant := middleware.Declaration{Namespace: "authz", SchemaName: "public", EntityType: "principal_policy", Action: "grant"}
+	contract := registerDMSManagerRoutes(logrus.NewEntry(logrus.New()), gin.New().Group("/api/dmsmanager"), nil, &grantEngine{})
 
-	with := map[string]bool{}
+	declared := map[string][]middleware.Declaration{}
 	for _, route := range contract.Declarations() {
-		with[route.Method+" "+route.Path] = len(route.ServiceChecks) > 0
 		if len(route.ServiceChecks) > 0 {
-			assert.Equal(t, []middleware.Declaration{grant}, route.ServiceChecks, route.Path)
+			declared[route.Method+" "+route.Path] = route.ServiceChecks
 		}
 	}
-	assert.Equal(t, map[string]bool{"POST /api/dmsmanager/v1/dms": true, "PUT /api/dmsmanager/v1/dms/:id": true}, onlyTrue(with), "only the saves of the settings ask for it")
-}
 
-func onlyTrue(m map[string]bool) map[string]bool {
-	out := map[string]bool{}
-	for k, v := range m {
-		if v {
-			out[k] = v
-		}
-	}
-	return out
+	only := []middleware.Declaration{grantDeclaration}
+	assert.Equal(t, map[string][]middleware.Declaration{"POST /api/dmsmanager/v1/dms": only, "PUT /api/dmsmanager/v1/dms/:id": only}, declared)
 }

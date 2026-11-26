@@ -721,24 +721,26 @@ func TestAuthzPrincipalFailureLeavesNothingBehind(t *testing.T) {
 	})
 }
 
-func TestAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
+func TestAuthzPrincipalRestoreDoesNotOverwriteAnotherWriter(t *testing.T) {
 	dmsMgr, servers, err := StartDMSManagerServiceTestServer(t)
 	require.NoError(t, err)
 	ctx := grantingCaller()
-	ca1, ca2, ca3 := createAuthzTestCA(t, servers, "ca-1"), createAuthzTestCA(t, servers, "ca-2"), createAuthzTestCA(t, servers, "ca-3")
+	ca1, ca2 := createAuthzTestCA(t, servers, "ca-1"), createAuthzTestCA(t, servers, "ca-2")
 	_, err = dmsMgr.Service.CreateDMS(ctx, services.CreateDMSInput{ID: "ra-1", Name: "Field devices", Settings: authzTestSettings(ca1.ID, true)})
 	require.NoError(t, err)
-	before := authzTrustedCA(t, servers, "dms:ra-1")
 	require.NoError(t, servers.Authz.Client.Principals.RevokePolicy(ctx, "dms:ra-1", "policy-b"))
 
-	// While the first update grants policy-b, a second one saves another CA. Then the first one fails.
+	// While the update grants policy-b, a writer that holds no lock (an older instance of the service, in a rolling
+	// upgrade) rewrites the principal. Then the update fails.
 	var raced atomic.Bool
 	servers.Authz.FailWhen(func(r *http.Request) bool {
 		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/policies") || raced.Swap(true) {
 			return false
 		}
-		newer := authzTestSettings(ca3.ID, true)
-		_, err := dmsMgr.Service.UpdateDMS(ctx, services.UpdateDMSInput{ID: "ra-1", Name: "Field devices", Settings: &newer})
+		principal := authzPrincipal(t, servers, "dms:ra-1")
+		(*principal.AuthConfig)["subject_attribute_mappings"] = map[string]any{"edited": "x509.subject.cn"}
+		(*principal.AuthConfig)["dms_manager"] = map[string]any{"dms_id": "ra-1", "revision": "older-instance"}
+		_, err := servers.Authz.Client.Principals.Update(ctx, "dms:ra-1", &dto.UpdatePrincipalRequest{AuthConfig: principal.AuthConfig})
 		assert.NoError(t, err)
 		return true
 	})
@@ -747,10 +749,7 @@ func TestAuthzPrincipalRestoreDoesNotOverwriteANewerUpdate(t *testing.T) {
 
 	require.Error(t, err)
 	servers.Authz.FailWhen(func(*http.Request) bool { return false })
-	dms, err := dmsMgr.Service.GetDMSByID(ctx, services.GetDMSByIDInput{ID: "ra-1"})
-	require.NoError(t, err)
-	assert.Equal(t, ca3.ID, dms.Settings.EnrollmentSettings.EnrollmentCA, "the newer update was saved")
-	assert.NotEqual(t, before, authzTrustedCA(t, servers, "dms:ra-1"), "the failed update did not put the old CA back")
+	assert.Equal(t, map[string]any{"edited": "x509.subject.cn"}, (*authzPrincipal(t, servers, "dms:ra-1").AuthConfig)["subject_attribute_mappings"], "the other writer's change stays")
 }
 
 func TestAuthzPrincipalSyncReadsEveryGrantPage(t *testing.T) {

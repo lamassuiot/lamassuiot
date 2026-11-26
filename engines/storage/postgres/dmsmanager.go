@@ -55,6 +55,15 @@ func (db *PostgresDMSManagerStore) Insert(ctx context.Context, DMS *models.DMS) 
 	return db.querier.Insert(ctx, DMS, DMS.ID)
 }
 
+func (db *PostgresDMSManagerStore) WithLock(ctx context.Context, ID string, fn func() error) error {
+	return db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtextextended(?, 0))`, "lamassu.dmsmanager.ra:"+ID).Error; err != nil {
+			return err
+		}
+		return fn()
+	})
+}
+
 func (db *PostgresDMSManagerStore) Delete(ctx context.Context, ID string) error {
 	return db.querier.Delete(ctx, ID)
 }
