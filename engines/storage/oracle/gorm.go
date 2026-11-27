@@ -22,7 +22,7 @@ func RegisterGORMPlugin(plugin gorm.Plugin) {
 // configured plugins. The caller remains responsible for closing the pool.
 func openGORM(pool *sql.DB, plugins ...gorm.Plugin) (*gorm.DB, error) {
 	serializers.Register()
-	db, err := gorm.Open(dialect.Dialector{Conn: pool}, &gorm.Config{DisableAutomaticPing: true})
+	db, err := gorm.Open(dialect.Dialector{Conn: pool}, &gorm.Config{DisableAutomaticPing: true, TranslateError: true})
 	if err != nil {
 		return nil, fmt.Errorf("open oracle GORM: %w", err)
 	}

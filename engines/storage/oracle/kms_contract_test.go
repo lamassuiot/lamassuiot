@@ -2,12 +2,14 @@ package oracle
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
+	"gorm.io/gorm"
 )
 
 type kmsContractRepository struct {
@@ -80,6 +82,10 @@ func testKMSRepositoryContracts(t *testing.T, ctx context.Context, repos ...kmsC
 				})
 			}
 
+			duplicate := *first
+			if _, err := contract.repo.Insert(ctx, &duplicate); !errors.Is(err, gorm.ErrDuplicatedKey) {
+				t.Fatalf("duplicate insert: %v, want gorm.ErrDuplicatedKey", err)
+			}
 			if rows, err := contract.repo.SelectByKeyID(ctx, first.KeyID); err != nil || len(rows) != 2 {
 				t.Fatalf("composite key lookup rows=%d error=%v", len(rows), err)
 			}
