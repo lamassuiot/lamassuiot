@@ -1171,6 +1171,56 @@ func TestUpdateDeviceIdentitySlot(t *testing.T) {
 
 }
 */
+// Over HTTP, writing the identity slot of a decommissioned device answers 422 and the SDK returns
+// ErrDeviceInvalidStatus, instead of a 200 that stored nothing.
+func TestUpdateDeviceIdentitySlotOfDecommissionedDeviceIsRejected(t *testing.T) {
+	ctx := context.Background()
+	dmgr, _, err := StartDeviceManagerServiceTestServer(t)
+	if err != nil {
+		t.Fatalf("could not create Device Manager test server: %s", err)
+	}
+
+	deviceID := fmt.Sprintf("decommissioned-%s", uuid.NewV7().String())
+	_, err = dmgr.Service.CreateDevice(ctx, services.CreateDeviceInput{
+		ID:        deviceID,
+		Alias:     deviceID,
+		Tags:      []string{},
+		Metadata:  map[string]any{},
+		DMSID:     "test",
+		Icon:      "test",
+		IconColor: "#000000",
+	})
+	if err != nil {
+		t.Fatalf("could not create device: %s", err)
+	}
+
+	_, err = dmgr.Service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{ID: deviceID, NewStatus: models.DeviceDecommissioned})
+	if err != nil {
+		t.Fatalf("could not decommission device: %s", err)
+	}
+
+	_, err = dmgr.HttpDeviceManagerSDK.UpdateDeviceIdentitySlot(ctx, services.UpdateDeviceIdentitySlotInput{
+		ID: deviceID,
+		Slot: models.Slot[string]{
+			Status:        models.SlotActive,
+			ActiveVersion: 0,
+			SecretType:    models.X509SlotProfileType,
+			Secrets:       map[int]string{0: "sn-new"},
+		},
+	})
+	if !errors.Is(err, errs.ErrDeviceInvalidStatus) {
+		t.Fatalf("expected ErrDeviceInvalidStatus, got %v", err)
+	}
+
+	dev, err := dmgr.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
+	if err != nil {
+		t.Fatalf("could not get device: %s", err)
+	}
+	if dev.Status != models.DeviceDecommissioned || dev.IdentitySlot != nil {
+		t.Fatalf("decommissioned device must stay untouched, got status %s and slot %+v", dev.Status, dev.IdentitySlot)
+	}
+}
+
 func TestDecommissionDevice(t *testing.T) {
 	devDMS1 := [3]string{"test1", "test2", "test3"}
 

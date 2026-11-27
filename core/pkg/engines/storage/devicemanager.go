@@ -13,6 +13,15 @@ type DeviceManagerRepo interface {
 	SelectByDMS(ctx context.Context, dmsID string, exhaustiveRun bool, applyFunc func(models.Device), queryParams *resources.QueryParameters, extraOpts map[string]any) (string, error)
 	SelectExists(ctx context.Context, ID string) (bool, *models.Device, error)
 	Update(ctx context.Context, device *models.Device) (*models.Device, error)
+	// UpdateStatus writes only the status of the device, and its identity slot when slot is not nil. A decommissioned
+	// device is final: it fails with errs.ErrDeviceInvalidStatus, even when the caller read the device before its
+	// decommission. It fails with errs.ErrDeviceNotFound when the device does not exist.
+	UpdateStatus(ctx context.Context, ID string, status models.DeviceStatus, slot *models.Slot[string]) (*models.Device, error)
+	// UpdateIdentitySlot writes only the identity slot of the device, with the same rules as UpdateStatus.
+	UpdateIdentitySlot(ctx context.Context, ID string, slot *models.Slot[string]) (*models.Device, error)
+	// UpdateMetadata writes only the metadata of the device, so that it never overwrites a status written meanwhile.
+	// It fails with errs.ErrDeviceNotFound when the device does not exist.
+	UpdateMetadata(ctx context.Context, ID string, metadata map[string]any) (*models.Device, error)
 	Insert(ctx context.Context, device *models.Device) (*models.Device, error)
 	Delete(ctx context.Context, ID string) error
 

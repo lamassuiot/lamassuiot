@@ -187,6 +187,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/Device'
         '400': { $ref: '#/components/responses/BadRequest' }
+        '422':
+          description: Device status does not allow updating the identity slot (decommissioned device)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '500': { $ref: '#/components/responses/InternalError' }
 
   /devices/{id}/metadata:

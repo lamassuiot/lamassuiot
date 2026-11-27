@@ -782,6 +782,11 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			return nil, fmt.Errorf("device already registered to another DMS")
 		}
 
+		if device.Status == models.DeviceDecommissioned {
+			lFunc.Errorf("aborting enrollment. device '%s' is decommissioned", csr.Subject.CommonName)
+			return nil, errs.ErrDeviceInvalidStatus
+		}
+
 		if enrollSettings.EnableReplaceableEnrollment {
 			lFunc.Debugf("DMS allows new enrollments. Continuing enrollment for device '%s'", csr.Subject.CommonName)
 			//revoke active certificate
@@ -958,6 +963,11 @@ func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.Cert
 		}
 	} else {
 		lFunc.Debugf("device found")
+	}
+
+	if device.Status == models.DeviceDecommissioned {
+		lFunc.Errorf("aborting reenrollment. device '%s' is decommissioned", device.ID)
+		return nil, errs.ErrDeviceInvalidStatus
 	}
 
 	lFunc = lFunc.WithField("step", "CSRCheck")
@@ -1327,11 +1337,23 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 		return nil, err
 	}
 
+	// The identity slot written below is the one of the device the certificate names. Both checks run before the
+	// certificate metadata is patched, so that a rejected bind leaves no change behind.
+	if crt.Subject.CommonName != input.DeviceID {
+		lFunc.Errorf("cannot bind certificate '%s' to device '%s': the certificate names device '%s'", input.CertificateSerialNumber, input.DeviceID, crt.Subject.CommonName)
+		return nil, fmt.Errorf("%w: certificate '%s' does not belong to device '%s'", errs.ErrValidateBadRequest, input.CertificateSerialNumber, input.DeviceID)
+	}
+
 	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: input.DeviceID,
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if device.Status == models.DeviceDecommissioned {
+		lFunc.Errorf("cannot bind certificate '%s' to device '%s': device is decommissioned", input.CertificateSerialNumber, device.ID)
+		return nil, errs.ErrDeviceInvalidStatus
 	}
 
 	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{

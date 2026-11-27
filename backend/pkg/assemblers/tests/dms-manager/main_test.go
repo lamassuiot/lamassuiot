@@ -36,6 +36,23 @@ import (
 
 const dmsID = "1234-5678"
 
+// countIssuedCertificates returns how many certificates the CA caID has issued.
+func countIssuedCertificates(t *testing.T, testServers *tests.TestServer, caID string) int {
+	t.Helper()
+	count := 0
+	_, err := testServers.CA.Service.GetCertificatesByCA(context.Background(), services.GetCertificatesByCAInput{
+		CAID: caID,
+		ListInput: resources.ListInput[models.Certificate]{
+			ExhaustiveRun: true,
+			ApplyFunc:     func(models.Certificate) { count++ },
+		},
+	})
+	if err != nil {
+		t.Fatalf("could not list certificates of CA %s: %s", caID, err)
+	}
+	return count
+}
+
 func TestCreateDMS(t *testing.T) {
 	dmsMgr, _, err := StartDMSManagerServiceTestServer(t)
 	if err != nil {
@@ -1314,6 +1331,87 @@ func TestESTEnroll(t *testing.T) {
 				}
 
 				expectedErr := "forbiddenNewEnrollment"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			// A decommissioned device is retired for good: even a DMS that allows replacing enrollments must not
+			// issue it a new certificate.
+			name: "Err/DecommissionedDevice",
+			run: func() (caCert, cert *x509.Certificate, key any, err error) {
+				bootstrapCA, err := createCA("boot", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create bootstrap CA: %s", err)
+				}
+
+				enrollCA, err := createCA("enroll", "1y", "1m")
+				if err != nil {
+					t.Fatalf("could not create Enrollment CA: %s", err)
+				}
+
+				dms, err := createDMS(func(in *services.CreateDMSInput) {
+					in.Settings.EnrollmentSettings.EnrollmentCA = enrollCA.ID
+					in.Settings.EnrollmentSettings.EnableReplaceableEnrollment = true
+					in.Settings.EnrollmentSettings.EnrollmentOptionsESTRFC7030.AuthOptionsMTLS.ValidationCAs = []string{
+						bootstrapCA.ID,
+					}
+				})
+				if err != nil {
+					t.Fatalf("could not create DMS: %s", err)
+				}
+
+				bootKey, _ := chelpers.GenerateECDSAKey(elliptic.P224())
+				bootCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: "boot-cert"}, bootKey)
+				bootCrt, err := testServers.CA.Service.SignCertificate(context.Background(), services.SignCertificateInput{
+					CAID:              bootstrapCA.ID,
+					CertRequest:       (*models.X509CertificateRequest)(bootCsr),
+					IssuanceProfileID: bootstrapCA.ProfileID,
+				})
+				if err != nil {
+					t.Fatalf("could not sign Bootstrap Certificate: %s", err)
+				}
+
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{(*x509.Certificate)(bootCrt.Certificate)},
+					PrivateKey:            bootKey,
+					InsecureSkipVerify:    true,
+				}
+
+				deviceID := fmt.Sprintf("decommissioned-device-%s", uuid.NewV7().String())
+				enrollKey, _ := chelpers.GenerateRSAKey(2048)
+				enrollCSR, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, enrollKey)
+
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if err != nil {
+					t.Fatalf("could not enroll device for the first time: %s", err)
+				}
+
+				_, err = testServers.DeviceManager.Service.UpdateDeviceStatus(context.Background(), services.UpdateDeviceStatusInput{
+					ID:        deviceID,
+					NewStatus: models.DeviceDecommissioned,
+				})
+				if err != nil {
+					t.Fatalf("could not decommission device: %s", err)
+				}
+
+				issued := countIssuedCertificates(t, testServers, enrollCA.ID)
+				_, err = estCli.Enroll(context.Background(), enrollCSR)
+				if after := countIssuedCertificates(t, testServers, enrollCA.ID); after != issued {
+					t.Fatalf("no certificate must be issued to a decommissioned device: enrollment CA went from %d to %d certificates", issued, after)
+				}
+
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := errs.ErrDeviceInvalidStatus.Error()
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}
@@ -4018,6 +4116,82 @@ func TestESTReEnroll(t *testing.T) {
 				}
 
 				_, err = estCli.Reenroll(context.Background(), newCsr)
+				return nil, nil, nil, err
+			},
+			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {
+				if err == nil {
+					t.Fatalf("expected error. Got none")
+				}
+
+				expectedErr := "certificate is revoked"
+				if !strings.Contains(err.Error(), expectedErr) {
+					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
+				}
+			},
+		},
+		{
+			// A slot that reads EXPIRED can still hold an active certificate. Decommissioning asks the CA, not the slot,
+			// so it revokes that certificate: the device can no longer authenticate, and gets no new certificate.
+			name: "Err/DecommissionedDeviceWithExpiredSlot",
+			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
+				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
+					func(in *services.CreateDMSInput) {
+						in.Settings.ReEnrollmentSettings.ReEnrollmentDelta = models.TimeDuration(time.Hour)
+					},
+					"1m",
+				)
+
+				deviceID := deviceCrt.Subject.CommonName
+				device, err := testServers.DeviceManager.Service.GetDeviceByID(context.Background(), services.GetDeviceByIDInput{ID: deviceID})
+				if err != nil {
+					t.Fatalf("could not get device: %s", err)
+				}
+
+				// As the expiration monitoring would.
+				slot := *device.IdentitySlot
+				slot.Status = models.SlotExpired
+				_, err = testServers.DeviceManager.Service.UpdateDeviceIdentitySlot(context.Background(), services.UpdateDeviceIdentitySlotInput{
+					ID:   deviceID,
+					Slot: slot,
+				})
+				if err != nil {
+					t.Fatalf("could not expire the identity slot: %s", err)
+				}
+
+				_, err = testServers.DeviceManager.Service.UpdateDeviceStatus(context.Background(), services.UpdateDeviceStatusInput{
+					ID:        deviceID,
+					NewStatus: models.DeviceDecommissioned,
+				})
+				if err != nil {
+					t.Fatalf("could not decommission device: %s", err)
+				}
+
+				revoked, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+					SerialNumber: helpers.SerialNumberToHexString(deviceCrt.SerialNumber),
+				})
+				if err != nil {
+					t.Fatalf("could not get device certificate: %s", err)
+				}
+				if revoked.Status != models.StatusRevoked || revoked.RevocationReason != ocsp.CessationOfOperation {
+					t.Fatalf("decommission must revoke the active certificate behind an EXPIRED slot. Got %s with reason %d", revoked.Status, revoked.RevocationReason)
+				}
+
+				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, deviceKey)
+				estCli := est.Client{
+					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
+					AdditionalPathSegment: dms.ID,
+					Certificates:          []*x509.Certificate{deviceCrt},
+					PrivateKey:            deviceKey,
+					InsecureSkipVerify:    true,
+				}
+
+				enrollCAID := dms.Settings.EnrollmentSettings.EnrollmentCA
+				issued := countIssuedCertificates(t, testServers, enrollCAID)
+				_, err = estCli.Reenroll(context.Background(), newCsr)
+				if after := countIssuedCertificates(t, testServers, enrollCAID); after != issued {
+					t.Fatalf("no certificate must be issued to a decommissioned device: enrollment CA went from %d to %d certificates", issued, after)
+				}
+
 				return nil, nil, nil, err
 			},
 			resultCheck: func(caCert, cert *x509.Certificate, key any, err error) {

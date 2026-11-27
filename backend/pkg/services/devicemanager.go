@@ -2,7 +2,10 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 	"uuid"
 
@@ -392,6 +395,8 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 
 	var statusEvent *models.DeviceEvent
 	statusEventTS := time.Time{}
+	// newSlot is the identity slot to store with the status, nil to leave it as it is.
+	var newSlot *models.Slot[string]
 
 	if input.NewStatus == models.DeviceDecommissioned {
 		statusEventTS = time.Now()
@@ -399,30 +404,18 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 			EventType: models.DeviceEventTypeStatusDecommissioned,
 		}
 
+		// The certificate is revoked before the decommission is stored: if the revocation fails, the decommission
+		// fails and nothing changed, so the caller can retry. The storage keeps the device handler, which reacts to the
+		// revocation with a read from before the decommission, from overwriting it.
+		if err := svc.revokeIdentityForGood(ctx, lFunc, device); err != nil {
+			lFunc.Errorf("aborting decommission of device %s: %s", input.ID, err)
+			return nil, err
+		}
+
 		idSlot := device.IdentitySlot
-		if idSlot != nil {
-			if idSlot.Status == models.SlotExpired {
-				lFunc.Debugf("skipping slot update. Identity slot already expired")
-			} else if idSlot.Status == models.SlotRevoke {
-				lFunc.Debugf("skipping slot update. Identity slot already revoked")
-			} else {
-
-				idSlot.Status = models.SlotRevoke
-				defer func() {
-					certSN := idSlot.Secrets[idSlot.ActiveVersion]
-					//don't revoke IdSlot, this will be handled by revoking the attached certificate
-					_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
-						SerialNumber:     certSN,
-						NewStatus:        models.StatusRevoked,
-						RevocationReason: ocsp.CessationOfOperation,
-					})
-
-					if err != nil {
-						lFunc.Errorf("error while updating IdentitySlot from device %s to revoked. could not update certificate %s status: %s", device.ID, certSN, err)
-						return
-					}
-				}()
-			}
+		if idSlot != nil && idSlot.Status != models.SlotExpired && idSlot.Status != models.SlotRevoke {
+			idSlot.Status = models.SlotRevoke
+			newSlot = idSlot
 		}
 	} else {
 		statusEventTS = time.Now()
@@ -432,11 +425,10 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 		}
 	}
 
-	device.Status = input.NewStatus
 	lFunc.Debugf("updating %s device status to %s", input.ID, input.NewStatus)
-	device, err = svc.devicesStorage.Update(ctx, device)
+	device, err = svc.devicesStorage.UpdateStatus(ctx, input.ID, input.NewStatus, newSlot)
 	if err != nil {
-		lFunc.Errorf("error while updating %s device status. could not update DB: %s", device.ID, err)
+		lFunc.Errorf("error while updating %s device status. could not update DB: %s", input.ID, err)
 		return nil, err
 	}
 
@@ -450,6 +442,58 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 
 	lFunc.Debugf("device %s status updated. new status: %s", input.ID, input.NewStatus)
 	return device, nil
+}
+
+// revokeIdentityForGood revokes, with cessationOfOperation, every certificate of the identity slot of a device being
+// decommissioned that is active or on hold, not only its active version: older versions stay active when the DMS does
+// not revoke on re-enrollment, and a certificate on hold comes back when its hold is released, for example by the
+// release of the CA that put it on hold. The CA, not the status of the slot, tells what is still valid. Certificates
+// revoked for good or expired are left as they are, so a retry only revokes what is left.
+func (svc DeviceManagerServiceBackend) revokeIdentityForGood(ctx context.Context, lFunc *logrus.Entry, device *models.Device) error {
+	idSlot := device.IdentitySlot
+	if idSlot == nil {
+		return nil
+	}
+
+	versions := slices.Sorted(maps.Keys(idSlot.Secrets))
+	for _, version := range versions {
+		if err := svc.revokeCertificateForGood(ctx, lFunc, device.ID, idSlot.Secrets[version]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (svc DeviceManagerServiceBackend) revokeCertificateForGood(ctx context.Context, lFunc *logrus.Entry, deviceID, certSN string) error {
+	if certSN == "" {
+		return nil
+	}
+
+	crt, err := svc.caClient.GetCertificateBySerialNumber(ctx, services.GetCertificatesBySerialNumberInput{
+		SerialNumber: certSN,
+	})
+	if errors.Is(err, errs.ErrCertificateNotFound) {
+		lFunc.Warnf("identity certificate %s of device %s not found, nothing to revoke", certSN, deviceID)
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("could not read identity certificate %s of device %s: %w", certSN, deviceID, err)
+	}
+
+	onHold := crt.Status == models.StatusRevoked && crt.RevocationReason == ocsp.CertificateHold
+	if crt.Status != models.StatusActive && !onHold {
+		return nil
+	}
+
+	_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
+		SerialNumber:     certSN,
+		NewStatus:        models.StatusRevoked,
+		RevocationReason: ocsp.CessationOfOperation,
+	})
+	if err != nil {
+		return fmt.Errorf("could not revoke identity certificate %s of device %s: %w", certSN, deviceID, err)
+	}
+	return nil
 }
 
 func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context, input services.UpdateDeviceMetadataInput) (*models.Device, error) {
@@ -479,10 +523,8 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceMetadata(ctx context.Context,
 		return nil, err
 	}
 
-	device.Metadata = *updatedMetadata
-
 	lFunc.Debugf("updating %s device metadata", input.ID)
-	device, err = svc.devicesStorage.Update(ctx, device)
+	device, err = svc.devicesStorage.UpdateMetadata(ctx, input.ID, *updatedMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -510,8 +552,8 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	}
 
 	if device.Status == models.DeviceDecommissioned {
-		lFunc.Warnf("device %s is decommissioned", input.ID)
-		return device, nil
+		lFunc.Errorf("cannot update identity slot of device %s: device is decommissioned", input.ID)
+		return nil, errs.ErrDeviceInvalidStatus
 	}
 
 	newSlot := input.Slot
@@ -567,7 +609,7 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceIdentitySlot(ctx context.Cont
 	device.IdentitySlot = &newSlot
 
 	lFunc.Debugf("updating %s device identity slot. New device status %s. ID slot status %s", input.ID, device.Status, device.IdentitySlot.Status)
-	device, err = svc.devicesStorage.Update(ctx, device)
+	device, err = svc.devicesStorage.UpdateIdentitySlot(ctx, input.ID, device.IdentitySlot)
 	if err != nil {
 		return nil, err
 	}
