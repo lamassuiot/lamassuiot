@@ -115,7 +115,7 @@ func AssembleAuthzService(conf authzconfig.AuthzConfig) (*service.PrincipalManag
 		return nil, nil, nil, nil, err
 	}
 
-	policyStore, err := store.NewGormPolicyStore(authzDB)
+	policyStore, err := store.NewGormPolicyStore(authzDB, store.WithPolicyStoreLogger(lDB))
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to create policy store: %w", err)
 	}

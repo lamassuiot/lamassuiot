@@ -37,7 +37,7 @@ func InitializeStorage(ctx context.Context, conf authzconfig.AuthzConfig) error 
 		return err
 	}
 
-	policyStore, err := store.NewGormPolicyStore(authzDB)
+	policyStore, err := store.NewGormPolicyStore(authzDB, store.WithPolicyStoreLogger(lDB))
 	if err != nil {
 		return fmt.Errorf("failed to create policy store: %w", err)
 	}

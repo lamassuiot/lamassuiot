@@ -9,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -17,18 +18,49 @@ import (
 type GormPolicyStore struct {
 	db      *gorm.DB
 	querier *postgres.DBQuerier[models.PolicyRecord]
+	logger  *logrus.Entry
+}
+
+// PolicyStoreOption configures a GormPolicyStore.
+type PolicyStoreOption func(*GormPolicyStore)
+
+// WithPolicyStoreLogger sets the logger used to report stored policies that
+// cannot be read. It defaults to the standard logrus logger.
+func WithPolicyStoreLogger(logger *logrus.Entry) PolicyStoreOption {
+	return func(s *GormPolicyStore) {
+		if logger != nil {
+			s.logger = logger
+		}
+	}
 }
 
 // NewGormPolicyStore creates the store. Schema is managed by RunMigrations.
-func NewGormPolicyStore(db *gorm.DB) (*GormPolicyStore, error) {
+func NewGormPolicyStore(db *gorm.DB, opts ...PolicyStoreOption) (*GormPolicyStore, error) {
+	s := &GormPolicyStore{db: db, logger: logrus.NewEntry(logrus.StandardLogger())}
+	for _, opt := range opts {
+		opt(s)
+	}
 	if db.Dialector.Name() == "oracle" {
-		return &GormPolicyStore{db: db}, nil
+		return s, nil
 	}
 	q, err := postgres.TableQuery[models.PolicyRecord](nil, db, "policies", "id", models.PolicyRecord{})
 	if err != nil {
 		return nil, err
 	}
-	return &GormPolicyStore{db: db, querier: q}, nil
+	s.querier = q
+	return s, nil
+}
+
+// readListedPolicy converts a listed record. A record whose rules cannot be
+// decoded is left out of the result so one corrupt policy does not break the
+// whole listing, and it is reported as a warning so it is not lost silently.
+func (s *GormPolicyStore) readListedPolicy(rec *models.PolicyRecord) (*models.Policy, bool) {
+	p, err := rec.ToPolicy()
+	if err != nil {
+		s.logger.Warnf("skipping stored policy %q that cannot be read: %s", rec.ID, err)
+		return nil, false
+	}
+	return p, true
 }
 
 func (s *GormPolicyStore) Create(ctx context.Context, policy *models.Policy) error {
@@ -133,8 +165,7 @@ func (s *GormPolicyStore) List(ctx context.Context, queryParams *resources.Query
 	var policies []*models.Policy
 	if s.querier == nil {
 		bookmark, err := listAuthzRows(ctx, s.db, &models.PolicyRecord{}, "id", queryParams, nil, false, func(rec models.PolicyRecord) {
-			p, convErr := rec.ToPolicy()
-			if convErr == nil {
+			if p, ok := s.readListedPolicy(&rec); ok {
 				policies = append(policies, p)
 			}
 		})
@@ -144,8 +175,7 @@ func (s *GormPolicyStore) List(ctx context.Context, queryParams *resources.Query
 		return policies, bookmark, nil
 	}
 	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []postgres.GormExtraOps{}, false, func(rec models.PolicyRecord) {
-		p, convErr := rec.ToPolicy()
-		if convErr == nil {
+		if p, ok := s.readListedPolicy(&rec); ok {
 			policies = append(policies, p)
 		}
 	})
@@ -170,11 +200,9 @@ func (s *GormPolicyStore) Search(ctx context.Context, query string) ([]*models.P
 
 	out := make([]*models.Policy, 0, len(records))
 	for i := range records {
-		p, err := records[i].ToPolicy()
-		if err != nil {
-			continue
+		if p, ok := s.readListedPolicy(&records[i]); ok {
+			out = append(out, p)
 		}
-		out = append(out, p)
 	}
 	return out, nil
 }
