@@ -43,6 +43,8 @@ func (e *env) write38CRL(fx fixtureCA) *x509.RevocationList {
 	crl, err := x509.ParseRevocationList(der)
 	require.NoError(e.t, err)
 
+	// fileblob requires the bucket directory to exist; on a fresh CI runner nothing has created it yet.
+	require.NoError(e.t, os.MkdirAll(vaBucketDir, 0o750))
 	ctx := context.Background()
 	bucket, err := blob.OpenBucket(ctx, fmt.Sprintf("file://%s?no_tmp_dir", vaBucketDir))
 	require.NoError(e.t, err)
