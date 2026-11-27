@@ -7,6 +7,7 @@ import (
 
 	"github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/azsecrets"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	lazure "github.com/lamassuiot/lamassuiot/v4/shared/azure"
 	"github.com/sirupsen/logrus"
@@ -69,6 +70,14 @@ func TestAzureKeyVaultSecretsCryptoEngine(t *testing.T) {
 		{"ImportRSAPrivateKey", cryptoengines.SharedTestImportRSAPrivateKey},
 		{"ImportECDSAPrivateKey", cryptoengines.SharedTestImportECDSAPrivateKey},
 		{"RenameKey", cryptoengines.SharedRenameKey},
+	}
+
+	// The same engine, through the Backend contract (legacy adapter).
+	for _, bt := range cryptoengines.SharedBackendTests() {
+		table = append(table, struct {
+			name     string
+			function func(t *testing.T, engine cryptoengines.CryptoEngine)
+		}{"Backend/" + bt.Name, func(t *testing.T, engine cryptoengines.CryptoEngine) { bt.Fn(t, legacy.Wrap(engine)) }})
 	}
 
 	for _, tt := range table {

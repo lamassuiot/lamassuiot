@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/cryptoengines/legacy"
 	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/crypto/pkcs11/docker"
 	"github.com/sirupsen/logrus"
@@ -33,6 +34,14 @@ func TestPKCS11CryptoEngine(t *testing.T) {
 	beforeEach, err := setup(t)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// The same engine, through the Backend contract (legacy adapter).
+	for _, bt := range cryptoengines.SharedBackendTests() {
+		table = append(table, struct {
+			name     string
+			function func(t *testing.T, engine cryptoengines.CryptoEngine)
+		}{"Backend/" + bt.Name, func(t *testing.T, engine cryptoengines.CryptoEngine) { bt.Fn(t, legacy.Wrap(engine)) }})
 	}
 
 	for _, tt := range table {
