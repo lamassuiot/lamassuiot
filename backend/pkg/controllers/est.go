@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -24,6 +25,15 @@ import (
 type estHttpRoutes struct {
 	svc    services.ESTService
 	logger *logrus.Entry
+}
+
+// estErrorStatus is the HTTP status of an enrollment the service rejected. A device whose status does not allow it (a
+// decommissioned device) is refused for good: 428, a 4xx, so that the client does not retry as it would after a 5xx.
+func estErrorStatus(err error) int {
+	if errors.Is(err, errs.ErrDeviceInvalidStatus) {
+		return http.StatusPreconditionRequired
+	}
+	return http.StatusInternalServerError
 }
 
 var (
@@ -114,7 +124,7 @@ func (r *estHttpRoutes) EnrollReenroll(ctx *gin.Context) {
 		signedCrt, err = r.svc.Enroll(ctx.Request.Context(), csr, params.APS)
 	}
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		ctx.JSON(estErrorStatus(err), gin.H{"err": err.Error()})
 		return
 	}
 
@@ -179,7 +189,7 @@ func (r *estHttpRoutes) ServerKeyGen(ctx *gin.Context) {
 
 	crt, key, err := r.svc.ServerKeyGen(ctx.Request.Context(), csr, params.APS)
 	if err != nil {
-		ctx.JSON(500, gin.H{"err": err.Error()})
+		ctx.JSON(estErrorStatus(err), gin.H{"err": err.Error()})
 		return
 	}
 

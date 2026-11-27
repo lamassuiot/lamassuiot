@@ -338,6 +338,7 @@ paths:
               schema:
                 type: string
                 format: byte
+        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simplereenroll:
@@ -392,6 +393,7 @@ paths:
               schema:
                 type: string
                 format: byte
+        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/serverkeygen:
@@ -446,6 +448,7 @@ paths:
               schema:
                 type: string
                 format: byte
+        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
 components:
@@ -507,6 +510,12 @@ components:
             $ref: '#/components/schemas/Error'
     InternalError:
       description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    DeviceNotEnrollable:
+      description: The status of the device does not allow issuing it a certificate (decommissioned device). The request is refused for good and should not be retried.
       content:
         application/json:
           schema:

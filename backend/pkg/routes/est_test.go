@@ -18,6 +18,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	middleware "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gin-middleware"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	smock "github.com/lamassuiot/lamassuiot/v4/core/pkg/services/mock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -182,6 +183,31 @@ func TestEnrollReenroll(t *testing.T) {
 			},
 			resultCheck: func(t *testing.T, m *smock.MockESTService, res *http.Response) {},
 		},
+		{
+			// A decommissioned device is a decision, not a failure: a 4xx tells the client not to retry.
+			name:           "Enroll of a decommissioned device",
+			url:            "/.well-known/est/aps/simpleenroll",
+			contentType:    "application/pkcs10",
+			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
+			expectedStatus: http.StatusPreconditionRequired,
+			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
+			mockSetup: func(m *smock.MockESTService) {
+				m.On("Enroll", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), errs.ErrDeviceInvalidStatus)
+			},
+			resultCheck: func(t *testing.T, m *smock.MockESTService, res *http.Response) {},
+		},
+		{
+			name:           "ReEnroll of a decommissioned device",
+			url:            "/.well-known/est/aps/simplereenroll",
+			contentType:    "application/pkcs10",
+			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
+			expectedStatus: http.StatusPreconditionRequired,
+			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
+			mockSetup: func(m *smock.MockESTService) {
+				m.On("Reenroll", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), errs.ErrDeviceInvalidStatus)
+			},
+			resultCheck: func(t *testing.T, m *smock.MockESTService, res *http.Response) {},
+		},
 	}
 
 	for _, tt := range tests {
@@ -286,6 +312,18 @@ func TestServerKeyGen(t *testing.T) {
 			resultCheck: func(t *testing.T, m *smock.MockESTService, res *http.Response) {
 				m.AssertNotCalled(t, "ServerKeyGen")
 			},
+		},
+		{
+			name:           "ServerKeyGen of a decommissioned device",
+			url:            "/.well-known/est/aps/serverkeygen",
+			contentType:    "application/pkcs10",
+			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
+			expectedStatus: http.StatusPreconditionRequired,
+			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
+			mockSetup: func(m *smock.MockESTService) {
+				m.On("ServerKeyGen", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), nil, errs.ErrDeviceInvalidStatus)
+			},
+			resultCheck: func(t *testing.T, m *smock.MockESTService, res *http.Response) {},
 		},
 		{
 			name:           "Invalid content type",
