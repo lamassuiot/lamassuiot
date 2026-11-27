@@ -32,6 +32,7 @@ var certificateSortFields = map[string]struct{}{
 	"issuer_common_name": {}, "issuer_organization": {}, "issuer_organization_unit": {}, "issuer_country": {}, "issuer_state": {}, "issuer_locality": {},
 	"valid_from": {}, "valid_to": {}, "revocation_timestamp": {}, "revocation_reason": {}, "type": {}, "engine_id": {}, "key_id": {},
 	"issuer_meta_serial_number": {}, "issuer_meta_id": {}, "issuer_meta_level": {}, "has_private_key": {}, "is_ca": {},
+	"metadata": {},
 }
 
 func (s *certificateStore) read(ctx context.Context) *gorm.DB {

@@ -57,6 +57,11 @@ func testDMS(t *testing.T, ctx context.Context, db *gorm.DB) {
 	if err != nil || bookmark != "" || !reflect.DeepEqual(ids, []string{"dms-a", "dms-b"}) {
 		t.Fatalf("DMS pages=%v bookmark=%q error=%v", ids, bookmark, err)
 	}
+	var byMetadata []string
+	sorted := &resources.QueryParameters{PageSize: 10, Sort: resources.SortOptions{SortField: "metadata", SortMode: resources.SortModeDesc, JsonPathExpr: "$.document"}}
+	if _, err := store.SelectAll(ctx, false, func(d models.DMS) { byMetadata = append(byMetadata, d.ID) }, sorted, nil); err != nil || !reflect.DeepEqual(byMetadata, []string{"dms-a", "dms-b"}) {
+		t.Fatalf("DMS sorted by metadata JSONPath=%v error=%v", byMetadata, err)
+	}
 	params.NextBookmark = ""
 	ids = nil
 	var updateErr error

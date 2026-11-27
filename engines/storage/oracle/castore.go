@@ -33,10 +33,8 @@ func caFields() (map[string]struct{}, map[string]struct{}, map[string]string) {
 	}
 	for _, name := range []string{"id", "serial_number", "profile_id", "metadata", "creation_ts", "level"} {
 		filters[name] = struct{}{}
+		sorts[name] = struct{}{}
 		delete(tables, name)
-		if name != "metadata" {
-			sorts[name] = struct{}{}
-		}
 	}
 	return filters, sorts, tables
 }

@@ -15,7 +15,7 @@ type dmsStore struct{ db *gorm.DB }
 var _ storage.DMSRepo = (*dmsStore)(nil)
 var dmsPK = regexp.MustCompile(`(?i)\([^)]*\blamassu_dms_pk\)`)
 var dmsFilterFields = map[string]struct{}{"id": {}, "name": {}, "creation_date": {}, "metadata": {}, "settings": {}}
-var dmsSortFields = map[string]struct{}{"id": {}, "name": {}, "creation_date": {}}
+var dmsSortFields = map[string]struct{}{"id": {}, "name": {}, "creation_date": {}, "metadata": {}}
 
 func (s *dmsStore) Count(ctx context.Context) (int, error) { return s.CountWithFilters(ctx, nil) }
 

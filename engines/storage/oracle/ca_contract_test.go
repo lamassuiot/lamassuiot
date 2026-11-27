@@ -151,6 +151,13 @@ func testCAAndCertificateContracts(t *testing.T, ctx context.Context, repos ...c
 			if err != nil || bookmark != "" || !reflect.DeepEqual(certPages, []string{childSerial, rootSerial}) {
 				t.Fatalf("certificate pages=%v bookmark=%q error=%v", certPages, bookmark, err)
 			}
+			var certsByMetadata []string
+			if _, err := repo.cert.SelectAll(ctx, storage.StorageListRequest[models.Certificate]{
+				QueryParams: &resources.QueryParameters{PageSize: 10, Sort: resources.SortOptions{SortField: "metadata", SortMode: resources.SortModeAsc, JsonPathExpr: "$.contract"}},
+				ApplyFunc:   func(cert models.Certificate) { certsByMetadata = append(certsByMetadata, cert.SerialNumber) },
+			}); err != nil || !reflect.DeepEqual(certsByMetadata, []string{childSerial, rootSerial}) {
+				t.Errorf("certificates sorted by metadata JSONPath=%v error=%v", certsByMetadata, err)
+			}
 
 			updatedChild := *childCert
 			updatedChild.Status = models.StatusRevoked
@@ -253,6 +260,18 @@ func testCAAndCertificateContracts(t *testing.T, ctx context.Context, repos ...c
 			bookmark, err = repo.ca.SelectAll(ctx, caPageReq)
 			if err != nil || bookmark != "" || !reflect.DeepEqual(caPages, []string{childID, rootID}) {
 				t.Fatalf("CA pages=%v bookmark=%q error=%v", caPages, bookmark, err)
+			}
+			// The PostgreSQL CA repository joins certificates, which also have a
+			// metadata column, and rejects this sort as ambiguous, so it is only
+			// checked on Oracle.
+			if repo.name == "oracle" {
+				var casByMetadata []string
+				if _, err := repo.ca.SelectAll(ctx, storage.StorageListRequest[models.CACertificate]{
+					QueryParams: &resources.QueryParameters{PageSize: 10, Sort: resources.SortOptions{SortField: "metadata", SortMode: resources.SortModeDesc, JsonPathExpr: "$.ca"}},
+					ApplyFunc:   func(ca models.CACertificate) { casByMetadata = append(casByMetadata, ca.ID) },
+				}); err != nil || !reflect.DeepEqual(casByMetadata, []string{rootID, childID}) {
+					t.Errorf("CAs sorted by metadata JSONPath=%v error=%v", casByMetadata, err)
+				}
 			}
 
 			updatedCA := *childCA

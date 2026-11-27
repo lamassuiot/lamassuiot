@@ -105,6 +105,17 @@ that PostgreSQL also stores as NULL (a certificate's `key_id`, a group's
 are evaluated with escaped `LIKE` patterns, because Oracle cannot compare CLOB
 values with `=`. Field-length limits still require parity validation.
 
+Sorting by `metadata` with a JSONPath expression
+(`sort_by=metadata[jsonpath]$.env`) is supported for certificates, CAs, DMS,
+devices and KMS keys, with the same order as PostgreSQL. A plain
+`sort_by=metadata` follows Oracle's JSON ordering, which differs from
+PostgreSQL's `jsonb` ordering; use a JSONPath expression when the order must
+match. Some sorts that PostgreSQL accepts are rejected on Oracle:
+
+- KMS `public_key` (a CLOB) and `tags` (a JSON array).
+- JSONPath sorts on Authz principals and policies when the Authz database is
+  Oracle; the API answers them with 400.
+
 Character columns are ordered and paginated with
 `NLSSORT(column, 'NLS_SORT=BINARY')`, so results match PostgreSQL's binary
 ordering whatever the session's `NLS_SORT` or `NLS_COMP` (the driver derives
