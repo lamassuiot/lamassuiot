@@ -637,13 +637,19 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		return nil, errors.New("unsupported private key type")
 	}
 
-	// The engine stores a public key once: a row of this engine may already carry it. It is the same key when the
-	// engine holds it under the name of that row. Otherwise the row is one the engine lost the object of (the key of a
-	// deleted CA left behind) or one with the public key only, and the imported key takes it over.
+	// The engine stores a public key once: a row of this engine may already carry it. Every engine names an imported
+	// key after its digest, so a row under another name (a key of a CA imported before the KMS, held under its SKI) is
+	// refused before anything is written to the engine. A row named by the digest is the same key when the engine holds
+	// it; otherwise it has the public key only (the key of a deleted CA) or the engine lost its key, and the imported
+	// private key is added to it.
 	existing, err := svc.rowOfPublicKey(ctx, publicKey, engineID)
 	if err != nil {
 		lFunc.Errorf("could not look up the public key of the imported key: %s", err)
 		return nil, err
+	}
+	if existing != nil && existing.KeyID != existing.Digest {
+		lFunc.Infof("engine %s already stores this public key as key %s", engineID, existing.KeyID)
+		return nil, fmt.Errorf("%w: engine %s stores this public key as key %s", errs.ErrKeyAlreadyExists, engineID, existing.KeyID)
 	}
 	if existing != nil && existing.HasPrivateKey {
 		held, err := engineHolds(ctx, engineInstance, existing.KeyID)
@@ -697,7 +703,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	if existing != nil {
-		return svc.takeOverKeyRow(ctx, lFunc, existing, keyID, engineID, input.Name)
+		return svc.addPrivateKeyToRow(ctx, lFunc, existing, input.Name)
 	}
 
 	pubBytes, err := x509.MarshalPKIXPublicKey(signer.Public())
@@ -770,36 +776,20 @@ func (svc *KMSServiceBackend) rowOfPublicKey(ctx context.Context, publicKey cryp
 	return nil, nil
 }
 
-// takeOverKeyRow makes the row of a key the engine did not hold refer to the key just imported under keyID: it takes
-// that name, keeping its old one as an alias (the certificates that reference it follow), and records the private key.
-func (svc *KMSServiceBackend) takeOverKeyRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, keyID, engineID, name string) (*models.Key, error) {
-	if row.KeyID != keyID {
-		renamed, err := svc.kmsStorage.RenameKey(ctx, engineID, row.KeyID, keyID, func() error { return nil })
-		if err != nil {
-			lFunc.Errorf("could not rename key %s of engine %s to %s: %s", row.KeyID, engineID, keyID, err)
-			return nil, err
-		}
-		if !renamed {
-			return nil, fmt.Errorf("key %s of engine %s changed while it was being imported", row.KeyID, engineID)
-		}
+// addPrivateKeyToRow records the private key just imported in the row that already carries its public key under the
+// same name, one whose key the engine did not hold.
+func (svc *KMSServiceBackend) addPrivateKeyToRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, name string) (*models.Key, error) {
+	row.HasPrivateKey = true
+	if row.Name == "" {
+		row.Name = name
 	}
-	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, engineID)
+	updated, err := svc.kmsStorage.Update(ctx, row)
 	if err != nil {
+		lFunc.Errorf("could not record the private key of key %s of engine %s: %s", row.KeyID, row.EngineID, err)
 		return nil, err
 	}
-	if !exists {
-		return nil, fmt.Errorf("key %s of engine %s changed while it was being imported", keyID, engineID)
-	}
-	key.HasPrivateKey = true
-	if key.Name == "" {
-		key.Name = name
-	}
-	updated, err := svc.kmsStorage.Update(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-	updated.PKCS11URI = buildPKCS11ID(engineID, keyID, "private")
-	lFunc.Infof("key %s of engine %s (was %s) now holds the imported private key", keyID, engineID, row.KeyID)
+	updated.PKCS11URI = buildPKCS11ID(row.EngineID, row.KeyID, "private")
+	lFunc.Infof("key %s of engine %s now holds the imported private key", row.KeyID, row.EngineID)
 	return updated, nil
 }
 

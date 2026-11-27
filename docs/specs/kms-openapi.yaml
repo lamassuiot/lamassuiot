@@ -236,8 +236,9 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: >-
-            The crypto engine already holds this key under the name of its row. A row of the engine that carries the same
-            public key but whose key the engine does not hold (or holds the public key only) is reused instead.
+            The crypto engine already holds this key, or the KMS stores its public key in that engine under a name other
+            than its digest. A row of the engine named by the digest whose key the engine does not hold (or that has the
+            public key only) gets the private key instead.
           content:
             application/json:
               schema:

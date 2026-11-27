@@ -112,21 +112,6 @@ func (r *importRows) Update(_ context.Context, key *models.Key) (*models.Key, er
 	return key, nil
 }
 
-func (r *importRows) RenameKey(_ context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
-	k, ok := r.rows[oldKeyID+"@"+engineID]
-	if !ok {
-		return false, nil
-	}
-	if err := renameInEngine(); err != nil {
-		return false, err
-	}
-	delete(r.rows, oldKeyID+"@"+engineID)
-	k.KeyID = newKeyID
-	k.Aliases = append(k.Aliases, oldKeyID)
-	r.rows[newKeyID+"@"+engineID] = k
-	return true, nil
-}
-
 func newImportService(t *testing.T) (*KMSServiceBackend, *importEngine, *importRows) {
 	t.Helper()
 	kmsValidator = validator.New()
@@ -148,9 +133,10 @@ func storedPublicKey(t *testing.T, key *ecdsa.PrivateKey) (string, string) {
 	return base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der})), digest
 }
 
-// Importing a key whose public key the engine already has a row for: the row is reused when nothing holds the key
-// (a row a deleted CA left behind, or one registered with its public key only), and the import is refused when the
-// engine holds it, instead of failing on the unique (digest, engine_id) of kms_keys.
+// Importing a key whose public key the engine already has a row for, instead of failing on the unique (digest,
+// engine_id) of kms_keys: a row named by the digest gets the private key when the engine does not hold it (a row
+// registered with its public key only, or one whose key the engine lost), and the import is refused when the engine
+// holds it or when the row has another name, before anything is written to the engine.
 func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 	ctx := context.Background()
 	newKey := func() *ecdsa.PrivateKey {
@@ -170,18 +156,33 @@ func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 		require.Len(t, rows.rows, 1)
 	})
 
-	t.Run("a row whose name the engine does not hold is taken over", func(t *testing.T) {
+	t.Run("a row under another name than the digest is refused, and nothing is written", func(t *testing.T) {
 		svc, eng, rows := newImportService(t)
 		key := newKey()
 		pub, digest := storedPublicKey(t, key)
 		const ski = "5a1b2c3d4e5f60718293a4b5c6d7e8f901234567"
 		rows.rows[ski+"@e1"] = &models.Key{KeyID: ski, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true, Aliases: []string{"kept"}}
 
-		got, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.ErrorIs(t, err, errs.ErrKeyAlreadyExists)
+		require.ErrorContains(t, err, ski, "the error names the row that stores the public key")
+		require.Empty(t, eng.keys, "nothing is written to the engine")
+		require.Len(t, rows.rows, 1)
+		require.Equal(t, []string{"kept"}, rows.rows[ski+"@e1"].Aliases, "the row is left as it was")
+	})
+
+	t.Run("a row named by the digest whose key the engine lost gets it back", func(t *testing.T) {
+		svc, eng, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true, Name: "original", Aliases: []string{"kept"}}
+
+		got, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1", Name: "again"})
 		require.NoError(t, err)
-		require.Equal(t, digest, got.KeyID, "the row now carries the name the engine holds the key under")
+		require.Equal(t, digest, got.KeyID)
 		require.True(t, got.HasPrivateKey)
-		require.ElementsMatch(t, []string{"kept", ski}, got.Aliases, "the old name stays as an alias")
+		require.Equal(t, "original", got.Name, "a row that has a name keeps it")
+		require.Equal(t, []string{"kept"}, got.Aliases)
 		require.Len(t, rows.rows, 1, "no second row")
 		require.Contains(t, eng.keys, digest)
 	})
@@ -232,30 +233,27 @@ func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 		svc, eng, rows := newImportService(t)
 		key := newKey()
 		pub, digest := storedPublicKey(t, key)
-		const ski = "7c2c3d4e5f60718293a4b5c6d7e8f9012345678b"
-		eng.keys[ski] = key
+		eng.keys[digest] = key
 		eng.getErr = errors.New("CKR_SESSION_HANDLE_INVALID")
-		rows.rows[ski+"@e1"] = &models.Key{KeyID: ski, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true}
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true, Name: "original"}
 
-		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1", Name: "again"})
 		require.ErrorIs(t, err, errs.ErrKeyAlreadyExists, "the engine lists the key: it holds it")
-		require.NotContains(t, eng.keys, digest, "no second copy is written")
-		require.Equal(t, ski, rows.rows[ski+"@e1"].KeyID)
+		require.Equal(t, "original", rows.rows[digest+"@e1"].Name, "the row is left as it was")
 	})
 
 	t.Run("an engine that cannot say whether it holds the key stops the import", func(t *testing.T) {
 		svc, eng, rows := newImportService(t)
 		key := newKey()
 		pub, digest := storedPublicKey(t, key)
-		const ski = "8d2c3d4e5f60718293a4b5c6d7e8f9012345678c"
 		eng.getErr = errors.New("throttled")
 		eng.listErr = errors.New("throttled")
-		rows.rows[ski+"@e1"] = &models.Key{KeyID: ski, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true}
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true, Name: "original"}
 
-		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1", Name: "again"})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, errs.ErrKeyAlreadyExists)
 		require.Empty(t, eng.keys, "nothing is written to the engine")
-		require.Equal(t, ski, rows.rows[ski+"@e1"].KeyID, "the row is left as it was")
+		require.Equal(t, "original", rows.rows[digest+"@e1"].Name, "the row is left as it was")
 	})
 }
