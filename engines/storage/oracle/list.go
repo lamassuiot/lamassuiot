@@ -38,7 +38,7 @@ func listRowsWithOptions[T any](tx *gorm.DB, req storage.StorageListRequest[T], 
 	if err != nil {
 		return "", err
 	}
-	var order []clause.OrderByColumn
+	var order orderKeys
 	var jsonOrder *jsonPathOrder
 	if page.Sort.SortField != "" {
 		name := strings.ReplaceAll(page.Sort.SortField, ".", "_")
@@ -68,35 +68,26 @@ func listRowsWithOptions[T any](tx *gorm.DB, req storage.StorageListRequest[T], 
 			if table == "" {
 				table = clause.CurrentTable
 			}
-			order = append(order, clause.OrderByColumn{Column: clause.Column{Table: table, Name: name}, Desc: page.Sort.SortMode == resources.SortModeDesc})
+			order = append(order, newOrderKey(table, name, page.Sort.SortMode == resources.SortModeDesc))
 		}
 	}
-	unique := make([]clause.OrderByColumn, len(uniqueFields))
+	unique := make(orderKeys, len(uniqueFields))
 	for i, field := range uniqueFields {
-		unique[i] = clause.OrderByColumn{Column: clause.Column{Table: clause.CurrentTable, Name: field}}
+		unique[i] = newOrderKey(clause.CurrentTable, field, false)
 	}
 	if req.ExhaustiveRun {
 		var last []any
 		for {
-			query := tx.Session(&gorm.Session{}).Clauses(clause.OrderBy{Columns: unique}).Limit(page.Limit)
+			query := tx.Session(&gorm.Session{}).Clauses(clause.OrderBy{Expression: unique}).Limit(page.Limit)
 			if last == nil {
 				query = query.Offset(page.Offset)
 			} else {
 				if len(last) != len(uniqueFields) {
 					return "", errors.New("invalid keyset cursor")
 				}
-				// Lexicographic comparison also works on Oracle releases without
-				// support for ordering tuple expressions.
-				var alternatives []clause.Expression
-				for i, field := range uniqueFields {
-					var terms []clause.Expression
-					for j := 0; j < i; j++ {
-						terms = append(terms, clause.Eq{Column: unique[j].Column, Value: last[j]})
-					}
-					terms = append(terms, clause.Gt{Column: clause.Column{Table: clause.CurrentTable, Name: field}, Value: last[i]})
-					alternatives = append(alternatives, clause.And(terms...))
-				}
-				query = query.Where(clause.Or(alternatives...))
+				// The predicate uses the same NLSSORT keys as ORDER BY, so rows
+				// are neither skipped nor repeated under a linguistic NLS_SORT.
+				query = query.Where(keysetAfter{keys: unique, values: last})
 			}
 			var rows []T
 			if err := query.Find(&rows).Error; err != nil {
@@ -115,7 +106,7 @@ func listRowsWithOptions[T any](tx *gorm.DB, req storage.StorageListRequest[T], 
 		}
 	}
 	var rows []T
-	orderClause := clause.OrderBy{Columns: append(order, unique...)}
+	orderClause := clause.OrderBy{Expression: append(order, unique...)}
 	if jsonOrder != nil {
 		jsonOrder.unique = unique
 		orderClause = clause.OrderBy{Expression: jsonOrder}

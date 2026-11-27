@@ -40,11 +40,11 @@ func TestJSONPathOrderBuildsOracleExpressionAndStableTieBreaker(t *testing.T) {
 	stmt.AddClause(clause.OrderBy{Expression: jsonPathOrder{
 		column: clause.Column{Table: clause.CurrentTable, Name: "metadata"},
 		path:   "$.env.priority",
-		unique: []clause.OrderByColumn{{Column: clause.Column{Table: clause.CurrentTable, Name: "id"}}},
+		unique: orderKeys{newOrderKey(clause.CurrentTable, "id", false)},
 	}})
 	stmt.Build("ORDER BY")
 	sql := stmt.SQL.String()
-	for _, expected := range []string{"lamassu_json_sort_key(CASE WHEN", "JSON_VALUE(\"DEVICE\".\"METADATA\"", "'$.\"env\".\"priority\".numberOnly()'", "RETURNING NUMBER", "LPAD(TO_CHAR", "REGEXP_LIKE(", "TO_TIMESTAMP(", "AS TIMESTAMP(6)", "FF9", "FF6", "JSON_QUERY(\"DEVICE\".\"METADATA\"", "RETURNING CLOB NULL ON EMPTY ERROR ON ERROR", "RETURNING CLOB NULL ON EMPTY NULL ON ERROR", "@.type() == \"array\" || @.type() == \"object\"", "@.stringOnly() == \"\"", "THEN TO_CLOB(CHR(1))", "NULLS FIRST", ", \"DEVICE\".\"ID\""} {
+	for _, expected := range []string{"lamassu_json_sort_key(CASE WHEN", "JSON_VALUE(\"DEVICE\".\"METADATA\"", "'$.\"env\".\"priority\".numberOnly()'", "RETURNING NUMBER", "LPAD(TO_CHAR", "REGEXP_LIKE(", "TO_TIMESTAMP(", "AS TIMESTAMP(6)", "FF9", "FF6", "JSON_QUERY(\"DEVICE\".\"METADATA\"", "RETURNING CLOB NULL ON EMPTY ERROR ON ERROR", "RETURNING CLOB NULL ON EMPTY NULL ON ERROR", "@.type() == \"array\" || @.type() == \"object\"", "@.stringOnly() == \"\"", "THEN TO_CLOB(CHR(1))", "NULLS FIRST", `, NLSSORT("DEVICE"."ID", 'NLS_SORT=BINARY')`} {
 		if !strings.Contains(sql, expected) {
 			t.Errorf("ORDER BY SQL %q missing %q", sql, expected)
 		}

@@ -95,3 +95,15 @@ startup checks that all known versions are applied and unchanged.
 These migrations create an empty Oracle schema. They do not copy data from an
 existing PostgreSQL installation. Oracle treats empty SQL strings as NULL;
 some search behavior and field-length limits still require parity validation.
+
+Character columns are ordered and paginated with
+`NLSSORT(column, 'NLS_SORT=BINARY')`, so results match PostgreSQL's binary
+ordering whatever the session's `NLS_SORT` or `NLS_COMP` (the driver derives
+them from the client's `NLS_LANGUAGE`). Migration 9 adds function-based indexes
+on those expressions for the columns each repository paginates by, so the first
+page and each keyset page are served by an index range scan. With
+`NLS_COMP=LINGUISTIC` set explicitly, Oracle still returns correct results but
+sorts the rows after the keyset cursor instead of stopping after one page.
+Under `MAX_STRING_SIZE=STANDARD`, `NLSSORT` truncates its key to 2000 bytes,
+so two identifiers that share their first 2000 bytes would compare as equal;
+this needs identifiers of over 500 four-byte characters.

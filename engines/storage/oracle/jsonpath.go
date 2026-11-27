@@ -49,7 +49,7 @@ type jsonPathOrder struct {
 	column clause.Column
 	path   string
 	desc   bool
-	unique []clause.OrderByColumn
+	unique orderKeys
 }
 
 func (e jsonPathOrder) Build(builder clause.Builder) {
@@ -126,6 +126,6 @@ func (e jsonPathOrder) Build(builder clause.Builder) {
 	}
 	if len(e.unique) > 0 {
 		builder.WriteString(", ")
-		clause.OrderBy{Columns: e.unique}.Build(builder)
+		e.unique.Build(builder)
 	}
 }
