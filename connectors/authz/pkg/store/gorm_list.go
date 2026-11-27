@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage/pagination"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -139,9 +138,9 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 	case resources.StringNotEqual, resources.EnumNotEqual:
 		return db.Where(clause.Neq{Column: column, Value: value}), nil
 	case resources.DateEqual:
-		date, err := time.Parse(time.RFC3339Nano, value)
+		date, err := oraclestorage.ParseFilterTime(value)
 		if err != nil {
-			return db, fmt.Errorf("invalid date filter value %q: %w", value, err)
+			return db, err
 		}
 		return db.Where(clause.Eq{Column: column, Value: date}), nil
 	case resources.NumberEqual, resources.NumberNotEqual:
@@ -237,9 +236,9 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 func applyAuthzOrderedFilter(db *gorm.DB, column clause.Column, value string, operation resources.FilterOperation, operator string) (*gorm.DB, error) {
 	var bind any
 	if operation == resources.DateBefore || operation == resources.DateAfter || operation == resources.DateEqual {
-		date, err := time.Parse(time.RFC3339Nano, value)
+		date, err := oraclestorage.ParseFilterTime(value)
 		if err != nil {
-			return db, fmt.Errorf("invalid date filter value %q: %w", value, err)
+			return db, err
 		}
 		bind = date
 	} else {

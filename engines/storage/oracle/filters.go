@@ -226,9 +226,9 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			operators := map[resources.FilterOperation]string{resources.NumberEqual: "=", resources.NumberNotEqual: "<>", resources.NumberLessThan: "<", resources.NumberLessOrEqualThan: "<=", resources.NumberGreaterThan: ">", resources.NumberGreaterOrEqualThan: ">="}
 			db = db.Where("? "+operators[filter.FilterOperation]+" ?", col, n)
 		case resources.DateEqual, resources.DateBefore, resources.DateAfter:
-			date, err := time.Parse(time.RFC3339Nano, filter.Value)
+			date, err := ParseFilterTime(filter.Value)
 			if err != nil {
-				return nil, fmt.Errorf("invalid date filter value %q: %w", filter.Value, err)
+				return nil, err
 			}
 			operators := map[resources.FilterOperation]string{resources.DateEqual: "=", resources.DateBefore: "<", resources.DateAfter: ">"}
 			db = db.Where("? "+operators[filter.FilterOperation]+" ?", col, date)
@@ -310,6 +310,30 @@ func clobEqualityFilter(col clause.Column, op resources.FilterOperation, value s
 		vars = append(vars, col)
 	}
 	return clause.Expr{SQL: sql, Vars: vars}, true
+}
+
+// filterTimeLayouts are the date filter formats accepted by both providers.
+// PostgreSQL casts the raw filter string to a timestamp, so besides RFC 3339 it
+// accepts a date alone and a date and time without a zone, which it reads in
+// the session time zone (UTC for Lamassu). Layouts without a zone are parsed
+// as UTC.
+var filterTimeLayouts = []string{
+	time.RFC3339Nano,
+	"2006-01-02 15:04:05.999999999Z07:00",
+	"2006-01-02T15:04:05.999999999",
+	"2006-01-02 15:04:05.999999999",
+	time.DateOnly,
+}
+
+// ParseFilterTime parses a date filter value as PostgreSQL would, for the
+// date formats listed in filterTimeLayouts.
+func ParseFilterTime(value string) (time.Time, error) {
+	for _, layout := range filterTimeLayouts {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("invalid date filter value %q: use RFC 3339, YYYY-MM-DD or YYYY-MM-DD[T ]HH:MM:SS", value)
 }
 
 // CompileJSONPathPredicate exposes the Oracle JSONPath translator to other

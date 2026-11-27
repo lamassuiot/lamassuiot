@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/testutil"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -117,5 +119,44 @@ func TestGormPrincipalStore_ListWithActiveAuthorizationFilter(t *testing.T) {
 		require.NoError(t, err, "active = %s", filter)
 		require.Len(t, principals, 1, "active = %s", filter)
 		assert.Equal(t, want, principals[0].ID, "active = %s", filter)
+	}
+}
+
+// TestGormPrincipalStore_ListWithDateOnlyFilter checks that date filters
+// accept a date alone, as PostgreSQL's timestamp cast does, on both providers.
+func TestGormPrincipalStore_ListWithDateOnlyFilter(t *testing.T) {
+	container, err := testutil.RunEmpty()
+	require.NoError(t, err)
+	defer container.Cleanup()
+
+	sqlDB, err := container.DB.DB()
+	require.NoError(t, err)
+
+	log := logrus.NewEntry(logrus.New())
+	log.Logger.SetLevel(logrus.ErrorLevel)
+	require.NoError(t, RunMigrationsForProvider(sqlDB, "", testutil.StorageProvider(), log))
+
+	s, err := NewGormPrincipalStore(container.DB)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, s.Create(ctx, &models.Principal{ID: "dated-user", Name: "Dated", Type: "oidc", Active: true}))
+
+	yesterday := time.Now().UTC().AddDate(0, 0, -1).Format(time.DateOnly)
+	tomorrow := time.Now().UTC().AddDate(0, 0, 1).Format(time.DateOnly)
+	for _, tc := range []struct {
+		op    resources.FilterOperation
+		value string
+		want  int
+	}{
+		{resources.DateAfter, yesterday, 1},
+		{resources.DateBefore, tomorrow, 1},
+		{resources.DateAfter, tomorrow, 0},
+	} {
+		principals, _, err := s.List(ctx, &resources.QueryParameters{
+			Filters: []resources.FilterOption{{Field: "created_at", FilterOperation: tc.op, Value: tc.value}},
+		})
+		require.NoError(t, err, "created_at op %d %s", tc.op, tc.value)
+		assert.Len(t, principals, tc.want, "created_at op %d %s", tc.op, tc.value)
 	}
 }
