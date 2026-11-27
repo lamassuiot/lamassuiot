@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
@@ -160,6 +161,9 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 	if err != nil {
 		return false, fmt.Errorf("failed to build authorization graph: %w", err)
 	}
+	if _, ok := core.TenantIDFromContext(ctx); ok {
+		filterGenerator.SetTenantScoped(true)
+	}
 	result, err := filterGenerator.GenerateCheckFilter(action, schemaName, entityType, entityKey)
 	if err != nil {
 		return false, fmt.Errorf("failed to generate filter: %w", err)
@@ -189,7 +193,11 @@ func (e *Engine) authorizeAtomic(ctx context.Context, policies *PolicyRegistry, 
 		"action": action, "entity_type": entityType, "where_clause": whereClause,
 	}).Trace("authorization filter detail")
 	span.AddEvent("db.query", trace.WithAttributes(attribute.Int("authz.condition_count", len(result.Conditions))))
-	query = query.Where(whereClause).Select("1").Limit(1).Find(&exists)
+	query = query.Where(whereClause)
+	if tenantID, ok := core.TenantIDFromContext(ctx); ok {
+		query = query.Where(fmt.Sprintf("%s.tenant_id = ?", schema.ColumnQualifier()), tenantID)
+	}
+	query = query.Select("1").Limit(1).Find(&exists)
 	if query.Error != nil {
 		return false, fmt.Errorf("database query failed: %w", query.Error)
 	}
@@ -233,10 +241,16 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 	if err != nil {
 		return "", fmt.Errorf("failed to build authorization graph: %w", err)
 	}
+	if _, ok := core.TenantIDFromContext(ctx); ok {
+		filterGenerator.SetTenantScoped(true)
+	}
 
 	result, err := filterGenerator.GenerateListFilter("read", schemaName, entityType)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate filter: %w", err)
+	}
+	if tenantID, ok := core.TenantIDFromContext(ctx); ok {
+		applyTenantScopeToListFilter(result, schema, tenantID)
 	}
 
 	log.WithFields(logrus.Fields{
@@ -255,6 +269,26 @@ func (e *Engine) GetListFilter(ctx context.Context, policies *PolicyRegistry, na
 	}).Trace("list filter SQL")
 
 	return result.FullSQL, nil
+}
+
+// applyTenantScopeToListFilter enforces tenant_id as an outer AND boundary over all
+// policy conditions, including wildcard policies where GenerateListFilter leaves
+// Conditions empty.
+func applyTenantScopeToListFilter(result *FilterResult, schema *SchemaDefinition, tenantID string) {
+	if tenantID == "" {
+		return
+	}
+	if len(result.Conditions) == 1 && result.Conditions[0] == "1 = 0" {
+		return
+	}
+	tenantCond := fmt.Sprintf("%s.tenant_id = %s", schema.ColumnQualifier(), sqlStringLiteral(tenantID))
+	if len(result.Conditions) == 0 || (len(result.Conditions) == 1 && result.Conditions[0] == "1 = 1") {
+		result.Conditions = []string{tenantCond}
+	} else {
+		policyExpr := strings.Join(result.Conditions, " OR ")
+		result.Conditions = []string{fmt.Sprintf("%s AND (%s)", tenantCond, policyExpr)}
+	}
+	result.buildFullSQL(schema, " AND ")
 }
 
 // GetSchemas returns the entity schema registry (for introspection).

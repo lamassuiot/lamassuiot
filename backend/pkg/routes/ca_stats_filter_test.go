@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	tenantcontext "github.com/lamassuiot/lamassuiot/v4/backend/pkg/routes/middlewares/tenant-context"
 	authzcore "github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
 	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -62,7 +63,9 @@ func TestCAStatisticsRoutesUseTheFilterOfTheirOwnEntity(t *testing.T) {
 		t.Run(path, func(t *testing.T) {
 			response := httptest.NewRecorder()
 			// No X-Principal-ID: admin-mode, so the list guard runs.
-			router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set(tenantcontext.HeaderTenantID, "tenant-a")
+			router.ServeHTTP(response, req)
 			require.Equal(t, http.StatusOK, response.Code)
 		})
 	}

@@ -5,6 +5,7 @@ package dto
 // GetGlobalCapabilitiesRequest is the request body for POST /api/v1/authz/capabilities/global.
 type GetGlobalCapabilitiesRequest struct {
 	PrincipalID string `json:"principal_id" binding:"required"`
+	TenantID    string `json:"tenant_id,omitempty"`
 }
 
 // MatchAndGetGlobalCapabilitiesRequest is the request body for
@@ -12,6 +13,7 @@ type GetGlobalCapabilitiesRequest struct {
 type MatchAndGetGlobalCapabilitiesRequest struct {
 	AuthType     string `json:"auth_type"     binding:"required,oneof=oidc x509"`
 	AuthMaterial any    `json:"auth_material" binding:"required"`
+	TenantID     string `json:"tenant_id,omitempty"`
 }
 
 // GlobalCapabilitiesResponse is the response for the global capabilities endpoints.
@@ -37,6 +39,7 @@ type EntityCapabilityQuery struct {
 type GetEntityCapabilitiesRequest struct {
 	PrincipalID string                  `json:"principal_id" binding:"required"`
 	Queries     []EntityCapabilityQuery `json:"queries"      binding:"required,min=1"`
+	TenantID    string                  `json:"tenant_id,omitempty"`
 }
 
 // MatchAndGetEntityCapabilitiesRequest is the request body for
@@ -45,6 +48,7 @@ type MatchAndGetEntityCapabilitiesRequest struct {
 	AuthType     string                  `json:"auth_type"     binding:"required,oneof=oidc x509"`
 	AuthMaterial any                     `json:"auth_material" binding:"required"`
 	Queries      []EntityCapabilityQuery `json:"queries"       binding:"required,min=1"`
+	TenantID     string                  `json:"tenant_id,omitempty"`
 }
 
 // EntityCapabilitiesResultDTO is a single entry in the batch response.

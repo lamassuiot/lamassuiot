@@ -10,9 +10,24 @@ import (
 
 // FilterGenerator generates SQL WHERE clauses for authorization
 type FilterGenerator struct {
-	schemas  *SchemaRegistry
-	policies *PolicyRegistry
-	graph    *AuthorizationGraph
+	schemas      *SchemaRegistry
+	policies     *PolicyRegistry
+	graph        *AuthorizationGraph
+	tenantScoped bool
+}
+
+// SetTenantScoped enables tenant_id equality on both sides of cascade JOIN clauses.
+func (fg *FilterGenerator) SetTenantScoped(enabled bool) {
+	fg.tenantScoped = enabled
+}
+
+func (fg *FilterGenerator) buildCascadeJoin(tableName, alias, leftRef, fkCol, pkCol string) string {
+	joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
+		tableName, alias, leftRef, fkCol, alias, pkCol)
+	if fg.tenantScoped {
+		joinClause += fmt.Sprintf(" AND %s.tenant_id = %s.tenant_id", leftRef, alias)
+	}
+	return joinClause
 }
 
 // NewFilterGenerator creates a new filter generator.
@@ -438,14 +453,9 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				targetSchema.ColumnQualifier(),
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, targetSchema.ColumnQualifier(), edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		} else {
 			prevAlias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx-1)
 			fromSchema, err := fg.schemas.Get(edge.From)
@@ -453,14 +463,9 @@ func (fg *FilterGenerator) buildPathFilter(ownedEntityType string, ownedEntityID
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				prevAlias,
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, prevAlias, edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		}
 
 		if edge.From == ownedEntityType {
@@ -512,28 +517,18 @@ func (fg *FilterGenerator) buildPathFilterByColumnFilter(ownedEntityType string,
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				targetSchema.ColumnQualifier(),
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, targetSchema.ColumnQualifier(), edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		} else {
 			prevAlias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx-1)
 			fromSchema, err := fg.schemas.Get(edge.From)
 			if err != nil {
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				prevAlias,
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, prevAlias, edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		}
 	}
 
@@ -618,14 +613,9 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				targetSchema.ColumnQualifier(),
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, targetSchema.ColumnQualifier(), edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		} else {
 			prevAlias := fmt.Sprintf("j%d_%d", pathIdx, joinIdx-1)
 			fromSchema, err := fg.schemas.Get(edge.From)
@@ -633,14 +623,9 @@ func (fg *FilterGenerator) buildPathFilterWildcard(ownedEntityType string, path 
 				return nil, fmt.Errorf("schema not found for entity %s: %w", edge.From, err)
 			}
 
-			joinClause := fmt.Sprintf("LEFT JOIN %s AS %s ON %s.%s = %s.%s",
-				fromSchema.QualifiedTableName(),
-				alias,
-				prevAlias,
-				edge.ForeignKey,
-				alias,
-				fromSchema.PrimaryKeys[0])
-			result.Joins = append(result.Joins, joinClause)
+			result.Joins = append(result.Joins, fg.buildCascadeJoin(
+				fromSchema.QualifiedTableName(), alias, prevAlias, edge.ForeignKey, fromSchema.PrimaryKeys[0],
+			))
 		}
 	}
 

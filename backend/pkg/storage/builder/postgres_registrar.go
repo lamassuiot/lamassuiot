@@ -7,6 +7,7 @@ import (
 )
 
 func init() {
+	postgres.RegisterGORMPlugin(postgres.NewTenantGormPlugin())
 	postgres.RegisterGORMPlugin(authzgorm.NewAuthzGormPlugin())
 	postgres.Register()
 	subsystem.Register()

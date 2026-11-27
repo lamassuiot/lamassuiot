@@ -7,6 +7,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/engine"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -27,11 +28,71 @@ func (noMatchError) Is(target error) bool {
 // ErrNoMatch is returned by IdentityResolver when auth material matches no active principals.
 var ErrNoMatch error = noMatchError{}
 
+type tenantAccessDeniedError struct{}
+
+func (tenantAccessDeniedError) Error() string {
+	return "principal is not associated with the requested tenant"
+}
+func (tenantAccessDeniedError) HTTPStatusCode() int { return http.StatusForbidden }
+func (tenantAccessDeniedError) Is(target error) bool {
+	_, ok := target.(tenantAccessDeniedError)
+	return ok
+}
+
+// ErrTenantAccessDenied is returned when auth material matches active principal(s),
+// but none of them is associated with the tenant_id in ctx.
+var ErrTenantAccessDenied error = tenantAccessDeniedError{}
+
+// TenantPrincipalChecker verifies whether a principal is associated with a tenant.
+type TenantPrincipalChecker interface {
+	IsPrincipalInTenant(ctx context.Context, tenantID, principalID string) (bool, error)
+}
+
 // IdentityResolver is the single entry point for the "match auth material → load policies" flow.
 type IdentityResolver struct {
-	match    principalMatcher
-	grants   engine.GrantStore
-	policies policyLoader
+	match         principalMatcher
+	grants        engine.GrantStore
+	policies      policyLoader
+	tenantChecker TenantPrincipalChecker
+}
+
+// SetTenantPrincipalChecker configures optional tenant-to-principal filtering.
+// When set and ctx carries LamassuContextKeyTenantID, only principals associated
+// with that tenant have their policies loaded.
+func (r *IdentityResolver) SetTenantPrincipalChecker(checker TenantPrincipalChecker) {
+	r.tenantChecker = checker
+}
+
+func (r *IdentityResolver) filterPrincipalsByTenant(ctx context.Context, principalIDs []string) ([]string, error) {
+	if r.tenantChecker == nil {
+		return principalIDs, nil
+	}
+	tenantID, ok := core.TenantIDFromContext(ctx)
+	if !ok {
+		return principalIDs, nil
+	}
+
+	filtered := make([]string, 0, len(principalIDs))
+	for _, pid := range principalIDs {
+		belongs, err := r.tenantChecker.IsPrincipalInTenant(ctx, tenantID, pid)
+		if err != nil {
+			return nil, fmt.Errorf("check tenant %s for principal %s: %w", tenantID, pid, err)
+		}
+		if belongs {
+			filtered = append(filtered, pid)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, ErrTenantAccessDenied
+	}
+	return filtered, nil
+}
+
+// CheckPrincipalInTenant verifies that a single known principal belongs to the tenant
+// in ctx (when a TenantPrincipalChecker is configured and ctx carries a tenant_id).
+func (r *IdentityResolver) CheckPrincipalInTenant(ctx context.Context, principalID string) error {
+	_, err := r.filterPrincipalsByTenant(ctx, []string{principalID})
+	return err
 }
 
 // principalMatcher is the local interface for the MatchService.
@@ -101,6 +162,11 @@ func (r *IdentityResolver) Resolve(ctx context.Context, authMaterial any, authTy
 		return nil, nil, ErrNoMatch
 	}
 
+	principalIDs, err = r.filterPrincipalsByTenant(ctx, principalIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	registry := engine.NewPolicyRegistry()
 	for _, pid := range principalIDs {
 		grants, _, err := r.grants.ListForPrincipal(ctx, pid, nil)
@@ -165,6 +231,25 @@ func (r *IdentityResolver) ResolveSubjects(ctx context.Context, authMaterial any
 		return nil, nil, ErrNoMatch
 	}
 
+	if r.tenantChecker != nil {
+		if tenantID, ok := core.TenantIDFromContext(ctx); ok {
+			filteredSubjects := make([]engine.ResolvedSubject, 0, len(subjects))
+			for _, subject := range subjects {
+				belongs, err := r.tenantChecker.IsPrincipalInTenant(ctx, tenantID, subject.PrincipalID)
+				if err != nil {
+					return nil, nil, fmt.Errorf("check tenant %s for principal %s: %w", tenantID, subject.PrincipalID, err)
+				}
+				if belongs {
+					filteredSubjects = append(filteredSubjects, subject)
+				}
+			}
+			if len(filteredSubjects) == 0 {
+				return nil, nil, ErrTenantAccessDenied
+			}
+			subjects = filteredSubjects
+		}
+	}
+
 	subjectPolicies := make([]engine.SubjectPolicySet, 0, len(subjects))
 	principalIDs := make([]string, 0, len(subjects))
 	for _, subject := range subjects {
@@ -205,6 +290,10 @@ func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principa
 		span.End()
 	}()
 
+	if _, err = r.filterPrincipalsByTenant(ctx, []string{principalID}); err != nil {
+		return nil, err
+	}
+
 	var grants []models.PrincipalPolicy
 	grants, _, err = r.grants.ListForPrincipal(ctx, principalID, nil)
 	if err != nil {
@@ -221,5 +310,12 @@ func (r *IdentityResolver) GetPoliciesForPrincipal(ctx context.Context, principa
 // MatchPrincipals delegates to the underlying MatchService. Useful for callers that need
 // the principal IDs without loading policies (e.g. capabilities controller).
 func (r *IdentityResolver) MatchPrincipals(ctx context.Context, authMaterial any, authType string) ([]string, error) {
-	return r.match.MatchPrincipals(ctx, authMaterial, authType)
+	principalIDs, err := r.match.MatchPrincipals(ctx, authMaterial, authType)
+	if err != nil {
+		return nil, err
+	}
+	if len(principalIDs) == 0 {
+		return principalIDs, nil
+	}
+	return r.filterPrincipalsByTenant(ctx, principalIDs)
 }

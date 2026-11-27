@@ -10,6 +10,7 @@ type AuthorizeRequest struct {
 	Action      string        `json:"action" binding:"required"`      // Action name (atomicAction or globalAction)
 	EntityType  string        `json:"entity_type" binding:"required"` // Unqualified entity type as defined in schema
 	EntityKey   FlexEntityKey `json:"entity_key"`                     // Primary key: string or {col: val} map (required for atomicActions)
+	TenantID    string        `json:"tenant_id,omitempty"`
 }
 
 // MatchAndAuthorizeRequest for checking authorization with principal matching
@@ -21,6 +22,7 @@ type MatchAndAuthorizeRequest struct {
 	Action       string        `json:"action" binding:"required"`
 	EntityType   string        `json:"entity_type" binding:"required"`
 	EntityKey    FlexEntityKey `json:"entity_key"`
+	TenantID     string        `json:"tenant_id,omitempty"`
 }
 
 // AuthorizeResponse returns authorization result
@@ -86,6 +88,7 @@ type GetFilterRequest struct {
 	Namespace   string `json:"namespace" binding:"required"`
 	SchemaName  string `json:"schema_name" binding:"required"`
 	EntityType  string `json:"entity_type" binding:"required"`
+	TenantID    string `json:"tenant_id,omitempty"`
 }
 
 // MatchAndGetFilterRequest for retrieving list filters with principal matching
@@ -95,6 +98,7 @@ type MatchAndGetFilterRequest struct {
 	Namespace    string `json:"namespace" binding:"required"`
 	SchemaName   string `json:"schema_name" binding:"required"`
 	EntityType   string `json:"entity_type" binding:"required"`
+	TenantID     string `json:"tenant_id,omitempty"`
 }
 
 // GetFilterResponse returns SQL filter

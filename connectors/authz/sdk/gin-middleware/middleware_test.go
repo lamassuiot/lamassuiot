@@ -18,6 +18,7 @@ type fakeEngine struct {
 	authorized        bool
 	matchedPrincipals []string
 	filterSQL         string
+	lastTenantID      string
 }
 
 func (e *fakeEngine) Authorize(_ context.Context, principalID, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, error) {
@@ -28,11 +29,13 @@ func (e *fakeEngine) GetFilter(_ context.Context, principalID, namespace, schema
 	return e.filterSQL, e.err
 }
 
-func (e *fakeEngine) MatchAndAuthorize(_ context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
+func (e *fakeEngine) MatchAndAuthorize(ctx context.Context, authType, authMaterial, namespace, schemaName, action, entityType string, entityKey map[string]string) (bool, []string, error) {
+	e.lastTenantID, _ = ctx.Value(lamassucore.LamassuContextKeyTenantID).(string)
 	return e.authorized, e.matchedPrincipals, e.err
 }
 
-func (e *fakeEngine) MatchAndGetFilter(_ context.Context, authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
+func (e *fakeEngine) MatchAndGetFilter(ctx context.Context, authType, authMaterial, namespace, schemaName, entityType string) (string, []string, error) {
+	e.lastTenantID, _ = ctx.Value(lamassucore.LamassuContextKeyTenantID).(string)
 	return e.filterSQL, e.matchedPrincipals, e.err
 }
 
@@ -157,5 +160,26 @@ func TestAdminModeHeaderBypassesGuardsWithoutCredentials(t *testing.T) {
 		bypass := httptest.NewRecorder()
 		router.ServeHTTP(bypass, req)
 		assert.Equal(t, http.StatusOK, bypass.Code, path)
+	}
+}
+
+func TestAuthzMiddlewarePropagatesTenantIDToEngine(t *testing.T) {
+	router := testRouterWithAuthzInputs()
+	router.Use(func(c *gin.Context) {
+		c.Set(lamassucore.LamassuContextKeyTenantID, "tenant-42")
+		c.Next()
+	})
+	engine := &fakeEngine{authorized: true, filterSQL: "1=1"}
+	mw := NewSimpleAuthzMiddleware(engine, "pki", "devicemanager", "device", testLogger())
+
+	router.GET("/devices/:id", mw.AuthzCheck("read"), func(c *gin.Context) { c.Status(http.StatusOK) })
+	router.GET("/devices", mw.AuthListCheck(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	for _, path := range []string{"/devices/dev-1", "/devices"} {
+		engine.lastTenantID = ""
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		assert.Equal(t, http.StatusOK, w.Code, path)
+		assert.Equal(t, "tenant-42", engine.lastTenantID, path)
 	}
 }

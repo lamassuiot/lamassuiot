@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
@@ -216,6 +217,17 @@ func Put[T any](ctx context.Context, client *http.Client, url string, data any, 
 	return requestWithBody[T](ctx, client, "PUT", url, data, knownErrors)
 }
 
+const tenantIDHeader = "X-Tenant-ID"
+
+func injectTenantHeader(ctx context.Context, r *http.Request) {
+	if r == nil {
+		return
+	}
+	if tenantID, ok := core.TenantIDFromContext(ctx); ok {
+		r.Header.Set(tenantIDHeader, tenantID)
+	}
+}
+
 func requestWithBody[T any](ctx context.Context, client *http.Client, method string, url string, data any, knownErrors map[int][]error) (T, error) {
 	var m T
 	b, err := toJSON(data)
@@ -230,6 +242,7 @@ func requestWithBody[T any](ctx context.Context, client *http.Client, method str
 	}
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	injectTenantHeader(ctx, r)
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -261,6 +274,7 @@ func Get[T any](ctx context.Context, client *http.Client, url string, queryParam
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	injectTenantHeader(ctx, r)
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -287,6 +301,7 @@ func DeleteWithBody[T any](ctx context.Context, client *http.Client, url string,
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	injectTenantHeader(ctx, r)
 	res, err := client.Do(r)
 	if err != nil {
 		return m, err
@@ -313,6 +328,7 @@ func Delete(ctx context.Context, client *http.Client, url string, knownErrors ma
 
 	// Important to set
 	r.Header.Add("Content-Type", "application/json")
+	injectTenantHeader(ctx, r)
 	res, err := client.Do(r)
 	if err != nil {
 		return err

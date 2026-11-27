@@ -6,7 +6,13 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/core"
+	lamassucore "github.com/lamassuiot/lamassuiot/v4/core"
 )
+
+func tenantIDFromContext(ctx context.Context) string {
+	tenantID, _ := lamassucore.TenantIDFromContext(ctx)
+	return tenantID
+}
 
 // RemoteEngine implements core.AuthzEngine by forwarding requests to a remote authz service via HTTP
 type RemoteEngine struct {
@@ -34,6 +40,7 @@ func (r *RemoteEngine) Authorize(ctx context.Context, principalID, namespace, sc
 		Action:      action,
 		EntityType:  entityType,
 		EntityKey:   dto.NewFlexEntityKeyFromMap(entityKey),
+		TenantID:    tenantIDFromContext(ctx),
 	}
 
 	resp, err := r.client.Authz.Authorize(ctx, req)
@@ -52,6 +59,7 @@ func (r *RemoteEngine) GetFilter(ctx context.Context, principalID, namespace, sc
 		Namespace:   namespace,
 		SchemaName:  schemaName,
 		EntityType:  entityType,
+		TenantID:    tenantIDFromContext(ctx),
 	}
 
 	resp, err := r.client.Authz.GetFilter(ctx, req)
@@ -74,6 +82,7 @@ func (r *RemoteEngine) MatchAndAuthorize(ctx context.Context, authType, authMate
 		Action:       action,
 		EntityType:   entityType,
 		EntityKey:    dto.NewFlexEntityKeyFromMap(entityKey),
+		TenantID:     tenantIDFromContext(ctx),
 	}
 
 	resp, err := r.client.Authz.MatchAndAuthorize(ctx, req)
@@ -93,6 +102,7 @@ func (r *RemoteEngine) MatchAndGetFilter(ctx context.Context, authType, authMate
 		Namespace:    namespace,
 		SchemaName:   schemaName,
 		EntityType:   entityType,
+		TenantID:     tenantIDFromContext(ctx),
 	}
 
 	resp, err := r.client.Authz.MatchAndGetFilter(ctx, req)

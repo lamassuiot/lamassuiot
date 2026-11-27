@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -17,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lamassuiot/lamassuiot/v4/core"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
@@ -163,4 +165,30 @@ func TestBuildHTTPClientJWTDiscoverySizeCap(t *testing.T) {
 	err := build(srv.URL + "/huge")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "OIDC discovery response exceeds")
+}
+
+func TestHTTPHelpersPropagateTenantIDHeader(t *testing.T) {
+	seen := map[string]string{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen[r.Method] = r.Header.Get(tenantIDHeader)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	ctx := context.WithValue(context.Background(), core.LamassuContextKeyTenantID, "tenant-sdk")
+	cli := srv.Client()
+
+	_, err := Get[map[string]any](ctx, cli, srv.URL, nil, nil)
+	require.NoError(t, err)
+	_, err = Post[map[string]any](ctx, cli, srv.URL, map[string]any{"a": 1}, nil)
+	require.NoError(t, err)
+	_, err = Put[map[string]any](ctx, cli, srv.URL, map[string]any{"a": 2}, nil)
+	require.NoError(t, err)
+	require.NoError(t, Delete(ctx, cli, srv.URL, nil))
+
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete} {
+		require.Equal(t, "tenant-sdk", seen[method], method)
+	}
 }

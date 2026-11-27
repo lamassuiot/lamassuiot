@@ -169,8 +169,11 @@ func (db *PostgresCertificateStorage) CRLSettingsHoldingKey(ctx context.Context,
 		return holders, nil
 	}
 
-	err := tx.Raw("SELECT ca_id FROM "+crlSettingsTable+" WHERE status = ? AND signer_serial_number IN ? ORDER BY ca_id",
-		models.CRLSettingsActive, serialNumbers).Scan(&holders).Error
+	err := tx.Table(crlSettingsTable).
+		Select("ca_id").
+		Where("status = ? AND signer_serial_number IN ?", models.CRLSettingsActive, serialNumbers).
+		Order("ca_id").
+		Scan(&holders).Error
 	if err != nil {
 		return nil, err
 	}

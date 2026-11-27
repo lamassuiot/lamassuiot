@@ -42,11 +42,18 @@ func (ctrl *AuthzController) Authorize(c *gin.Context) {
 		return
 	}
 
-	reqCtx := enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID)
+	reqCtx := enrichContextWithTenantID(enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID), req.TenantID)
 	c.Request = c.Request.WithContext(reqCtx)
 
 	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Access denied",
+				Details: map[string]string{"reason": err.Error()},
+			})
+			return
+		}
 		replyInternalError(c, "Failed to get principal policies", err)
 		return
 	}
@@ -89,11 +96,18 @@ func (ctrl *AuthzController) GetFilter(c *gin.Context) {
 		return
 	}
 
-	reqCtx := enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID)
+	reqCtx := enrichContextWithTenantID(enrichContextByPrincipalID(c.Request.Context(), req.PrincipalID), req.TenantID)
 	c.Request = c.Request.WithContext(reqCtx)
 
 	policies, err := ctrl.resolver.GetPoliciesForPrincipal(reqCtx, req.PrincipalID)
 	if err != nil {
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Access denied",
+				Details: map[string]string{"reason": err.Error()},
+			})
+			return
+		}
 		replyInternalError(c, "Failed to get principal policies", err)
 		return
 	}
@@ -125,7 +139,7 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 		return
 	}
 
-	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial)
+	reqCtx := enrichContextWithTenantID(enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial), req.TenantID)
 	c.Request = c.Request.WithContext(reqCtx)
 
 	policies, matchedPrincipals, err := ctrl.resolver.Resolve(reqCtx, req.AuthMaterial, req.AuthType)
@@ -134,6 +148,13 @@ func (ctrl *AuthzController) MatchAndAuthorize(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 				Error:   "Authentication failed",
 				Details: map[string]string{"reason": "No matching principals found"},
+			})
+			return
+		}
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Access denied",
+				Details: map[string]string{"reason": err.Error()},
 			})
 			return
 		}
@@ -264,7 +285,7 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 		return
 	}
 
-	reqCtx := enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial)
+	reqCtx := enrichContextWithTenantID(enrichContextByAuthMaterial(c.Request.Context(), req.AuthType, req.AuthMaterial), req.TenantID)
 	c.Request = c.Request.WithContext(reqCtx)
 
 	policies, matchedPrincipals, err := ctrl.resolver.Resolve(reqCtx, req.AuthMaterial, req.AuthType)
@@ -273,6 +294,13 @@ func (ctrl *AuthzController) MatchAndGetFilter(c *gin.Context) {
 			c.JSON(http.StatusUnauthorized, dto.ErrorResponse{
 				Error:   "Authentication failed",
 				Details: map[string]string{"reason": "No matching principals found"},
+			})
+			return
+		}
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			c.JSON(http.StatusForbidden, dto.ErrorResponse{
+				Error:   "Access denied",
+				Details: map[string]string{"reason": err.Error()},
 			})
 			return
 		}
@@ -434,6 +462,10 @@ func enrichContextByPrincipalID(ctx context.Context, principalID string) context
 	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthType, "principal-id")
 	ctx = context.WithValue(ctx, lamassu.LamassuContextKeyAuthID, principalID)
 	return ctx
+}
+
+func enrichContextWithTenantID(ctx context.Context, tenantID string) context.Context {
+	return lamassu.WithTenantID(ctx, tenantID)
 }
 
 // enrichContextByAuthMaterial stores the credential type and material into the context

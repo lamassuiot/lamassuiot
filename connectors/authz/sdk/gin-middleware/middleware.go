@@ -72,9 +72,10 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 			return
 		}
 
-		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(c.Request.Context(), authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
+		reqCtx := requestContextWithTenant(c)
+		authorized, matchedPrincipals, err := m.engine.MatchAndAuthorize(reqCtx, authType, authMaterial, m.namespace, m.schemaName, action, m.entityType, entityKey)
 		if err != nil {
-			helpers.ConfigureLogger(c.Request.Context(), m.logger).Errorf("error in MatchAndAuthorize: %v", err)
+			helpers.ConfigureLogger(reqCtx, m.logger).Errorf("error in MatchAndAuthorize: %v", err)
 			abortWithAuthzServiceError(c, err)
 			return
 		}
@@ -85,7 +86,7 @@ func (m *AuthzMiddleware) AuthzCheckCustom(action string, entityKeyFunc func(*gi
 		}
 
 		c.Set("matched_principals", matchedPrincipals)
-		reqCtx := context.WithValue(c.Request.Context(), lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
+		reqCtx = context.WithValue(reqCtx, lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
 		c.Request = c.Request.WithContext(reqCtx)
 		c.Next()
 	}
@@ -140,9 +141,10 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 			return
 		}
 
-		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(c.Request.Context(), authType, authMaterial, s.namespace, s.schemaName, s.entityType)
+		reqCtx := requestContextWithTenant(c)
+		authorizedList, matchedPrincipals, err := s.engine.MatchAndGetFilter(reqCtx, authType, authMaterial, s.namespace, s.schemaName, s.entityType)
 		if err != nil {
-			helpers.ConfigureLogger(c.Request.Context(), s.logger).Errorf("error in MatchAndGetFilter: %v", err)
+			helpers.ConfigureLogger(reqCtx, s.logger).Errorf("error in MatchAndGetFilter: %v", err)
 			abortWithAuthzServiceError(c, err)
 			return
 		}
@@ -150,12 +152,11 @@ func (s *AuthzMiddleware) AuthListCheck() gin.HandlerFunc {
 		if len(authorizedList) != 0 {
 			c.Set("authz_query", authorizedList)
 
-			reqCtx := context.WithValue(c.Request.Context(), authzsdk.AuthzQueryKey, authorizedList)
-			c.Request = c.Request.WithContext(reqCtx)
+			reqCtx = context.WithValue(reqCtx, authzsdk.AuthzQueryKey, authorizedList)
 		}
 
 		c.Set("matched_principals", matchedPrincipals)
-		reqCtx := context.WithValue(c.Request.Context(), lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
+		reqCtx = context.WithValue(reqCtx, lamassucore.LamassuContextKeyMatchedPrincipals, matchedPrincipals)
 		c.Request = c.Request.WithContext(reqCtx)
 		c.Next()
 	}
@@ -166,7 +167,7 @@ type httpStatusCoder interface {
 }
 
 func abortWithAuthzServiceError(c *gin.Context, err error) {
-	if status, ok := authzServiceStatus(err); ok && status == http.StatusUnauthorized {
+	if status, ok := authzServiceStatus(err); ok && (status == http.StatusUnauthorized || status == http.StatusForbidden) {
 		c.AbortWithStatusJSON(status, gin.H{"error": "Authorization service error", "details": err.Error()})
 		return
 	}
@@ -212,4 +213,12 @@ func extractAuthInputs(c *gin.Context) (string, string, error) {
 	default:
 		return "", "", fmt.Errorf("auth-type not supported")
 	}
+}
+
+func requestContextWithTenant(c *gin.Context) context.Context {
+	reqCtx := c.Request.Context()
+	if _, ok := lamassucore.TenantIDFromContext(reqCtx); ok {
+		return reqCtx
+	}
+	return lamassucore.WithTenantID(reqCtx, c.GetString(lamassucore.LamassuContextKeyTenantID))
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -47,11 +48,26 @@ func (c *CapabilitiesController) GetGlobalCapabilities(ctx *gin.Context) {
 		return
 	}
 
-	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	reqCtx := enrichContextWithTenantID(ctx.Request.Context(), req.TenantID)
+	ctx.Request = ctx.Request.WithContext(reqCtx)
+
+	log := helpers.ConfigureLogger(reqCtx, c.logger)
 	log.WithFields(logrus.Fields{"principal_id": req.PrincipalID}).Debug("get global capabilities")
 
+	if c.resolver != nil {
+		if err := c.resolver.CheckPrincipalInTenant(reqCtx, req.PrincipalID); err != nil {
+			if errors.Is(err, service.ErrTenantAccessDenied) {
+				ctx.JSON(http.StatusForbidden, dto.ErrorResponse{Error: err.Error()})
+				return
+			}
+			log.WithFields(logrus.Fields{"error": err}).Error("tenant check failed")
+			ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to check tenant access: " + err.Error()})
+			return
+		}
+	}
+
 	gc, err := service.GetGlobalCapabilitiesForPrincipal(
-		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID,
+		reqCtx, c.eng, c.principalManager, c.policyManager, req.PrincipalID,
 	)
 	if err != nil {
 		log.WithFields(logrus.Fields{"error": err}).Error("get global capabilities failed")
@@ -73,11 +89,18 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 		return
 	}
 
-	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	reqCtx := enrichContextWithTenantID(ctx.Request.Context(), req.TenantID)
+	ctx.Request = ctx.Request.WithContext(reqCtx)
+
+	log := helpers.ConfigureLogger(reqCtx, c.logger)
 	log.WithFields(logrus.Fields{"auth_type": req.AuthType}).Debug("match and get global capabilities")
 
-	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
+	matchedPrincipals, err := c.resolver.MatchPrincipals(reqCtx, req.AuthMaterial, req.AuthType)
 	if err != nil {
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			ctx.JSON(http.StatusForbidden, dto.ErrorResponse{Error: err.Error()})
+			return
+		}
 		log.WithFields(logrus.Fields{"auth_type": req.AuthType, "error": err}).Error("match principals failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
@@ -90,7 +113,7 @@ func (c *CapabilitiesController) MatchAndGetGlobalCapabilities(ctx *gin.Context)
 	merged := make(engine.GlobalCapabilities)
 	for _, principalID := range matchedPrincipals {
 		gc, err := service.GetGlobalCapabilitiesForPrincipal(
-			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID,
+			reqCtx, c.eng, c.principalManager, c.policyManager, principalID,
 		)
 		if err != nil {
 			log.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get global capabilities failed")
@@ -115,8 +138,23 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 		return
 	}
 
-	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	reqCtx := enrichContextWithTenantID(ctx.Request.Context(), req.TenantID)
+	ctx.Request = ctx.Request.WithContext(reqCtx)
+
+	log := helpers.ConfigureLogger(reqCtx, c.logger)
 	log.WithFields(logrus.Fields{"principal_id": req.PrincipalID, "query_count": len(req.Queries)}).Debug("get entity capabilities")
+
+	if c.resolver != nil {
+		if err := c.resolver.CheckPrincipalInTenant(reqCtx, req.PrincipalID); err != nil {
+			if errors.Is(err, service.ErrTenantAccessDenied) {
+				ctx.JSON(http.StatusForbidden, dto.ErrorResponse{Error: err.Error()})
+				return
+			}
+			log.WithFields(logrus.Fields{"error": err}).Error("tenant check failed")
+			ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to check tenant access: " + err.Error()})
+			return
+		}
+	}
 
 	engineQueries, err := dtoQueriesToEngine(c.eng.GetSchemas(), req.Queries)
 	if err != nil {
@@ -124,7 +162,7 @@ func (c *CapabilitiesController) GetEntityCapabilities(ctx *gin.Context) {
 		return
 	}
 	results, err := service.GetEntityCapabilitiesBatchForPrincipal(
-		ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, req.PrincipalID, engineQueries,
+		reqCtx, c.eng, c.principalManager, c.policyManager, req.PrincipalID, engineQueries,
 	)
 	if err != nil {
 		log.WithFields(logrus.Fields{"error": err}).Error("get entity capabilities failed")
@@ -146,11 +184,18 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 		return
 	}
 
-	log := helpers.ConfigureLogger(ctx.Request.Context(), c.logger)
+	reqCtx := enrichContextWithTenantID(ctx.Request.Context(), req.TenantID)
+	ctx.Request = ctx.Request.WithContext(reqCtx)
+
+	log := helpers.ConfigureLogger(reqCtx, c.logger)
 	log.WithFields(logrus.Fields{"auth_type": req.AuthType, "query_count": len(req.Queries)}).Debug("match and get entity capabilities")
 
-	matchedPrincipals, err := c.resolver.MatchPrincipals(ctx.Request.Context(), req.AuthMaterial, req.AuthType)
+	matchedPrincipals, err := c.resolver.MatchPrincipals(reqCtx, req.AuthMaterial, req.AuthType)
 	if err != nil {
+		if errors.Is(err, service.ErrTenantAccessDenied) {
+			ctx.JSON(http.StatusForbidden, dto.ErrorResponse{Error: err.Error()})
+			return
+		}
 		log.WithFields(logrus.Fields{"auth_type": req.AuthType, "error": err}).Error("match principals failed")
 		ctx.JSON(http.StatusInternalServerError, dto.ErrorResponse{Error: "Failed to match principals: " + err.Error()})
 		return
@@ -180,7 +225,7 @@ func (c *CapabilitiesController) MatchAndGetEntityCapabilities(ctx *gin.Context)
 
 	for _, principalID := range matchedPrincipals {
 		batch, err := service.GetEntityCapabilitiesBatchForPrincipal(
-			ctx.Request.Context(), c.eng, c.principalManager, c.policyManager, principalID, engineQueries,
+			reqCtx, c.eng, c.principalManager, c.policyManager, principalID, engineQueries,
 		)
 		if err != nil {
 			log.WithFields(logrus.Fields{"principal_id": principalID, "error": err}).Error("get entity capabilities batch failed")
