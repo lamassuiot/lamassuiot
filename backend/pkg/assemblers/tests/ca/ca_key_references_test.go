@@ -271,6 +271,19 @@ func TestDeletingAnImportedCADeletesItsKey(t *testing.T) {
 	require.ErrorIs(t, err, errs.ErrKeyNotFound)
 }
 
+func TestImportedCAKeyGetsAName(t *testing.T) {
+	require.NoError(t, serverTest.BeforeEach())
+	ctx := context.Background()
+
+	cert, key := selfSignedCAWithForeignSKI(t, "references-named-key")
+	ca, err := serverTest.CA.Service.ImportCA(ctx, services.ImportCAInput{ProfileID: newKeyRefsProfile(t).ID, Key: key, CACertificate: (*models.X509Certificate)(cert)})
+	require.NoError(t, err)
+
+	kmsKey, err := serverTest.KMS.Service.GetKey(ctx, services.GetKeyInput{Identifier: keyURI(&ca.Certificate)})
+	require.NoError(t, err)
+	require.Equal(t, "Key For CA CN=references-named-key (imported)", kmsKey.Name)
+}
+
 func TestDeletingACertificateReleasesItsKey(t *testing.T) {
 	require.NoError(t, serverTest.BeforeEach())
 	ctx := context.Background()
