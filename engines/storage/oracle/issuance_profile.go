@@ -6,6 +6,7 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"gorm.io/gorm"
 )
 
@@ -36,7 +37,24 @@ func (s *issuanceProfileStore) SelectAll(ctx context.Context, req storage.Storag
 			apply(profile)
 		}
 	}
-	return listRows(s.db.WithContext(ctx).Table("issuance_profiles"), req, profileFields, profileFields, nil, nil, []string{"id"}, func(profile models.IssuanceProfile) []any { return []any{profile.ID} })
+	return listRows(s.db.WithContext(ctx).Table("issuance_profiles"), req, profileFields, profileFields, nil, nil, []string{"id"}, func(profile models.IssuanceProfile) []any { return []any{profile.ID} }, persistProfileNameFilters)
+}
+
+// persistProfileNameFilters matches an empty name against the stored
+// placeholder. Containment and list filters already behave as on PostgreSQL:
+// the placeholder is non-NULL, contains "" and is never a requested list item.
+func persistProfileNameFilters(filters []resources.FilterOption) []resources.FilterOption {
+	out := append([]resources.FilterOption(nil), filters...)
+	for i, filter := range out {
+		if filter.Field != "name" || filter.Value != "" {
+			continue
+		}
+		switch filter.FilterOperation {
+		case resources.StringEqual, resources.StringNotEqual, resources.StringEqualIgnoreCase, resources.StringNotEqualIgnoreCase:
+			out[i].Value = emptyProfileName
+		}
+	}
+	return out
 }
 
 func (s *issuanceProfileStore) SelectByID(ctx context.Context, id string) (bool, *models.IssuanceProfile, error) {

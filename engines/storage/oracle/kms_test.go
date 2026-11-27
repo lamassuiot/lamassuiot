@@ -199,6 +199,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	testJSONPathFilterContract(t, ctx, jsonSortRepos...)
 	testOracleJSONPathSort(t, ctx, jsonSortRepos...)
 	testKMSRepositoryContracts(t, ctx, kmsContractRepos...)
+	testEmptyStringFilterContract(t, ctx, kmsContractRepos...)
 	testCAAndCertificateContracts(t, ctx, caContractRepos...)
 	testVARepositoryContracts(t, ctx, vaContractRepos...)
 	var jsonPathKeys []string
@@ -480,6 +481,7 @@ func testJSONPathFilterContract(t *testing.T, ctx context.Context, repos ...stor
 		"rotation_days": 30, "large_number": int64(9007199254740993), "region": "us-east",
 		"tags": []any{"production", "api"}, "ports": []any{8080, 9000}, "nullable": nil,
 		"rank_empty_array": []any{}, "rank_array": []any{1},
+		"app-name": "lamassu", "1st": "first",
 	}
 	for _, repo := range repos {
 		for _, engineID := range []string{"filter-one", "filter-two"} {
@@ -566,6 +568,12 @@ func testJSONPathFilterContract(t *testing.T, ctx context.Context, repos ...stor
 		{`$.value in ("text", "other")`, 2},
 		{`$.region has substring "east"`, 2},
 		{`$.rotation_days.number() > 20`, 2},
+		// Member names that Oracle only accepts when quoted.
+		{`$.app-name == "lamassu"`, 2},
+		{`$.app-name starts with "lam"`, 2},
+		{`!($.app-name starts with "x")`, 2},
+		{`$.1st == "first"`, 2},
+		{`$.1st != "first"`, 0},
 	} {
 		query := &resources.QueryParameters{Filters: []resources.FilterOption{
 			{Field: "key_id", FilterOperation: resources.StringEqual, Value: "json-filter"},

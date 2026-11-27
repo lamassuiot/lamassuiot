@@ -16,8 +16,6 @@ import (
 
 const kmsTableName = "kms_keys"
 
-var kmsEmptyNameNullFields = map[string]struct{}{"name": {}}
-
 type kmsStore struct{ db *gorm.DB }
 
 var _ storage.KMSKeysRepo = (*kmsStore)(nil)
@@ -50,7 +48,7 @@ func (s *kmsStore) countFiltered(ctx context.Context, engineID *string, params *
 	}
 	if params != nil {
 		var err error
-		tx, err = applyFilters(tx, params.Filters, kmsFilterFields, kmsEmptyNameNullFields)
+		tx, err = applyFilters(tx, params.Filters, kmsFilterFields)
 		if err != nil {
 			return -1, err
 		}
@@ -67,8 +65,8 @@ var kmsSortFields = map[string]struct{}{
 }
 
 func (s *kmsStore) SelectAll(ctx context.Context, req storage.StorageListRequest[models.Key]) (string, error) {
-	return listRowsWithOptions(s.db.WithContext(ctx).Table(kmsTableName), req, kmsFilterFields, kmsSortFields, nil, nil,
-		[]string{"key_id", "engine_id"}, func(key models.Key) []any { return []any{key.KeyID, key.EngineID} }, kmsEmptyNameNullFields)
+	return listRows(s.db.WithContext(ctx).Table(kmsTableName), req, kmsFilterFields, kmsSortFields, nil, nil,
+		[]string{"key_id", "engine_id"}, func(key models.Key) []any { return []any{key.KeyID, key.EngineID} })
 }
 
 func (s *kmsStore) SelectExistsByKeyID(ctx context.Context, keyID, engineID string) (bool, *models.Key, error) {

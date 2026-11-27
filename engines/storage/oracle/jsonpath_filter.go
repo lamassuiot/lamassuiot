@@ -1216,7 +1216,13 @@ func splitFinalPathStep(path string) (base, relative string, err error) {
 	if last < 1 {
 		return "", "", fmt.Errorf("JSONPath root predicates require a terminal item method")
 	}
-	base = path
+	// Normalize the base like every other path: Oracle requires member names
+	// such as a-b or 1abc to be quoted. The base has no nested filters, so it
+	// binds no values.
+	base, err = oracleAbsolutePath(path, &jsonFilterCompiler{})
+	if err != nil {
+		return "", "", err
+	}
 	relative = "@" + method
 	return base, relative, nil
 }

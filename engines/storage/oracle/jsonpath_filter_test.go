@@ -230,3 +230,27 @@ func TestOracleJSONNumberBindingLimits(t *testing.T) {
 		}
 	}
 }
+
+// Oracle accepts member names such as a-b or 1abc only when quoted. The base
+// path of a predicate must be quoted like every other path the compiler emits.
+func TestCompileJSONPredicateQuotesPredicateBasePath(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{`$.app-name == "x"`, `'$."app-name"?(`},
+		{`$.1st == "x"`, `'$."1st"?(`},
+		{`$.a.b-c[0] == "x"`, `'$."a"."b-c"[0]?(`},
+		{`$."a b" == "x"`, `'$."a b"?(`},
+		{`!($.app-name starts with "x")`, `'$."app-name"?(@.type() == "string")'`},
+	} {
+		expression, err := compileJSONPredicate(tc.input, clause.Column{Name: "metadata"})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.input, err)
+		}
+		sql := expression.(jsonPredicateExpression).sql
+		if !strings.Contains(sql, tc.want) {
+			t.Errorf("%s: SQL %q does not contain %q", tc.input, sql, tc.want)
+		}
+		if strings.Contains(sql, `'$.app-name`) || strings.Contains(sql, `'$.1st`) {
+			t.Errorf("%s: SQL %q contains an unquoted member name", tc.input, sql)
+		}
+	}
+}

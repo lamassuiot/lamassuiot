@@ -66,6 +66,35 @@ func testIssuanceProfiles(t *testing.T, ctx context.Context, db *gorm.DB) {
 	if err != nil || bookmark != "" || !reflect.DeepEqual(ids, []string{"profile-a", "profile-b"}) {
 		t.Fatalf("profile pages=%v bookmark=%q error=%v", ids, bookmark, err)
 	}
+	unnamed := *profile
+	unnamed.ID, unnamed.Name = "profile-unnamed", ""
+	if _, err := store.Insert(ctx, &unnamed); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		op    resources.FilterOperation
+		value string
+		want  []string
+	}{
+		{resources.StringEqual, "", []string{"profile-unnamed"}},
+		{resources.StringEqualIgnoreCase, "", []string{"profile-unnamed"}},
+		{resources.StringNotEqual, "", []string{"profile-a", "profile-b"}},
+		{resources.StringNotEqual, "profile", []string{"profile-unnamed"}},
+		{resources.StringContains, "", []string{"profile-a", "profile-b", "profile-unnamed"}},
+		{resources.StringNotContains, "prof", []string{"profile-unnamed"}},
+	} {
+		ids = nil
+		listReq := storage.StorageListRequest[models.IssuanceProfile]{
+			QueryParams: &resources.QueryParameters{Filters: []resources.FilterOption{{Field: "name", FilterOperation: tc.op, Value: tc.value}}},
+			ApplyFunc:   func(p models.IssuanceProfile) { ids = append(ids, p.ID) },
+		}
+		if _, err := store.SelectAll(ctx, listReq); err != nil || !reflect.DeepEqual(ids, tc.want) {
+			t.Errorf("profile name filter op=%d value=%q: ids=%v want=%v error=%v", tc.op, tc.value, ids, tc.want, err)
+		}
+	}
+	if err := store.Delete(ctx, unnamed.ID); err != nil {
+		t.Fatal(err)
+	}
 	if err := store.Delete(ctx, profile.ID); err != nil {
 		t.Fatal(err)
 	}

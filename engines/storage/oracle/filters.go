@@ -13,8 +13,8 @@ import (
 
 // applyFilters accepts only fields explicitly exposed by a repository. Values
 // are always bound, including those restored from a client bookmark.
-func applyFilters(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, nullAsEmptyFields ...map[string]struct{}) (*gorm.DB, error) {
-	return applyFiltersOn(db, filters, allowed, nil, nullAsEmptyFields...)
+func applyFilters(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}) (*gorm.DB, error) {
+	return applyFiltersOn(db, filters, allowed, nil)
 }
 
 // Oracle stores booleans as NUMBER(1), so textual values from the shared query
@@ -24,6 +24,31 @@ var oracleBooleanFilterFields = map[string]struct{}{
 	"honor_extended_key_usages": {}, "honor_subject": {}, "honor_extensions": {},
 	"crypto_enforcement_enabled": {}, "crypto_enforcement_allow_rsa_keys": {},
 	"crl_regenerate_on_revoke": {},
+}
+
+// Oracle stores an empty string as NULL, while PostgreSQL stores Go's empty
+// string as an empty value. String filters on these character columns treat
+// NULL as the empty string, so that, for example, "not equal to x" keeps rows
+// whose value is empty, as it does on PostgreSQL.
+//
+// clobFilterColumns are the CLOB columns repositories filter by. They are
+// character data but cannot be sorted by, and Oracle rejects =, <> and IN on
+// CLOB (ORA-22848), so equality filters on them use an escaped LIKE pattern.
+var clobFilterColumns = map[string]struct{}{"certificate": {}, "public_key": {}, "icon": {}, "description": {}}
+
+// postgresNullTextColumns hold NULL on PostgreSQL too when the Go value is
+// empty (nullstring serializer, *string or nil pointer fields). Treating NULL
+// as empty there would match rows that PostgreSQL does not.
+var postgresNullTextColumns = map[string]struct{}{"key_id": {}, "parent_id": {}, "certificate": {}}
+
+func emptyStringStoredAsNull(field string) bool {
+	if _, ok := postgresNullTextColumns[field]; ok {
+		return false
+	}
+	if _, ok := clobFilterColumns[field]; ok {
+		return true
+	}
+	return isTextSortColumn(field)
 }
 
 func parseOracleBooleanFilter(field, value string) (int64, error) {
@@ -37,15 +62,7 @@ func parseOracleBooleanFilter(field, value string) (int64, error) {
 	}
 }
 
-func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, tables map[string]string, nullAsEmptyFields ...map[string]struct{}) (*gorm.DB, error) {
-	fieldUsesNullForEmpty := func(field string) bool {
-		for _, fields := range nullAsEmptyFields {
-			if _, ok := fields[field]; ok {
-				return true
-			}
-		}
-		return false
-	}
+func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[string]struct{}, tables map[string]string) (*gorm.DB, error) {
 	for _, filter := range filters {
 		field := strings.ReplaceAll(filter.Field, ".", "_")
 		if _, ok := allowed[field]; !ok {
@@ -58,7 +75,15 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 		col := clause.Column{Table: table, Name: field}
 		value := filter.Value
 		_, isBooleanField := oracleBooleanFilterFields[field]
-		nullAsEmpty := fieldUsesNullForEmpty(field) && !isBooleanField
+		nullAsEmpty := !isBooleanField && emptyStringStoredAsNull(field)
+		if _, isCLOB := clobFilterColumns[field]; isCLOB {
+			if expression, handled := clobEqualityFilter(col, filter.FilterOperation, value, nullAsEmpty); handled {
+				if expression != nil {
+					db = db.Where(expression)
+				}
+				continue
+			}
+		}
 		switch filter.FilterOperation {
 		case resources.UnspecifiedFilter:
 			continue
@@ -128,46 +153,49 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			}
 			pattern := escapeLike(filter.Value)
 			op, lhs := "LIKE", "?"
+			contains, negated := false, false
 			switch filter.FilterOperation {
 			case resources.StringContains, resources.StringContainsIgnoreCase, resources.StringNotContains, resources.StringNotContainsIgnoreCase:
 				pattern = "%" + pattern + "%"
+				contains = true
 			}
 			switch filter.FilterOperation {
 			case resources.StringNotEqualIgnoreCase, resources.StringNotContains, resources.StringNotContainsIgnoreCase:
 				op = "NOT LIKE"
+				negated = true
 			}
 			switch filter.FilterOperation {
 			case resources.StringEqualIgnoreCase, resources.StringNotEqualIgnoreCase, resources.StringContainsIgnoreCase, resources.StringNotContainsIgnoreCase:
 				lhs = "LOWER(?)"
 				pattern = strings.ToLower(pattern)
 			}
-			db = db.Where(lhs+" "+op+` ? ESCAPE '\'`, col, pattern)
+			condition := lhs + " " + op + ` ? ESCAPE '\'`
+			// An empty value contains "" and contains no other value, so it
+			// matches "contains ''" and "does not contain x".
+			if nullAsEmpty && contains && negated == (value != "") {
+				db = db.Where("("+condition+" OR ? IS NULL)", col, pattern, col)
+			} else {
+				db = db.Where(condition, col, pattern)
+			}
 		case resources.StringIn, resources.StringInIgnoreCase, resources.StringNotIn, resources.StringNotInIgnoreCase, resources.EnumIn:
+			// As on PostgreSQL, empty list items are ignored and an empty list
+			// applies no restriction.
 			var values []any
-			hasEmptyValue := false
 			for _, item := range strings.Split(filter.Value, ",") {
-				if item != "" {
-					if isBooleanField {
-						booleanValue, err := parseOracleBooleanFilter(field, item)
-						if err != nil {
-							return nil, err
-						}
-						values = append(values, booleanValue)
-					} else {
-						values = append(values, item)
+				if item == "" {
+					continue
+				}
+				if isBooleanField {
+					booleanValue, err := parseOracleBooleanFilter(field, item)
+					if err != nil {
+						return nil, err
 					}
-				} else if nullAsEmpty {
-					hasEmptyValue = true
+					values = append(values, booleanValue)
+				} else {
+					values = append(values, item)
 				}
 			}
 			if len(values) == 0 {
-				if hasEmptyValue {
-					op := "IS NULL"
-					if filter.FilterOperation == resources.StringNotIn || filter.FilterOperation == resources.StringNotInIgnoreCase {
-						op = "IS NOT NULL"
-					}
-					db = db.Where("? "+op, col)
-				}
 				continue
 			}
 			lhs, op := "?", "IN"
@@ -182,14 +210,9 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 			if filter.FilterOperation == resources.StringNotIn || filter.FilterOperation == resources.StringNotInIgnoreCase {
 				op = "NOT IN"
 			}
-			if nullAsEmpty && (op == "IN" && hasEmptyValue) {
-				db = db.Where("("+lhs+" IN ? OR ? IS NULL)", col, values, col)
-			} else if nullAsEmpty && op == "NOT IN" {
-				if hasEmptyValue {
-					db = db.Where("("+lhs+" NOT IN ? AND ? IS NOT NULL)", col, values, col)
-				} else {
-					db = db.Where("("+lhs+" NOT IN ? OR ? IS NULL)", col, values, col)
-				}
+			// An empty value is never in a list of non-empty values.
+			if nullAsEmpty && op == "NOT IN" {
+				db = db.Where("("+lhs+" NOT IN ? OR ? IS NULL)", col, values, col)
 			} else {
 				db = db.Where(lhs+" "+op+" ?", col, values)
 			}
@@ -224,6 +247,69 @@ func applyFiltersOn(db *gorm.DB, filters []resources.FilterOption, allowed map[s
 		}
 	}
 	return db, nil
+}
+
+// clobEqualityFilter rewrites equality and list filters on a CLOB column as
+// escaped LIKE patterns, which match exactly and which Oracle accepts on CLOB.
+// It reports false for operations that need no rewriting, such as containment
+// (already LIKE). A nil expression with true means no restriction applies.
+func clobEqualityFilter(col clause.Column, op resources.FilterOperation, value string, nullAsEmpty bool) (clause.Expression, bool) {
+	var values []string
+	negated, ignoreCase := false, false
+	switch op {
+	case resources.StringEqual, resources.EnumEqual:
+		values = []string{value}
+	case resources.StringNotEqual, resources.EnumNotEqual:
+		values, negated = []string{value}, true
+	case resources.StringEqualIgnoreCase:
+		values, ignoreCase = []string{value}, true
+	case resources.StringNotEqualIgnoreCase:
+		values, negated, ignoreCase = []string{value}, true, true
+	case resources.StringIn, resources.EnumIn, resources.StringInIgnoreCase, resources.StringNotIn, resources.StringNotInIgnoreCase:
+		// As on PostgreSQL, empty list items are ignored.
+		for _, item := range strings.Split(value, ",") {
+			if item != "" {
+				values = append(values, item)
+			}
+		}
+		if len(values) == 0 {
+			return nil, true
+		}
+		negated = op == resources.StringNotIn || op == resources.StringNotInIgnoreCase
+		ignoreCase = op == resources.StringInIgnoreCase || op == resources.StringNotInIgnoreCase
+	default:
+		return nil, false
+	}
+	if nullAsEmpty && len(values) == 1 && values[0] == "" {
+		if negated {
+			return clause.Expr{SQL: "? IS NOT NULL", Vars: []any{col}}, true
+		}
+		return clause.Expr{SQL: "? IS NULL", Vars: []any{col}}, true
+	}
+	lhs, like, join := "?", " LIKE ", " OR "
+	if ignoreCase {
+		lhs = "LOWER(?)"
+	}
+	if negated {
+		like, join = " NOT LIKE ", " AND "
+	}
+	var terms []string
+	var vars []any
+	for _, item := range values {
+		pattern := escapeLike(item)
+		if ignoreCase {
+			pattern = strings.ToLower(pattern)
+		}
+		terms = append(terms, lhs+like+`? ESCAPE '\'`)
+		vars = append(vars, col, pattern)
+	}
+	sql := "(" + strings.Join(terms, join) + ")"
+	// An empty value equals none of the given non-empty values.
+	if nullAsEmpty && negated {
+		sql = "(" + sql + " OR ? IS NULL)"
+		vars = append(vars, col)
+	}
+	return clause.Expr{SQL: sql, Vars: vars}, true
 }
 
 // CompileJSONPathPredicate exposes the Oracle JSONPath translator to other

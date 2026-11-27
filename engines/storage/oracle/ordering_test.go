@@ -98,26 +98,7 @@ func TestBinarySortIndexesCoverKeysetColumns(t *testing.T) {
 // leaving a character column unwrapped would make its order depend on the
 // session's NLS_SORT. Check every sortable and keyset column against the DDL.
 func TestTextSortColumnsMatchMigrations(t *testing.T) {
-	column := regexp.MustCompile(`^\s*"?([A-Za-z_][A-Za-z0-9_]*)"?\s+([A-Za-z0-9_]+)`)
-	types := map[string]map[string]struct{}{}
-	for _, m := range migrations.Plan() {
-		for _, stmt := range m.Statements {
-			if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(stmt)), "CREATE TABLE") {
-				continue
-			}
-			for _, line := range strings.Split(stmt, "\n")[1:] {
-				match := column.FindStringSubmatch(line)
-				if match == nil || strings.EqualFold(match[1], "CONSTRAINT") {
-					continue
-				}
-				name := strings.ToLower(match[1])
-				if types[name] == nil {
-					types[name] = map[string]struct{}{}
-				}
-				types[name][strings.ToUpper(match[2])] = struct{}{}
-			}
-		}
-	}
+	types := migrationColumnTypes()
 
 	sortable := map[string]struct{}{}
 	for _, fields := range []map[string]struct{}{
@@ -153,4 +134,30 @@ func TestTextSortColumnsMatchMigrations(t *testing.T) {
 			t.Errorf("textSortColumns lists %q, which no repository sorts by", name)
 		}
 	}
+}
+
+// migrationColumnTypes returns, for each column name defined by a CREATE TABLE
+// in the migration plan, the set of Oracle types it has across tables.
+func migrationColumnTypes() map[string]map[string]struct{} {
+	column := regexp.MustCompile(`^\s*"?([A-Za-z_][A-Za-z0-9_]*)"?\s+([A-Za-z0-9_]+)`)
+	types := map[string]map[string]struct{}{}
+	for _, m := range migrations.Plan() {
+		for _, stmt := range m.Statements {
+			if !strings.HasPrefix(strings.ToUpper(strings.TrimSpace(stmt)), "CREATE TABLE") {
+				continue
+			}
+			for _, line := range strings.Split(stmt, "\n")[1:] {
+				match := column.FindStringSubmatch(line)
+				if match == nil || strings.EqualFold(match[1], "CONSTRAINT") {
+					continue
+				}
+				name := strings.ToLower(match[1])
+				if types[name] == nil {
+					types[name] = map[string]struct{}{}
+				}
+				types[name][strings.ToUpper(match[2])] = struct{}{}
+			}
+		}
+	}
+	return types
 }
