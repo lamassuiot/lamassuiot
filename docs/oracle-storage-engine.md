@@ -93,8 +93,14 @@ migration record. Do not simply retry an interrupted migration. Application
 startup checks that all known versions are applied and unchanged.
 
 These migrations create an empty Oracle schema. They do not copy data from an
-existing PostgreSQL installation. Oracle treats empty SQL strings as NULL;
-some search behavior and field-length limits still require parity validation.
+existing PostgreSQL installation. Oracle treats empty SQL strings as NULL.
+String filters treat NULL in character columns as the empty string PostgreSQL
+stores, so "not equal", "not contains" and "not in" keep rows with an empty
+value, and empty items in "in" lists are ignored, as on PostgreSQL. Columns
+that PostgreSQL also stores as NULL (a certificate's `key_id`, a group's
+`parent_id`) are compared as NULL. Equality and list filters on CLOB columns
+are evaluated with escaped `LIKE` patterns, because Oracle cannot compare CLOB
+values with `=`. Field-length limits still require parity validation.
 
 Character columns are ordered and paginated with
 `NLSSORT(column, 'NLS_SORT=BINARY')`, so results match PostgreSQL's binary

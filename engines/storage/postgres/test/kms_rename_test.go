@@ -9,6 +9,7 @@ import (
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 // Renaming a key changes its key_id with its engine copy, keeps the old name as an alias and carries the
@@ -34,6 +35,33 @@ func TestKMSStoreRenameKey(t *testing.T) {
 		exists, _, err := kmsStore.SelectExistsByKeyID(ctx, "ski", "engine-a")
 		require.NoError(t, err)
 		require.True(t, exists)
+		_, stored, err := certStore.SelectExistsBySerialNumber(ctx, cert.SerialNumber)
+		require.NoError(t, err)
+		assert.Equal(t, "ski", stored.KeyID, "the certificate keeps its reference")
+	})
+
+	// The engine cannot be rolled back, so a rename the database rejects must fail before the engine is
+	// renamed.
+	t.Run("a taken new name fails before the engine is renamed", func(t *testing.T) {
+		_, err := kmsStore.Insert(ctx, &models.Key{
+			KeyID: "taken", EngineID: "engine-a", Name: "other", Algorithm: "ECDSA", Size: 256, PublicKey: "pub2", HasPrivateKey: true,
+			CreationTS: time.Now().UTC().Truncate(time.Second), Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, kmsStore.Delete(ctx, "taken", "engine-a")) })
+
+		engineRenamed := false
+		renamed, err := kmsStore.RenameKey(ctx, "engine-a", "ski", "taken", func() error { engineRenamed = true; return nil })
+		require.ErrorIs(t, err, gorm.ErrDuplicatedKey)
+		require.False(t, renamed)
+		require.False(t, engineRenamed, "the engine is not renamed when the database rejects the rename")
+
+		exists, _, err := kmsStore.SelectExistsByKeyID(ctx, "ski", "engine-a")
+		require.NoError(t, err)
+		require.True(t, exists)
+		_, stored, err := certStore.SelectExistsBySerialNumber(ctx, cert.SerialNumber)
+		require.NoError(t, err)
+		assert.Equal(t, "ski", stored.KeyID)
 	})
 
 	t.Run("the key, its aliases and the references to it move to the new name", func(t *testing.T) {

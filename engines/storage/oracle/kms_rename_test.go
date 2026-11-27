@@ -11,6 +11,7 @@ import (
 
 	coreconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
+	"gorm.io/gorm"
 )
 
 // This test uses a disposable schema because it creates tables with the same
@@ -29,7 +30,7 @@ func TestOracleRenameKey(t *testing.T) {
 	t.Cleanup(func() { _ = pool.Close() })
 	for _, step := range []struct{ create, drop string }{
 		{`CREATE TABLE lamassu_locks (lock_id VARCHAR2(64) PRIMARY KEY)`, `DROP TABLE lamassu_locks PURGE`},
-		{`CREATE TABLE kms_keys (key_id VARCHAR2(128) NOT NULL, engine_id VARCHAR2(128) NOT NULL, aliases JSON, CONSTRAINT test_kms_pk PRIMARY KEY(key_id, engine_id))`, `DROP TABLE kms_keys PURGE`},
+		{`CREATE TABLE kms_keys (key_id VARCHAR2(128) NOT NULL, engine_id VARCHAR2(128) NOT NULL, aliases JSON, CONSTRAINT lamassu_kms_keys_pk PRIMARY KEY(key_id, engine_id))`, `DROP TABLE kms_keys PURGE`},
 		{`CREATE TABLE certificates (serial_number VARCHAR2(128) PRIMARY KEY, key_id VARCHAR2(128), engine_id VARCHAR2(128), CONSTRAINT lamassu_cert_key_fk FOREIGN KEY(key_id, engine_id) REFERENCES kms_keys(key_id, engine_id) DEFERRABLE INITIALLY IMMEDIATE)`, `DROP TABLE certificates PURGE`},
 	} {
 		if _, err := pool.ExecContext(ctx, step.create); err != nil {
@@ -59,6 +60,15 @@ func TestOracleRenameKey(t *testing.T) {
 	callbackErr := errors.New("engine rename failed")
 	if renamed, err := renameKey(ctx, db, "engine", "old", "new", func() error { return callbackErr }); renamed || !errors.Is(err, callbackErr) {
 		t.Fatalf("callback failure: renamed=%v err=%v", renamed, err)
+	}
+	// The callback runs after the updates, so its failure must roll them back.
+	var keyID string
+	if err := pool.QueryRowContext(ctx, `SELECT key_id FROM certificates WHERE serial_number = 'one'`).Scan(&keyID); err != nil || keyID != "old" {
+		t.Fatalf("callback failure must roll back references: %q, %v", keyID, err)
+	}
+	var oldKeys int
+	if err := pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM kms_keys WHERE key_id = 'old' AND engine_id = 'engine'`).Scan(&oldKeys); err != nil || oldKeys != 1 {
+		t.Fatalf("callback failure must roll back the key: count=%d error=%v", oldKeys, err)
 	}
 	firstEntered, releaseFirst := make(chan struct{}), make(chan struct{})
 	firstResult := make(chan error, 1)
@@ -106,7 +116,6 @@ func TestOracleRenameKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	insertErr := <-insertResult
-	var keyID string
 	if insertErr == nil {
 		if err := pool.QueryRowContext(ctx, `SELECT key_id FROM certificates WHERE serial_number = 'racing'`).Scan(&keyID); err != nil || keyID != "new" {
 			t.Fatalf("concurrent certificate was not moved with its key: key=%q error=%v", keyID, err)
@@ -144,8 +153,10 @@ func TestOracleRenameKey(t *testing.T) {
 	if _, err := pool.ExecContext(ctx, `INSERT INTO kms_keys VALUES ('taken', 'engine', '[]')`); err != nil {
 		t.Fatal(err)
 	}
+	// A taken target must fail before the engine is renamed: the engine cannot
+	// be rolled back if the database rejects the rename afterwards.
 	called := false
-	if renamed, err := renameKey(ctx, db, "engine", "new", "taken", func() error { called = true; return nil }); err == nil || renamed || !called {
+	if renamed, err := renameKey(ctx, db, "engine", "new", "taken", func() error { called = true; return nil }); !errors.Is(err, gorm.ErrDuplicatedKey) || renamed || called {
 		t.Fatalf("duplicate target: renamed=%v callback=%v error=%v", renamed, called, err)
 	}
 	if err := pool.QueryRowContext(ctx, `SELECT key_id FROM certificates WHERE serial_number = 'one'`).Scan(&keyID); err != nil || keyID != "new" {

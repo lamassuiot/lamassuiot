@@ -6,15 +6,21 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"gorm.io/gorm"
 )
 
+var kmsKeyPK = regexp.MustCompile(`(?i)\([^)]*\blamassu_kms_keys_pk\)`)
+
 // renameKey updates the composite key and its certificate references under a
 // shared database lock. The certificate FK must be DEFERRABLE and named
 // lamassu_cert_key_fk. The migration must seed the kms_rename lock row.
-// As with PostgreSQL, the external callback cannot be rolled back if the SQL
-// transaction subsequently fails to commit.
+//
+// The engine is renamed last, after both updates succeed: it cannot be rolled
+// back, so any database failure (such as a taken target key) must happen
+// first. A failure of the callback rolls the updates back. Only a failure to
+// commit can still leave the engine renamed and the database unchanged.
 func renameKey(ctx context.Context, db *gorm.DB, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
 	renamed := false
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -41,13 +47,14 @@ func renameKey(ctx context.Context, db *gorm.DB, engineID, oldKeyID, newKeyID st
 		if err != nil {
 			return err
 		}
+		// Certificates still reference the old key until the second update.
 		if err := tx.Exec("SET CONSTRAINTS lamassu_cert_key_fk DEFERRED").Error; err != nil {
 			return err
 		}
-		if err := renameInEngine(); err != nil {
-			return err
-		}
 		result := tx.Exec("UPDATE kms_keys SET key_id = ?, aliases = ? WHERE key_id = ? AND engine_id = ?", newKeyID, string(encoded), oldKeyID, engineID)
+		if constraintError(result.Error, "ORA-00001", kmsKeyPK) {
+			return fmt.Errorf("rename key %s to %s in engine %s: %w", oldKeyID, newKeyID, engineID, gorm.ErrDuplicatedKey)
+		}
 		if result.Error != nil {
 			return result.Error
 		}
@@ -55,6 +62,9 @@ func renameKey(ctx context.Context, db *gorm.DB, engineID, oldKeyID, newKeyID st
 			return fmt.Errorf("rename key: expected one key, updated %d", result.RowsAffected)
 		}
 		if err := tx.Exec("UPDATE certificates SET key_id = ? WHERE key_id = ? AND engine_id = ?", newKeyID, oldKeyID, engineID).Error; err != nil {
+			return err
+		}
+		if err := renameInEngine(); err != nil {
 			return err
 		}
 		renamed = true
