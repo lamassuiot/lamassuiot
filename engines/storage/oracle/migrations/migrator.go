@@ -75,7 +75,7 @@ func Apply(ctx context.Context, db *sql.DB, migrations []Migration) error {
 	if err := validatePlan(migrations); err != nil {
 		return err
 	}
-	if max := db.Stats().MaxOpenConnections; max == 1 {
+	if db.Stats().MaxOpenConnections == 1 {
 		return errors.New("oracle migrations require at least two pool connections")
 	}
 	if err := bootstrap(ctx, db); err != nil {

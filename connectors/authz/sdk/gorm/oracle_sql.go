@@ -271,14 +271,8 @@ func parseAuthorization(query, target string) (authorizationPlan, error) {
 	if len(rootParts) == 2 {
 		qualifiers[rootParts[1]] = root.table
 	}
-	if p.take("as") {
-		alias, valid := p.word()
-		if !valid {
-			return empty, ErrAuthorizationUnsupported
-		}
-		qualifiers[alias] = root.table
-	} else if p.pos < len(p.tokens) && isAuthzIdentifier(p.tokens[p.pos]) && !isAuthzJoinStart(&p) && !p.peek("where") {
-		// Authz emits explicit aliases for views; accept the SQL shorthand too.
+	// Authz emits explicit aliases for views; accept the SQL shorthand too.
+	if p.take("as") || (p.pos < len(p.tokens) && isAuthzIdentifier(p.tokens[p.pos]) && !isAuthzJoinStart(&p) && !p.peek("where")) {
 		alias, valid := p.word()
 		if !valid {
 			return empty, ErrAuthorizationUnsupported
@@ -302,12 +296,7 @@ func parseAuthorization(query, target string) (authorizationPlan, error) {
 		}
 		tableName := strings.Join(parts, ".")
 		alias := relation.table
-		if p.take("as") {
-			alias, valid = p.word()
-			if !valid {
-				return empty, ErrAuthorizationUnsupported
-			}
-		} else if p.pos < len(p.tokens) && isAuthzIdentifier(p.tokens[p.pos]) && !p.peek("on") && !isAuthzJoinStart(&p) {
+		if p.take("as") || (p.pos < len(p.tokens) && isAuthzIdentifier(p.tokens[p.pos]) && !p.peek("on") && !isAuthzJoinStart(&p)) {
 			alias, valid = p.word()
 			if !valid {
 				return empty, ErrAuthorizationUnsupported

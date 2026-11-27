@@ -932,7 +932,7 @@ func emitPathLiteralCompare(c *jsonFilterCompiler, path, literal jsonFilterOpera
 	// A path-ending item method fixes the path's SQL/JSON type. Appending
 	// .type() to a method result is invalid Oracle path syntax (and can apply
 	// the conversion twice), so compare the typed result directly.
-	if methodType := oraclePathComparisonType(path.text); methodType != "" {
+	if oraclePathComparisonType(path.text) != "" {
 		return pathSQL + " " + op + " " + literalSQL, nil
 	}
 	targetType := jsonFilterLiteralType(literal)
