@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
@@ -33,6 +34,17 @@ func testDeviceGroups(t *testing.T, ctx context.Context, db *gorm.DB) {
 	ancestors, err := groups.SelectAncestors(ctx, grandchild.ID)
 	if err != nil || len(ancestors) != 3 || ancestors[0].ID != root.ID || ancestors[1].ID != child.ID || ancestors[2].ID != grandchild.ID || !reflect.DeepEqual(ancestors[0].Criteria, root.Criteria) {
 		t.Fatalf("ancestors=%+v error=%v", ancestors, err)
+	}
+	// GET /device-groups/:id/devices resolves the hierarchy while the request
+	// carries the devices authorization filter, which must not apply here.
+	devicesFilter := context.WithValue(ctx, authzsdk.AuthzQueryKey, `SELECT * FROM devicemanager.devices WHERE devicemanager.devices.id IN ('device-a')`)
+	if ancestors, err := groups.SelectAncestors(devicesFilter, grandchild.ID); err != nil || len(ancestors) != 3 {
+		t.Fatalf("ancestors under a devices authorization filter=%+v error=%v", ancestors, err)
+	}
+	// A filter on device_groups itself is still applied to the hierarchy.
+	groupsFilter := context.WithValue(ctx, authzsdk.AuthzQueryKey, `SELECT * FROM devicemanager.device_groups WHERE devicemanager.device_groups.id IN ('`+child.ID+`')`)
+	if ancestors, err := groups.SelectAncestors(groupsFilter, grandchild.ID); err != nil || len(ancestors) != 1 || ancestors[0].ID != child.ID {
+		t.Fatalf("ancestors under a device_groups authorization filter=%+v error=%v", ancestors, err)
 	}
 	invalid := *root
 	invalid.ParentID = &grandchild.ID

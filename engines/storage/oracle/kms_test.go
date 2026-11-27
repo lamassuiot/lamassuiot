@@ -106,8 +106,10 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	if _, err := deviceRepo.Count(unsupported, nil); !errors.Is(err, authzgorm.ErrAuthorizationUnsupported) {
 		t.Fatalf("unsupported authorization guard: %v", err)
 	}
-	if _, err := deviceRepo.DeviceGroups().SelectAncestors(guarded, "missing"); !errors.Is(err, authzgorm.ErrAuthorizationUnsupported) {
-		t.Fatalf("authorization guard on raw query: %v", err)
+	// GET /device-groups/:id/devices resolves the group hierarchy while the
+	// request carries the devices authorization filter.
+	if ancestors, err := deviceRepo.DeviceGroups().SelectAncestors(guarded, "missing"); err != nil || len(ancestors) != 0 {
+		t.Fatalf("group ancestors under a devices authorization filter: ancestors=%v error=%v", ancestors, err)
 	}
 	db, err := openGORM(pool, registeredPlugins...)
 	if err != nil {

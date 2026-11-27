@@ -47,9 +47,14 @@ func (s *deviceGroupStore) SelectByID(ctx context.Context, id string) (bool, *mo
 func (s *deviceGroupStore) SelectAncestors(ctx context.Context, id string) ([]*models.DeviceGroup, error) {
 	var groups []*models.DeviceGroup
 	// The starting group is included, matching the PostgreSQL repository.
-	query := `SELECT id, name, description, parent_id, criteria, created_at, updated_at FROM device_groups
-		START WITH id = ? CONNECT BY NOCYCLE PRIOR parent_id = id ORDER BY created_at ASC`
-	if err := s.db.WithContext(ctx).Raw(query, id).Find(&groups).Error; err != nil {
+	// The hierarchy walk stays in a subquery so the statement is built by GORM
+	// on the device_groups table rather than supplied through Raw: the Oracle
+	// Authz guard rejects prebuilt SQL whenever the request carries an
+	// authorization filter (e.g. the devices filter of
+	// GET /device-groups/:id/devices), and it can still apply a filter that
+	// targets device_groups.
+	ancestorIDs := `id IN (SELECT id FROM device_groups START WITH id = ? CONNECT BY NOCYCLE PRIOR parent_id = id)`
+	if err := s.db.WithContext(ctx).Table("device_groups").Where(ancestorIDs, id).Order("created_at ASC").Find(&groups).Error; err != nil {
 		return nil, err
 	}
 	return groups, nil
