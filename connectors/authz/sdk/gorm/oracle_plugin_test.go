@@ -166,6 +166,31 @@ func TestAuthorizationParserTranslatesTypedColumnPredicates(t *testing.T) {
 	}
 }
 
+func TestAuthorizationParserBindsNativeBooleanColumns(t *testing.T) {
+	for query, want := range map[string]bool{
+		`SELECT * FROM principals WHERE principals.active = true`:    true,
+		`SELECT * FROM principals WHERE principals.active = 'false'`: false,
+	} {
+		plan, err := parseAuthorization(query, "principals")
+		if err != nil {
+			t.Fatalf("%s: %v", query, err)
+		}
+		db, err := gorm.Open(dialect.Dialector{Conn: &sql.DB{}}, &gorm.Config{DryRun: true, DisableAutomaticPing: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		stmt := &gorm.Statement{DB: db, Table: "PRINCIPALS", Clauses: make(map[string]clause.Clause)}
+		stmt.AddClause(clause.Where{Exprs: []clause.Expression{plan.where}})
+		stmt.Build("WHERE")
+		if !reflect.DeepEqual(stmt.Vars, []any{want}) {
+			t.Fatalf("%s: values=%#v, want %v", query, stmt.Vars, want)
+		}
+	}
+	if _, err := parseAuthorization(`SELECT * FROM principals WHERE principals.active = 1`, "principals"); !errors.Is(err, ErrAuthorizationUnsupported) {
+		t.Fatalf("numeric literal on a BOOLEAN column: %v", err)
+	}
+}
+
 func TestAuthorizationGuardRejectsPrebuiltSQL(t *testing.T) {
 	ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey,
 		`SELECT * FROM devicemanager.devices WHERE devices.id IN ('allowed')`)

@@ -6,9 +6,12 @@ import (
 
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/testutil"
+	authzsdk "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk"
+	authzgorm "github.com/lamassuiot/lamassuiot/v4/connectors/authz/sdk/gorm"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestGormPrincipalStore_UpdatePersistsZeroValues(t *testing.T) {
@@ -70,4 +73,49 @@ func TestGormPrincipalStore_CreateRequiresType(t *testing.T) {
 
 	_, err = s.Get(ctx, "no-type")
 	assert.Error(t, err, "a principal without type must not be stored")
+}
+
+// TestGormPrincipalStore_ListWithActiveAuthorizationFilter runs the GET /principals
+// authorization filter on principals.active through the provider's Authz GORM
+// plugin, as the Authz assembler registers it.
+func TestGormPrincipalStore_ListWithActiveAuthorizationFilter(t *testing.T) {
+	container, err := testutil.RunEmpty()
+	require.NoError(t, err)
+	defer container.Cleanup()
+
+	sqlDB, err := container.DB.DB()
+	require.NoError(t, err)
+
+	log := logrus.NewEntry(logrus.New())
+	log.Logger.SetLevel(logrus.ErrorLevel)
+	require.NoError(t, RunMigrationsForProvider(sqlDB, "", testutil.StorageProvider(), log))
+
+	var plugin gorm.Plugin = authzgorm.NewAuthzGormPlugin()
+	if testutil.StorageProvider() == "oracle" {
+		plugin = authzgorm.NewOracleAuthzGormPlugin()
+	}
+	require.NoError(t, container.DB.Use(plugin))
+
+	s, err := NewGormPrincipalStore(container.DB)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	for _, p := range []*models.Principal{
+		{ID: "active-user", Name: "Active", Type: "oidc", Active: true},
+		{ID: "inactive-user", Name: "Inactive", Type: "oidc", Active: true},
+	} {
+		require.NoError(t, s.Create(ctx, p))
+	}
+	require.NoError(t, s.SetActive(ctx, "inactive-user", false))
+
+	for filter, want := range map[string]string{
+		"true":    "active-user",
+		"'false'": "inactive-user",
+	} {
+		authzCtx := context.WithValue(ctx, authzsdk.AuthzQueryKey, "SELECT * FROM principals WHERE principals.active = "+filter)
+		principals, _, err := s.List(authzCtx, nil)
+		require.NoError(t, err, "active = %s", filter)
+		require.Len(t, principals, 1, "active = %s", filter)
+		assert.Equal(t, want, principals[0].ID, "active = %s", filter)
+	}
 }

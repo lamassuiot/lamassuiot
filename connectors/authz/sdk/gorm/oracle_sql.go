@@ -404,7 +404,33 @@ var oracleBooleanColumns = map[string]struct{}{
 	"crypto_enforcement_enabled": {}, "crypto_enforcement_allow_rsa_keys": {}, "crypto_enforcement_allow_ecdsa_keys": {},
 }
 
+// oracleNativeBooleanColumns are Oracle BOOLEAN columns, such as the Authz
+// database's principals.active. Unlike the NUMBER(1) columns above, they are
+// bound as Go booleans.
+var oracleNativeBooleanColumns = map[string]struct{}{
+	"active": {},
+}
+
+func authzBooleanLiteral(token authzToken) (bool, bool) {
+	if !token.literal && token.numeric {
+		return false, false
+	}
+	switch strings.ToLower(token.text) {
+	case "true":
+		return true, true
+	case "false":
+		return false, true
+	}
+	return false, false
+}
+
 func authzLiteralValue(token authzToken, column clause.Column) (any, error) {
+	if _, isBoolean := oracleNativeBooleanColumns[strings.ToLower(column.Name)]; isBoolean {
+		if value, ok := authzBooleanLiteral(token); ok {
+			return value, nil
+		}
+		return nil, ErrAuthorizationUnsupported
+	}
 	if _, isBoolean := oracleBooleanColumns[strings.ToLower(column.Name)]; isBoolean {
 		switch strings.ToLower(token.text) {
 		case "true":
