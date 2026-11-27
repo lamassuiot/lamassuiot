@@ -188,6 +188,9 @@ func (m *mockKMSStorage) SelectExistsByAlias(_ context.Context, _ string) (bool,
 func (m *mockKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
 }
+func (m *mockKMSStorage) RecordPrivateKey(context.Context, string, string, string) (*models.Key, error) {
+	return nil, nil
+}
 func (m *mockKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 func (m *mockKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
 	return fn()
@@ -238,6 +241,9 @@ func (c *controlledKMSStorage) SelectExistsByAlias(_ context.Context, _ string) 
 }
 func (c *controlledKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
+}
+func (c *controlledKMSStorage) RecordPrivateKey(context.Context, string, string, string) (*models.Key, error) {
+	return nil, nil
 }
 func (c *controlledKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 func (c *controlledKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {

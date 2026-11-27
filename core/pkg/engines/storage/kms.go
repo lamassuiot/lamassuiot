@@ -28,6 +28,10 @@ type KMSKeysRepo interface {
 
 	Insert(ctx context.Context, key *models.Key) (*models.Key, error)
 	Update(ctx context.Context, key *models.Key) (*models.Key, error)
+	// RecordPrivateKey marks that the engine holds the private key of a key and gives the key name when it has none.
+	// Only those two columns are written, so what else changed in the row since it was read is kept. It fails with
+	// errs.ErrKeyNotFound when no key has that key_id in that engine.
+	RecordPrivateKey(ctx context.Context, keyID, engineID, name string) (*models.Key, error)
 	// Delete fails with errs.ErrKeyInUse while a certificate references the key.
 	Delete(ctx context.Context, keyID, engineID string) error
 	// DeleteWith deletes the key and runs fn in the same transaction, after the row is deleted: fn does

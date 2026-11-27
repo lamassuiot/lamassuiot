@@ -28,8 +28,9 @@ import (
 type importEngine struct {
 	cryptoengines.CryptoEngine
 	keys    map[string]crypto.Signer
-	getErr  error // when set, every GetPrivateKeyByID fails with it, as an HSM whose session dropped
-	listErr error
+	getErr   error // when set, every GetPrivateKeyByID fails with it, as an HSM whose session dropped
+	listErr  error
+	onImport func() // runs while a key is imported, as another request that arrives meanwhile
 }
 
 func (e *importEngine) ListPrivateKeyIDs(context.Context) ([]string, error) {
@@ -53,6 +54,9 @@ func (e *importEngine) ImportECDSAPrivateKey(_ context.Context, key *ecdsa.Priva
 		return "", nil, err
 	}
 	e.keys[name] = key
+	if e.onImport != nil {
+		e.onImport()
+	}
 	return name, key, nil
 }
 
@@ -103,13 +107,17 @@ func (r *importRows) Insert(_ context.Context, key *models.Key) (*models.Key, er
 	return key, nil
 }
 
-func (r *importRows) Update(_ context.Context, key *models.Key) (*models.Key, error) {
-	if _, ok := r.rows[key.KeyID+"@"+key.EngineID]; !ok {
-		return nil, errors.New("record not found")
+func (r *importRows) RecordPrivateKey(_ context.Context, keyID, engineID, name string) (*models.Key, error) {
+	k, ok := r.rows[keyID+"@"+engineID]
+	if !ok {
+		return nil, errs.ErrKeyNotFound
 	}
-	c := *key
-	r.rows[key.KeyID+"@"+key.EngineID] = &c
-	return key, nil
+	k.HasPrivateKey = true
+	if k.Name == "" {
+		k.Name = name
+	}
+	c := *k
+	return &c, nil
 }
 
 func newImportService(t *testing.T) (*KMSServiceBackend, *importEngine, *importRows) {
@@ -199,6 +207,30 @@ func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 		require.True(t, got.HasPrivateKey)
 		require.True(t, rows.rows[digest+"@e1"].HasPrivateKey)
 		require.Len(t, rows.rows, 1)
+	})
+
+	t.Run("what is saved in the row while the key is imported is kept", func(t *testing.T) {
+		svc, eng, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub, Aliases: []string{"old"}, Tags: []string{}, Metadata: map[string]any{}}
+		eng.onImport = func() {
+			row := rows.rows[digest+"@e1"]
+			row.Name = "renamed meanwhile"
+			row.Aliases = []string{"old", "added meanwhile"}
+			row.Tags = []string{"tagged meanwhile"}
+			row.Metadata = map[string]any{"edited": "meanwhile"}
+		}
+
+		got, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1", Name: "import"})
+		require.NoError(t, err)
+		require.True(t, got.HasPrivateKey)
+		stored := rows.rows[digest+"@e1"]
+		require.True(t, stored.HasPrivateKey)
+		require.Equal(t, "renamed meanwhile", stored.Name, "a name given meanwhile is not replaced")
+		require.Equal(t, []string{"old", "added meanwhile"}, stored.Aliases)
+		require.Equal(t, []string{"tagged meanwhile"}, stored.Tags)
+		require.Equal(t, map[string]any{"edited": "meanwhile"}, stored.Metadata)
 	})
 
 	t.Run("a key the engine already holds is refused", func(t *testing.T) {

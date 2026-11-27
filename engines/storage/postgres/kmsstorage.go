@@ -180,6 +180,29 @@ func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*mo
 	return kmsKey, nil
 }
 
+// RecordPrivateKey writes has_private_key and an empty name in one statement, rather than saving a copy of the row read
+// earlier, which would put back the values of every column as they were then.
+func (db *PostgresKMSStore) RecordPrivateKey(ctx context.Context, keyID, engineID, name string) (*models.Key, error) {
+	tx := db.db.WithContext(ctx).Exec(`UPDATE kms_keys SET has_private_key = true,
+		name = CASE WHEN COALESCE(name, '') = '' THEN ? ELSE name END
+		WHERE key_id = ? AND engine_id = ?`, name, keyID, engineID)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	if tx.RowsAffected != 1 {
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyNotFound, keyID, engineID)
+	}
+
+	exists, key, err := db.SelectExistsByKeyID(ctx, keyID, engineID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyNotFound, keyID, engineID)
+	}
+	return key, nil
+}
+
 func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
 	tx := db.querier.Table(kmsTableName).WithContext(ctx).
 		Where("key_id = ? AND engine_id = ?", keyID, engineID).Delete(nil)

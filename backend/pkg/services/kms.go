@@ -777,13 +777,10 @@ func (svc *KMSServiceBackend) rowOfPublicKey(ctx context.Context, publicKey cryp
 }
 
 // addPrivateKeyToRow records the private key just imported in the row that already carries its public key under the
-// same name, one whose key the engine did not hold.
+// same name, one whose key the engine did not hold. The row was read before the import, so only the private key and an
+// empty name are written: what was saved in the row meanwhile is kept.
 func (svc *KMSServiceBackend) addPrivateKeyToRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, name string) (*models.Key, error) {
-	row.HasPrivateKey = true
-	if row.Name == "" {
-		row.Name = name
-	}
-	updated, err := svc.kmsStorage.Update(ctx, row)
+	updated, err := svc.kmsStorage.RecordPrivateKey(ctx, row.KeyID, row.EngineID, name)
 	if err != nil {
 		lFunc.Errorf("could not record the private key of key %s of engine %s: %s", row.KeyID, row.EngineID, err)
 		return nil, err
