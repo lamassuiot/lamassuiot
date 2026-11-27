@@ -163,7 +163,7 @@ func TestUpgrade38To40(t *testing.T) {
 				requireResolves(row.Digest, row.Digest)
 				requireResolves(keyURI(row.KeyID), row.Digest)
 			}
-			requireResolves(skiB, b.Digest)      // the alias the rename left
+			requireResolves(skiB, b.Digest)  // the alias the rename left
 			requireResolves(c.SKI, c.Digest) // a Lamassu SKI is the digest
 			requireResolves(hex.EncodeToString(fCert.SubjectKeyId), fDigest)
 			if v == variantGhost {
