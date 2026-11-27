@@ -40,8 +40,9 @@ func sortJSONPath(path string) (string, error) {
 	return out.String(), nil
 }
 
-// jsonPathOrder sorts JSON values using a padded numeric key and text key,
-// preserving empty strings separately from missing and null values. ISO date
+// jsonPathOrder sorts JSON values by a text key that orders the JSON types,
+// then by the value of JSON numbers. It preserves empty strings separately
+// from missing and null values. ISO date
 // strings are normalized to a timezone-free timestamp, matching
 // PostgreSQL's timestamp cast. Oracle requires SQL/JSON paths to be SQL literals, so this path
 // is safe to inline only after sortJSONPath validates its grammar.
@@ -96,10 +97,10 @@ func (e jsonPathOrder) Build(builder clause.Builder) {
 	builder.WriteString(" THEN lamassu_json_sort_key(CASE WHEN ")
 	// Without numberOnly(), Oracle implicitly converts JSON strings such as
 	// "12" to NUMBER. PostgreSQL only treats JSON numbers as numeric sort keys.
+	// All numbers share the text key '0', which places them among the other
+	// JSON types as before; the second ORDER BY key orders them by value.
 	writeValue("NUMBER", ".numberOnly()")
-	builder.WriteString(" IS NOT NULL THEN TO_CLOB(LPAD(TO_CHAR(")
-	writeValue("NUMBER", ".numberOnly()")
-	builder.WriteString(", 'TM9', 'NLS_NUMERIC_CHARACTERS=''.,'''), 20, '0')) WHEN REGEXP_LIKE(")
+	builder.WriteString(" IS NOT NULL THEN TO_CLOB('0') WHEN REGEXP_LIKE(")
 	writeValue("VARCHAR2(4000)", "")
 	builder.WriteString(", '^[0-9]{4}-[0-9]{2}-[0-9]{2}') THEN TO_CLOB(CASE WHEN LENGTH(")
 	writeValue("VARCHAR2(4000)", "")
@@ -119,11 +120,16 @@ func (e jsonPathOrder) Build(builder clause.Builder) {
 	writeValue("CLOB", "")
 	builder.WriteString(" END)")
 	builder.WriteString(" ELSE NULL END")
+	direction := " ASC NULLS FIRST"
 	if e.desc {
-		builder.WriteString(" DESC NULLS LAST")
-	} else {
-		builder.WriteString(" ASC NULLS FIRST")
+		direction = " DESC NULLS LAST"
 	}
+	builder.WriteString(direction)
+	// The value of JSON numbers, NULL for other types. Comparing the numbers
+	// themselves orders negatives, decimals and wide numbers correctly.
+	builder.WriteString(", ")
+	writeValue("NUMBER", ".numberOnly()")
+	builder.WriteString(direction)
 	if len(e.unique) > 0 {
 		builder.WriteString(", ")
 		e.unique.Build(builder)

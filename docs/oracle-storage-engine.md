@@ -33,7 +33,10 @@ JSON sort paths are translated to Oracle SQL/JSON paths. Empty JSON strings
 are distinguished from absent and null values. Extracted sort keys use a
 CLOB-backed Oracle order type so arrays, objects, and strings are not limited
 to `VARCHAR2(4000)`; their serialized text is compared lexically to follow the
-PostgreSQL query's current sort key. Character collation and Oracle JSON
+PostgreSQL query's current sort key. JSON numbers sort by value on both
+engines (Oracle `NUMBER`, PostgreSQL `numeric`), including negatives,
+decimals and numbers wider than 20 digits; on Oracle, a number outside
+`NUMBER`'s range sorts as if it had no value. Character collation and Oracle JSON
 serialization still need differential validation. ISO datetime sort keys use
 Oracle `TIMESTAMP(6)` conversion to match PostgreSQL's microsecond precision.
 Other date and timezone edge cases still need differential validation.

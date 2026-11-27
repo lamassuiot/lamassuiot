@@ -198,6 +198,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	}
 	testJSONPathFilterContract(t, ctx, jsonSortRepos...)
 	testOracleJSONPathSort(t, ctx, jsonSortRepos...)
+	testJSONPathNumericSort(t, ctx, jsonSortRepos...)
 	testKMSRepositoryContracts(t, ctx, kmsContractRepos...)
 	testEmptyStringFilterContract(t, ctx, kmsContractRepos...)
 	testCAAndCertificateContracts(t, ctx, caContractRepos...)
@@ -639,6 +640,77 @@ func testOracleJSONPathSort(t *testing.T, ctx context.Context, repos ...storage.
 		})
 		if err != nil || !reflect.DeepEqual(actual, expected) {
 			t.Fatalf("JSONPath sort repository %d: got %v, want %v, error=%v", i, actual, expected, err)
+		}
+	}
+}
+
+// testJSONPathNumericSort checks that JSON numbers sort by value on every
+// repository: negatives, decimals and numbers wider than 20 characters.
+func testJSONPathNumericSort(t *testing.T, ctx context.Context, repos ...storage.KMSKeysRepo) {
+	t.Helper()
+	probes := []struct {
+		engineID string
+		value    any
+	}{
+		{"num-big", json.Number("123456789012345678901234567")},
+		{"num-1e25", 1e25},
+		{"num-10", 10},
+		{"num-3", 3},
+		{"num-1.5", 1.5},
+		{"num-neg-0.5", -0.5},
+		{"num-neg-3", -3},
+		{"num-neg-5", -5},
+	}
+	var ids []string
+	for _, repo := range repos {
+		for _, probe := range probes {
+			if _, err := repo.Insert(ctx, &models.Key{
+				KeyID: "json-numeric-sort", EngineID: probe.engineID, Name: "json-numeric-sort", Algorithm: "RSA", Size: 2048,
+				PublicKey: "public key", CreationTS: time.Now().UTC().Truncate(time.Second),
+				Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{"value": probe.value},
+			}); err != nil {
+				t.Fatalf("insert JSON numeric sort probe %s: %v", probe.engineID, err)
+			}
+		}
+	}
+	for _, probe := range probes {
+		ids = append(ids, probe.engineID)
+	}
+	t.Cleanup(func() {
+		for _, repo := range repos {
+			for _, probe := range probes {
+				if err := repo.Delete(context.Background(), "json-numeric-sort", probe.engineID); err != nil {
+					t.Errorf("delete JSON numeric sort probe %s: %v", probe.engineID, err)
+				}
+			}
+		}
+	})
+	descending := append([]string(nil), ids...)
+	ascending := make([]string, len(ids))
+	for i := range ids {
+		ascending[i] = ids[len(ids)-1-i]
+	}
+	for _, tc := range []struct {
+		mode resources.SortMode
+		want []string
+	}{
+		{resources.SortModeAsc, ascending},
+		{resources.SortModeDesc, descending},
+	} {
+		params := &resources.QueryParameters{
+			PageSize: 20,
+			Sort:     resources.SortOptions{SortField: "metadata", SortMode: tc.mode, JsonPathExpr: "$.value"},
+			Filters:  []resources.FilterOption{{Field: "key_id", FilterOperation: resources.StringEqual, Value: "json-numeric-sort"}},
+		}
+		for i, repo := range repos {
+			var actual []string
+			_, err := repo.SelectAll(ctx, storage.StorageListRequest[models.Key]{
+				QueryParams: params,
+				ApplyFunc:   func(item models.Key) { actual = append(actual, item.EngineID) },
+			})
+			if err != nil || !reflect.DeepEqual(actual, tc.want) {
+				t.Errorf("JSONPath numeric sort %s repository %d: got %v, want %v, error=%v", tc.mode, i, actual, tc.want, err)
+			}
 		}
 	}
 }

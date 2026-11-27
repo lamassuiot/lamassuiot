@@ -732,22 +732,23 @@ func buildJsonPathOrderExpr(field, jsonPath, sortMode string) (clause.Expression
 
 	path := "{" + strings.Join(keys, ",") + "}"
 
-	// Build CASE expression that handles:
-	// 1. Numbers - pad for proper text sorting
-	// 2. Dates/timestamps - cast to timestamp for proper chronological sorting
-	// 3. Text - use as-is
-	// Use binary collation so JSON sort order matches Oracle regardless of
-	// the PostgreSQL database's locale.
+	// Two ORDER BY keys:
+	// 1. A text key that orders the JSON types. Numbers all share the key '0';
+	//    dates and timestamps are normalized for chronological sorting; other
+	//    values sort as their text. It uses binary collation so the order
+	//    matches Oracle regardless of the PostgreSQL database's locale.
+	// 2. The value of JSON numbers (NULL for other types), so numbers sort by
+	//    value, including negatives, decimals and wide numbers.
+	direction := " ASC NULLS FIRST"
+	if strings.EqualFold(sortMode, "desc") {
+		direction = " DESC NULLS LAST"
+	}
 	sql := "CASE " +
-		"WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN lpad(((? #> ?::text[])::numeric)::text, 20, '0') " +
+		"WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN '0' " +
 		"WHEN (? #>> ?::text[]) ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' THEN to_char(((? #>> ?::text[]))::timestamp, 'YYYY-MM-DD HH24:MI:SS.US') " +
 		"ELSE (? #>> ?::text[]) " +
-		`END COLLATE "C"`
-	if strings.EqualFold(sortMode, "desc") {
-		sql += " DESC NULLS LAST"
-	} else {
-		sql += " ASC NULLS FIRST"
-	}
+		`END COLLATE "C"` + direction + ", " +
+		"CASE WHEN jsonb_typeof(? #> ?::text[]) = 'number' THEN (? #> ?::text[])::numeric END" + direction
 
-	return gorm.Expr(sql, col, path, col, path, col, path, col, path, col, path), nil
+	return gorm.Expr(sql, col, path, col, path, col, path, col, path, col, path, col, path), nil
 }
