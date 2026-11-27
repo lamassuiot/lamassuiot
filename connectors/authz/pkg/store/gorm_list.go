@@ -125,6 +125,12 @@ func authzSafeColumn(name string) (clause.Column, error) {
 	return clause.Column{Name: name}, nil
 }
 
+// authzEmptyStoredAsNull are the nullable character columns of the Authz
+// tables whose Go fields are plain strings. PostgreSQL stores an empty value
+// as an empty string and Oracle as NULL, so string filters on them treat NULL
+// as the empty string, as the Oracle storage engine does for its own columns.
+var authzEmptyStoredAsNull = map[string]struct{}{"description": {}, "granted_by": {}}
+
 func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, error) {
 	column, err := authzSafeColumn(filter.Field)
 	if err != nil {
@@ -132,10 +138,26 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 	}
 	value := filter.Value
 	pattern := func(v string) string { return authzLikeEscaper.Replace(v) }
+	_, nullAsEmpty := authzEmptyStoredAsNull[column.Name]
+	isNull := clause.Expr{SQL: "? IS NULL", Vars: []any{column}}
+	isNotNull := clause.Expr{SQL: "? IS NOT NULL", Vars: []any{column}}
+	// orNull also matches the rows whose value is empty (NULL on Oracle).
+	orNull := func(condition clause.Expression) clause.Expression {
+		return clause.Or(condition, isNull)
+	}
 	switch filter.FilterOperation {
 	case resources.StringEqual, resources.EnumEqual:
+		if nullAsEmpty && value == "" {
+			return db.Where(isNull), nil
+		}
 		return db.Where(clause.Eq{Column: column, Value: value}), nil
 	case resources.StringNotEqual, resources.EnumNotEqual:
+		if nullAsEmpty {
+			if value == "" {
+				return db.Where(isNotNull), nil
+			}
+			return db.Where(orNull(clause.Neq{Column: column, Value: value})), nil
+		}
 		return db.Where(clause.Neq{Column: column, Value: value}), nil
 	case resources.DateEqual:
 		date, err := oraclestorage.ParseFilterTime(value)
@@ -153,21 +175,41 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 		}
 		return db.Where(clause.Eq{Column: column, Value: number}), nil
 	case resources.StringEqualIgnoreCase:
+		if nullAsEmpty && value == "" {
+			return db.Where(isNull), nil
+		}
 		return db.Where(clause.Expr{SQL: "LOWER(?) = LOWER(?)", Vars: []any{column, value}}), nil
 	case resources.StringNotEqualIgnoreCase:
-		return db.Where(clause.Expr{SQL: "LOWER(?) <> LOWER(?)", Vars: []any{column, value}}), nil
+		condition := clause.Expr{SQL: "LOWER(?) <> LOWER(?)", Vars: []any{column, value}}
+		if nullAsEmpty {
+			if value == "" {
+				return db.Where(isNotNull), nil
+			}
+			return db.Where(orNull(condition)), nil
+		}
+		return db.Where(condition), nil
 	case resources.StringContains, resources.StringContainsIgnoreCase:
 		lhs, match := "?", pattern(value)
 		if filter.FilterOperation == resources.StringContainsIgnoreCase {
 			lhs, match = "LOWER(?)", strings.ToLower(match)
 		}
-		return db.Where(clause.Expr{SQL: lhs + " LIKE ? ESCAPE '\\'", Vars: []any{column, "%" + match + "%"}}), nil
+		condition := clause.Expr{SQL: lhs + " LIKE ? ESCAPE '\\'", Vars: []any{column, "%" + match + "%"}}
+		// An empty value contains "", so "contains ''" matches every row.
+		if nullAsEmpty && value == "" {
+			return db.Where(orNull(condition)), nil
+		}
+		return db.Where(condition), nil
 	case resources.StringNotContains, resources.StringNotContainsIgnoreCase:
 		lhs, match := "?", pattern(value)
 		if filter.FilterOperation == resources.StringNotContainsIgnoreCase {
 			lhs, match = "LOWER(?)", strings.ToLower(match)
 		}
-		return db.Where(clause.Expr{SQL: lhs + " NOT LIKE ? ESCAPE '\\'", Vars: []any{column, "%" + match + "%"}}), nil
+		condition := clause.Expr{SQL: lhs + " NOT LIKE ? ESCAPE '\\'", Vars: []any{column, "%" + match + "%"}}
+		// An empty value contains no other value.
+		if nullAsEmpty && value != "" {
+			return db.Where(orNull(condition)), nil
+		}
+		return db.Where(condition), nil
 	case resources.StringIn, resources.EnumIn, resources.StringInIgnoreCase, resources.StringNotIn, resources.StringNotInIgnoreCase:
 		values := make([]string, 0)
 		for _, part := range strings.Split(value, ",") {
@@ -191,10 +233,19 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 			if negated {
 				operator = "NOT IN"
 			}
-			return db.Where(clause.Expr{SQL: "LOWER(?) " + operator + " ?", Vars: []any{column, anyValues}}), nil
+			condition := clause.Expr{SQL: "LOWER(?) " + operator + " ?", Vars: []any{column, anyValues}}
+			// An empty value is never in a list of non-empty values.
+			if nullAsEmpty && negated {
+				return db.Where(orNull(condition)), nil
+			}
+			return db.Where(condition), nil
 		}
 		if negated {
-			return db.Where(clause.Not(clause.IN{Column: column, Values: anyValues})), nil
+			condition := clause.Not(clause.IN{Column: column, Values: anyValues})
+			if nullAsEmpty {
+				return db.Where(orNull(condition)), nil
+			}
+			return db.Where(condition), nil
 		}
 		return db.Where(clause.IN{Column: column, Values: anyValues}), nil
 	case resources.DateBefore, resources.NumberLessThan:

@@ -160,3 +160,54 @@ func TestGormPrincipalStore_ListWithDateOnlyFilter(t *testing.T) {
 		assert.Len(t, principals, tc.want, "created_at op %d %s", tc.op, tc.value)
 	}
 }
+
+// TestGormPrincipalStore_ListFiltersEmptyDescription checks that string
+// filters treat an empty description alike on both providers: PostgreSQL
+// stores it as an empty string and Oracle as NULL.
+func TestGormPrincipalStore_ListFiltersEmptyDescription(t *testing.T) {
+	container, err := testutil.RunEmpty()
+	require.NoError(t, err)
+	defer container.Cleanup()
+
+	sqlDB, err := container.DB.DB()
+	require.NoError(t, err)
+
+	log := logrus.NewEntry(logrus.New())
+	log.Logger.SetLevel(logrus.ErrorLevel)
+	require.NoError(t, RunMigrationsForProvider(sqlDB, "", testutil.StorageProvider(), log))
+
+	s, err := NewGormPrincipalStore(container.DB)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	require.NoError(t, s.Create(ctx, &models.Principal{ID: "empty-description", Name: "Empty", Type: "oidc", Active: true}))
+	require.NoError(t, s.Create(ctx, &models.Principal{ID: "with-description", Name: "Described", Description: "Operator", Type: "oidc", Active: true}))
+
+	for _, tc := range []struct {
+		name  string
+		op    resources.FilterOperation
+		value string
+		want  []string
+	}{
+		{"equal empty", resources.StringEqual, "", []string{"empty-description"}},
+		{"not equal empty", resources.StringNotEqual, "", []string{"with-description"}},
+		{"not equal value", resources.StringNotEqual, "Operator", []string{"empty-description"}},
+		{"equal ignore case empty", resources.StringEqualIgnoreCase, "", []string{"empty-description"}},
+		{"not equal ignore case value", resources.StringNotEqualIgnoreCase, "OPERATOR", []string{"empty-description"}},
+		{"contains empty", resources.StringContains, "", []string{"empty-description", "with-description"}},
+		{"not contains value", resources.StringNotContains, "Oper", []string{"empty-description"}},
+		{"not contains ignore case value", resources.StringNotContainsIgnoreCase, "OPER", []string{"empty-description"}},
+		{"not in value", resources.StringNotIn, "Operator", []string{"empty-description"}},
+		{"not in ignore case value", resources.StringNotInIgnoreCase, "OPERATOR", []string{"empty-description"}},
+	} {
+		principals, _, err := s.List(ctx, &resources.QueryParameters{
+			Filters: []resources.FilterOption{{Field: "description", FilterOperation: tc.op, Value: tc.value}},
+		})
+		require.NoError(t, err, tc.name)
+		var ids []string
+		for _, p := range principals {
+			ids = append(ids, p.ID)
+		}
+		assert.ElementsMatch(t, tc.want, ids, tc.name)
+	}
+}
