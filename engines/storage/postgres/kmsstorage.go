@@ -153,7 +153,12 @@ func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*mo
 		kmsKey.Digest = digest
 	}
 
-	return db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
+	key, err := db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		// another import of the same key, or of another key under the same name, got there first
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyAlreadyExists, kmsKey.KeyID, kmsKey.EngineID)
+	}
+	return key, err
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
@@ -230,8 +235,19 @@ func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, n
 			return err
 		}
 
+		// The old name stays as an alias, so that what still refers to the key by it finds it, unless no lookup could
+		// ever reach it: a name shaped like an id or a digest is never read as an alias, and one another key still
+		// carries resolves to that key first.
+		var others int64
+		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id <> ?", oldKeyID, engineID).Count(&others).Error; err != nil {
+			return err
+		}
+		keep := "[]"
+		if others == 0 && !chelpers.IsKeyUUID(oldKeyID) && !chelpers.IsKeyDigest(oldKeyID) {
+			keep = jsonStringArray(oldKeyID)
+		}
 		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
-			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+			WHERE key_id = ? AND engine_id = ?`, newKeyID, keep, oldKeyID, engineID)
 		if res.Error != nil {
 			return res.Error
 		}

@@ -27,7 +27,20 @@ import (
 // importEngine holds keys by name and names an imported key after its digest, as every crypto engine does.
 type importEngine struct {
 	cryptoengines.CryptoEngine
-	keys map[string]crypto.Signer
+	keys    map[string]crypto.Signer
+	getErr  error // when set, every GetPrivateKeyByID fails with it, as an HSM whose session dropped
+	listErr error
+}
+
+func (e *importEngine) ListPrivateKeyIDs(context.Context) ([]string, error) {
+	if e.listErr != nil {
+		return nil, e.listErr
+	}
+	var ids []string
+	for k := range e.keys {
+		ids = append(ids, k)
+	}
+	return ids, nil
 }
 
 func (e *importEngine) GetEngineConfig() models.CryptoEngineInfo {
@@ -44,6 +57,9 @@ func (e *importEngine) ImportECDSAPrivateKey(_ context.Context, key *ecdsa.Priva
 }
 
 func (e *importEngine) GetPrivateKeyByID(_ context.Context, name string) (crypto.Signer, error) {
+	if e.getErr != nil {
+		return nil, e.getErr
+	}
 	if k, ok := e.keys[name]; ok {
 		return k, nil
 	}
@@ -210,5 +226,36 @@ func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 		require.Len(t, eng.keys, 1)
 		require.Contains(t, eng.keys, ski)
 		require.Len(t, rows.rows, 1)
+	})
+
+	t.Run("an engine that fails to read a key it holds is not taken for one that lost it", func(t *testing.T) {
+		svc, eng, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		const ski = "7c2c3d4e5f60718293a4b5c6d7e8f9012345678b"
+		eng.keys[ski] = key
+		eng.getErr = errors.New("CKR_SESSION_HANDLE_INVALID")
+		rows.rows[ski+"@e1"] = &models.Key{KeyID: ski, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true}
+
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.ErrorIs(t, err, errs.ErrKeyAlreadyExists, "the engine lists the key: it holds it")
+		require.NotContains(t, eng.keys, digest, "no second copy is written")
+		require.Equal(t, ski, rows.rows[ski+"@e1"].KeyID)
+	})
+
+	t.Run("an engine that cannot say whether it holds the key stops the import", func(t *testing.T) {
+		svc, eng, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		const ski = "8d2c3d4e5f60718293a4b5c6d7e8f9012345678c"
+		eng.getErr = errors.New("throttled")
+		eng.listErr = errors.New("throttled")
+		rows.rows[ski+"@e1"] = &models.Key{KeyID: ski, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true}
+
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, errs.ErrKeyAlreadyExists)
+		require.Empty(t, eng.keys, "nothing is written to the engine")
+		require.Equal(t, ski, rows.rows[ski+"@e1"].KeyID, "the row is left as it was")
 	})
 }

@@ -15,7 +15,8 @@ import (
 // NormalizeKeyNames renames, in their engine and in the KMS, the keys whose key_id is not the SHA-256 of
 // their SubjectPublicKeyInfo, and returns how many it renamed. Crypto engines before the KMS renamed the
 // keys of imported CAs to their certificate's SKI, and ca-to-kms-migration registered them under it.
-// Each renamed key keeps its old name as an alias, and the certificates that reference it follow it.
+// Each renamed key keeps its old name as an alias, unless another key still carries that name or it has the shape of an
+// id or a digest (no lookup would reach it), and the certificates that reference it follow it.
 //
 // It is safe to run again: a key its engine already holds under its digest only has its row renamed.
 // A key that cannot be renamed is logged and left as it is, for the next run.

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	postgres "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
@@ -57,7 +58,41 @@ func TestKMSStoreKeyIdentity(t *testing.T) {
 
 	t.Run("a public key is stored once per engine, whatever its name", func(t *testing.T) {
 		_, err := store.Insert(ctx, newKey("yet-another-name", "engine-1"))
-		require.Error(t, err)
+		require.ErrorIs(t, err, errs.ErrKeyAlreadyExists, "a concurrent import of the same key is a conflict, not a 500")
+		_, err = store.Insert(ctx, newKey(digest, "engine-1"))
+		require.ErrorIs(t, err, errs.ErrKeyAlreadyExists, "so is the same key_id")
+	})
+
+	t.Run("a rename keeps as alias only an old name that can still address the key", func(t *testing.T) {
+		pubA, digA := realPublicKey(t)
+		pubB, digB := realPublicKey(t)
+		const shared = "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
+		legacy := strings.Repeat("7f", 32) // a SKI with the shape of a digest
+		for _, k := range []*models.Key{
+			{KeyID: shared, EngineID: "engine-r1", PublicKey: pubA},
+			{KeyID: shared, EngineID: "engine-r2", PublicKey: pubA},
+			{KeyID: legacy, EngineID: "engine-r1", PublicKey: pubB},
+		} {
+			k.Name, k.Algorithm, k.Size, k.HasPrivateKey, k.CreationTS = "r", "ECDSA", 256, true, time.Now().UTC().Truncate(time.Second)
+			k.Aliases, k.Tags, k.Metadata = []string{}, []string{}, map[string]any{}
+			_, err := store.Insert(ctx, k)
+			require.NoError(t, err)
+		}
+		noop := func() error { return nil }
+
+		renamed, err := store.RenameKey(ctx, "engine-r1", shared, digA, noop)
+		require.NoError(t, err)
+		require.True(t, renamed)
+		_, k, err := store.SelectExistsByKeyID(ctx, digA, "engine-r1")
+		require.NoError(t, err)
+		assert.NotContains(t, k.Aliases, shared, "another key still has that name: the alias would be shadowed")
+
+		renamed, err = store.RenameKey(ctx, "engine-r1", legacy, digB, noop)
+		require.NoError(t, err)
+		require.True(t, renamed)
+		_, k, err = store.SelectExistsByKeyID(ctx, digB, "engine-r1")
+		require.NoError(t, err)
+		assert.NotContains(t, k.Aliases, legacy, "an identifier shaped like a digest is never read as an alias")
 	})
 
 	t.Run("a public key that is not one is not stored", func(t *testing.T) {

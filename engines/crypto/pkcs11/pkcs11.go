@@ -222,6 +222,7 @@ func (hsmContext *pkcs11EngineContext) ListPrivateKeyIDs(ctx context.Context) ([
 	keys, err := hsmContext.api.FindAllKeyPairs()
 	if err != nil {
 		lFunc.Errorf("could not list private keys: %s", err)
+		return nil, err
 	}
 
 	keyIDs := make([]string, 0)

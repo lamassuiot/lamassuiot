@@ -143,6 +143,17 @@ func TestGetKeyResolvesIdentifiers(t *testing.T) {
 		require.Equal(t, "e1", key.EngineID)
 	})
 
+	t.Run("a digest that is also the name of one of its copies resolves to that copy", func(t *testing.T) {
+		repo := identifierFixture()
+		dig := strings.Repeat("5e", 32)
+		repo.keys = append(repo.keys,
+			&models.Key{ID: "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c06", Digest: dig, KeyID: dig, EngineID: "e1", Aliases: []string{}},
+			&models.Key{ID: "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c07", Digest: dig, KeyID: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", EngineID: "e2", Aliases: []string{}})
+		key, err := newIdentifierService(repo).GetKey(ctx, services.GetKeyInput{Identifier: dig})
+		require.NoError(t, err)
+		require.Equal(t, "e1", key.EngineID)
+	})
+
 	t.Run("a digest held by several engines needs the engine", func(t *testing.T) {
 		_, err := get(digestShared)
 		require.ErrorIs(t, err, errs.ErrKeyEngineRequired)

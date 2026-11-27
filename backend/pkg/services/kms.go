@@ -329,6 +329,10 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 			lFunc.Errorf("something went wrong while checking if digest '%s' exists in storage engine: %s", input.Identifier, err)
 			return nil, err
 		}
+		// A copy named by the digest itself is the one a bare key_id addressed before keys had a digest.
+		if named := slices.DeleteFunc(slices.Clone(copies), func(k *models.Key) bool { return k.KeyID != strings.ToLower(input.Identifier) }); len(copies) > 1 && len(named) == 1 {
+			return named[0], nil
+		}
 		if len(copies) > 0 {
 			return singleCopy(lFunc, input.Identifier, copies)
 		}
@@ -642,7 +646,12 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		return nil, err
 	}
 	if existing != nil && existing.HasPrivateKey {
-		if _, err := engineInstance.GetPrivateKeyByID(ctx, existing.KeyID); err == nil {
+		held, err := engineHolds(ctx, engineInstance, existing.KeyID)
+		if err != nil {
+			lFunc.Errorf("could not tell whether engine %s holds key %s: %s", engineID, existing.KeyID, err)
+			return nil, fmt.Errorf("could not tell whether engine %s holds key %s: %w", engineID, existing.KeyID, err)
+		}
+		if held {
 			lFunc.Infof("engine %s already holds this key as %s", engineID, existing.KeyID)
 			return nil, errs.ErrKeyAlreadyExists
 		}
@@ -727,6 +736,20 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
+}
+
+// engineHolds reports whether the engine holds a key under that name. Failing to read it is not proof that the key is
+// gone (an HSM session that dropped, a throttled vault): the list of the keys of the engine settles it, and when that
+// fails too the answer is unknown.
+func engineHolds(ctx context.Context, engine cryptoengines.CryptoEngine, keyID string) (bool, error) {
+	if _, err := engine.GetPrivateKeyByID(ctx, keyID); err == nil {
+		return true, nil
+	}
+	ids, err := engine.ListPrivateKeyIDs(ctx)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(ids, keyID), nil
 }
 
 // rowOfPublicKey returns the row of the engine that carries the public key, or nil.
