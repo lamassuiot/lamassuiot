@@ -262,9 +262,21 @@ func CreatePostgresDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageE
 // CreateOracleAuthzDBConnection opens the Oracle database that stores Authz
 // principals, grants, and policies. Oracle's connected user owns this schema.
 func CreateOracleAuthzDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEngine) (*gorm.DB, error) {
+	db, oracleCfg, err := openOracleGORM(log, cfg, "Oracle Authz database")
+	if err != nil {
+		return nil, err
+	}
+	log.Infof("Connected to Oracle Authz database as %s", oracleCfg.Username)
+	return db, nil
+}
+
+// openOracleGORM opens an Oracle connection for Authz with the Oracle Authz
+// GORM plugin and the Authz GORM logger, so every Oracle connection is
+// configured the same way.
+func openOracleGORM(log *logrus.Entry, cfg cconfig.PluggableStorageEngine, purpose string) (*gorm.DB, authzconfig.OracleDBConfig, error) {
 	oracleCfg, err := authzconfig.DecodeOracleDBConfig(cfg.Config)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode Oracle Authz database config: %w", err)
+		return nil, oracleCfg, fmt.Errorf("failed to decode %s config: %w", purpose, err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -277,20 +289,19 @@ func CreateOracleAuthzDBConnection(log *logrus.Entry, cfg cconfig.PluggableStora
 		ConnMaxLifetime: oracleCfg.ConnMaxLifetime,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Oracle Authz database: %w", err)
+		return nil, oracleCfg, fmt.Errorf("failed to connect to %s: %w", purpose, err)
 	}
 	db, err := oraclestorage.OpenGORM(pool)
 	if err != nil {
 		_ = pool.Close()
-		return nil, err
+		return nil, oracleCfg, err
 	}
 	if err := db.Use(authzgorm.NewOracleAuthzGormPlugin()); err != nil {
 		_ = pool.Close()
-		return nil, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
+		return nil, oracleCfg, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
 	}
 	db.Logger = NewGormLogger(log)
-	log.Infof("Connected to Oracle Authz database as %s", oracleCfg.Username)
-	return db, nil
+	return db, oracleCfg, nil
 }
 
 // CreateSchemaDBConnection opens the database Authz uses to resolve entities
@@ -301,31 +312,9 @@ func CreateSchemaDBConnection(log *logrus.Entry, cfg cconfig.PluggableStorageEng
 	case "", "postgres", "postgresql":
 		return CreatePostgresDBConnection(log, cfg)
 	case "oracle":
-		oracleCfg, err := authzconfig.DecodeOracleDBConfig(cfg.Config)
+		db, oracleCfg, err := openOracleGORM(log, cfg, "Oracle schema")
 		if err != nil {
-			return nil, fmt.Errorf("failed to decode oracle schema config: %w", err)
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		pool, err := oraclestorage.OpenDatabaseWithOptions(ctx, oraclestorage.ConnectionOptions{
-			ConnectString:   oracleCfg.ConnectString,
-			Username:        oracleCfg.Username,
-			Password:        oracleCfg.Password,
-			MaxOpenConns:    oracleCfg.MaxOpenConns,
-			MaxIdleConns:    oracleCfg.MaxIdleConns,
-			ConnMaxLifetime: oracleCfg.ConnMaxLifetime,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to Oracle schema: %w", err)
-		}
-		db, err := oraclestorage.OpenGORM(pool)
-		if err != nil {
-			_ = pool.Close()
 			return nil, err
-		}
-		if err := db.Use(authzgorm.NewOracleAuthzGormPlugin()); err != nil {
-			_ = pool.Close()
-			return nil, fmt.Errorf("failed to register Oracle authz gorm plugin: %w", err)
 		}
 		log.Infof("Connected to Oracle schema as %s", oracleCfg.Username)
 		return db, nil
