@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 	"uuid"
 
@@ -442,17 +444,27 @@ func (svc DeviceManagerServiceBackend) UpdateDeviceStatus(ctx context.Context, i
 	return device, nil
 }
 
-// revokeIdentityForGood revokes, with cessationOfOperation, the identity certificate of a device being decommissioned
-// when it is active or on hold: a certificate on hold would come back when its hold is released, for example by the
-// release of the CA that put it on hold. A certificate already revoked for good is left as it is. An expired slot is
-// left as it is too.
+// revokeIdentityForGood revokes, with cessationOfOperation, every certificate of the identity slot of a device being
+// decommissioned that is active or on hold, not only its active version: older versions stay active when the DMS does
+// not revoke on re-enrollment, and a certificate on hold comes back when its hold is released, for example by the
+// release of the CA that put it on hold. The CA, not the status of the slot, tells what is still valid. Certificates
+// revoked for good or expired are left as they are, so a retry only revokes what is left.
 func (svc DeviceManagerServiceBackend) revokeIdentityForGood(ctx context.Context, lFunc *logrus.Entry, device *models.Device) error {
 	idSlot := device.IdentitySlot
-	if idSlot == nil || idSlot.Status == models.SlotExpired {
+	if idSlot == nil {
 		return nil
 	}
 
-	certSN := idSlot.Secrets[idSlot.ActiveVersion]
+	versions := slices.Sorted(maps.Keys(idSlot.Secrets))
+	for _, version := range versions {
+		if err := svc.revokeCertificateForGood(ctx, lFunc, device.ID, idSlot.Secrets[version]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (svc DeviceManagerServiceBackend) revokeCertificateForGood(ctx context.Context, lFunc *logrus.Entry, deviceID, certSN string) error {
 	if certSN == "" {
 		return nil
 	}
@@ -461,11 +473,11 @@ func (svc DeviceManagerServiceBackend) revokeIdentityForGood(ctx context.Context
 		SerialNumber: certSN,
 	})
 	if errors.Is(err, errs.ErrCertificateNotFound) {
-		lFunc.Warnf("identity certificate %s of device %s not found, nothing to revoke", certSN, device.ID)
+		lFunc.Warnf("identity certificate %s of device %s not found, nothing to revoke", certSN, deviceID)
 		return nil
 	}
 	if err != nil {
-		return fmt.Errorf("could not read identity certificate %s of device %s: %w", certSN, device.ID, err)
+		return fmt.Errorf("could not read identity certificate %s of device %s: %w", certSN, deviceID, err)
 	}
 
 	onHold := crt.Status == models.StatusRevoked && crt.RevocationReason == ocsp.CertificateHold
@@ -479,7 +491,7 @@ func (svc DeviceManagerServiceBackend) revokeIdentityForGood(ctx context.Context
 		RevocationReason: ocsp.CessationOfOperation,
 	})
 	if err != nil {
-		return fmt.Errorf("could not revoke identity certificate %s of device %s: %w", certSN, device.ID, err)
+		return fmt.Errorf("could not revoke identity certificate %s of device %s: %w", certSN, deviceID, err)
 	}
 	return nil
 }

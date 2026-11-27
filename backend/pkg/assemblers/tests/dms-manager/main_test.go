@@ -4130,8 +4130,8 @@ func TestESTReEnroll(t *testing.T) {
 			},
 		},
 		{
-			// Decommissioning a device whose slot is already EXPIRED does not revoke its certificate. The device can
-			// still authenticate with it, but a decommissioned device must not get a new certificate.
+			// A slot that reads EXPIRED can still hold an active certificate. Decommissioning asks the CA, not the slot,
+			// so it revokes that certificate: the device can no longer authenticate, and gets no new certificate.
 			name: "Err/DecommissionedDeviceWithExpiredSlot",
 			run: func() (caCert *x509.Certificate, cert *x509.Certificate, key any, err error) {
 				dms, _, deviceCrt, deviceKey := prepReenrollScenario(
@@ -4166,6 +4166,16 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("could not decommission device: %s", err)
 				}
 
+				revoked, err := testServers.CA.Service.GetCertificateBySerialNumber(context.Background(), services.GetCertificatesBySerialNumberInput{
+					SerialNumber: helpers.SerialNumberToHexString(deviceCrt.SerialNumber),
+				})
+				if err != nil {
+					t.Fatalf("could not get device certificate: %s", err)
+				}
+				if revoked.Status != models.StatusRevoked || revoked.RevocationReason != ocsp.CessationOfOperation {
+					t.Fatalf("decommission must revoke the active certificate behind an EXPIRED slot. Got %s with reason %d", revoked.Status, revoked.RevocationReason)
+				}
+
 				newCsr, _ := chelpers.GenerateCertificateRequest(models.Subject{CommonName: deviceID}, deviceKey)
 				estCli := est.Client{
 					Host:                  fmt.Sprintf("localhost:%d", dmsMgr.Port),
@@ -4189,7 +4199,7 @@ func TestESTReEnroll(t *testing.T) {
 					t.Fatalf("expected error. Got none")
 				}
 
-				expectedErr := errs.ErrDeviceInvalidStatus.Error()
+				expectedErr := "certificate is revoked"
 				if !strings.Contains(err.Error(), expectedErr) {
 					t.Fatalf("error should contain '%s'. Got error %s", expectedErr, err.Error())
 				}

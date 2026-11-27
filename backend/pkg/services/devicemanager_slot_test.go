@@ -85,34 +85,60 @@ func (slotEventsRepo) Insert(_ context.Context, event *models.DeviceEventRecord)
 // device had when each update arrived.
 type slotCA struct {
 	coreservices.CAService
-	cert             models.Certificate
+	cert models.Certificate
+	// older holds the certificates of the older versions of the slot, by serial number.
+	older            map[string]*models.Certificate
 	updates          []coreservices.UpdateCertificateStatusInput
 	repo             *slotDevicesRepo
 	statusesAtUpdate []models.DeviceStatus
-	// getErr and updateErr make the CA fail to read or to update the certificate.
+	// getErr and updateErr make the CA fail to read or to update any certificate; failUpdates, to update the
+	// certificates it names.
 	getErr, updateErr error
+	failUpdates       map[string]error
 }
 
-func (ca *slotCA) GetCertificateBySerialNumber(context.Context, coreservices.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
+func (ca *slotCA) certificate(serialNumber string) (*models.Certificate, error) {
+	if serialNumber == ca.cert.SerialNumber {
+		return &ca.cert, nil
+	}
+	if crt, ok := ca.older[serialNumber]; ok {
+		return crt, nil
+	}
+	return nil, errs.ErrCertificateNotFound
+}
+
+func (ca *slotCA) GetCertificateBySerialNumber(_ context.Context, input coreservices.GetCertificatesBySerialNumberInput) (*models.Certificate, error) {
 	if ca.getErr != nil {
 		return nil, ca.getErr
 	}
-	cert := ca.cert
-	return &cert, nil
+	crt, err := ca.certificate(input.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
+	stored := *crt
+	return &stored, nil
 }
 
 func (ca *slotCA) UpdateCertificateStatus(_ context.Context, input coreservices.UpdateCertificateStatusInput) (*models.Certificate, error) {
 	if ca.updateErr != nil {
 		return nil, ca.updateErr
 	}
+	if err := ca.failUpdates[input.SerialNumber]; err != nil {
+		return nil, err
+	}
+	crt, err := ca.certificate(input.SerialNumber)
+	if err != nil {
+		return nil, err
+	}
 	ca.updates = append(ca.updates, input)
 	if ca.repo != nil {
 		ca.statusesAtUpdate = append(ca.statusesAtUpdate, ca.repo.device.Status)
 	}
-	ca.cert.Status = input.NewStatus
-	ca.cert.RevocationReason = input.RevocationReason
-	delete(ca.cert.Metadata, models.CAMetadataSuspendedByCascadeKey)
-	return &ca.cert, nil
+	crt.Status = input.NewStatus
+	crt.RevocationReason = input.RevocationReason
+	delete(crt.Metadata, models.CAMetadataSuspendedByCascadeKey)
+	stored := *crt
+	return &stored, nil
 }
 
 // newSlotFixture holds the device "dev-1", whose identity certificate "sn-1" a CA hold put on hold. slotStatus is the
@@ -326,4 +352,78 @@ func TestDecommissioningADeviceWhoseCertificateIsRevokedForGoodLeavesIt(t *testi
 
 	require.Empty(t, ca.updates)
 	require.Equal(t, models.RevocationReason(ocsp.KeyCompromise), ca.cert.RevocationReason)
+}
+
+// olderVersionsFixture is a device whose slot keeps, besides its active certificate "sn-4" (active), older versions:
+// one still active (a DMS that does not revoke on re-enrollment), one on hold by the cascade of its CA, one superseded
+// and one expired.
+func olderVersionsFixture(t *testing.T, slotStatus models.SlotStatus) (*DeviceManagerServiceBackend, *slotCA) {
+	t.Helper()
+	svc, ca := newSlotFixture(t, slotStatus)
+	ca.cert = models.Certificate{SerialNumber: "sn-4", Status: models.StatusActive, Metadata: map[string]any{}}
+	ca.older = map[string]*models.Certificate{
+		"sn-0": {SerialNumber: "sn-0", Status: models.StatusActive, Metadata: map[string]any{}},
+		"sn-1": {SerialNumber: "sn-1", Status: models.StatusRevoked, RevocationReason: ocsp.CertificateHold,
+			Metadata: map[string]any{models.CAMetadataSuspendedByCascadeKey: "ca-1"}},
+		"sn-2": {SerialNumber: "sn-2", Status: models.StatusRevoked, RevocationReason: ocsp.Superseded, Metadata: map[string]any{}},
+		"sn-3": {SerialNumber: "sn-3", Status: models.StatusExpired, Metadata: map[string]any{}},
+	}
+	repo := svc.devicesStorage.(*slotDevicesRepo)
+	repo.device.IdentitySlot = &models.Slot[string]{Status: slotStatus, ActiveVersion: 4, Secrets: map[int]string{
+		0: "sn-0", 1: "sn-1", 2: "sn-2", 3: "sn-3", 4: "sn-4",
+	}}
+	return svc, ca
+}
+
+func revokedSerials(ca *slotCA) []string {
+	var serials []string
+	for _, update := range ca.updates {
+		serials = append(serials, update.SerialNumber)
+	}
+	return serials
+}
+
+// A decommissioned device keeps no valid certificate: every version of its slot that is active, or on hold (which a
+// release would reactivate), is revoked for good. Versions revoked for good or expired are left as they are.
+func TestDecommissionRevokesEveryActiveOrHeldVersion(t *testing.T) {
+	svc, ca := olderVersionsFixture(t, models.SlotActive)
+
+	decommission(t, svc)
+
+	require.ElementsMatch(t, []string{"sn-0", "sn-1", "sn-4"}, revokedSerials(ca))
+	for _, update := range ca.updates {
+		require.Equal(t, models.RevocationReason(ocsp.CessationOfOperation), update.RevocationReason)
+	}
+	require.NotContains(t, ca.older["sn-1"].Metadata, models.CAMetadataSuspendedByCascadeKey)
+	require.Equal(t, models.RevocationReason(ocsp.Superseded), ca.older["sn-2"].RevocationReason)
+	require.Equal(t, models.StatusExpired, ca.older["sn-3"].Status)
+}
+
+// The status of the slot does not decide what is revoked: the CA does. A slot that reads expired can still hold active
+// certificates.
+func TestDecommissionOfAnExpiredSlotRevokesItsActiveCertificates(t *testing.T) {
+	svc, ca := olderVersionsFixture(t, models.SlotExpired)
+
+	decommission(t, svc)
+
+	require.ElementsMatch(t, []string{"sn-0", "sn-1", "sn-4"}, revokedSerials(ca))
+}
+
+// A version that cannot be revoked makes the decommission fail and store nothing. The retry revokes what is left,
+// without revoking again what the first attempt revoked.
+func TestDecommissionThatCannotRevokeAnOlderVersionStoresNothing(t *testing.T) {
+	svc, ca := olderVersionsFixture(t, models.SlotActive)
+	repo := svc.devicesStorage.(*slotDevicesRepo)
+	caDown := errors.New("CA unavailable")
+	ca.failUpdates = map[string]error{"sn-1": caDown}
+
+	_, err := svc.UpdateDeviceStatus(context.Background(), coreservices.UpdateDeviceStatusInput{ID: "dev-1", NewStatus: models.DeviceDecommissioned})
+	require.ErrorIs(t, err, caDown)
+	require.Equal(t, models.DeviceActive, repo.device.Status)
+	firstAttempt := revokedSerials(ca)
+
+	ca.failUpdates = nil
+	decommission(t, svc)
+	require.ElementsMatch(t, []string{"sn-0", "sn-1", "sn-4"}, revokedSerials(ca))
+	require.Len(t, revokedSerials(ca), 3, "the retry revoked again what the first attempt revoked: %v", firstAttempt)
 }
