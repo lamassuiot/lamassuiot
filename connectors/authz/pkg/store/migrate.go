@@ -6,6 +6,7 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -68,7 +69,12 @@ func RunMigrationCommandForProvider(ctx context.Context, db *sql.DB, schema, com
 
 	switch command {
 	case "up":
-		results, err := gooseProvider.Up(ctx)
+		var results []*goose.MigrationResult
+		if provider == "oracle" {
+			results, err = upOracle(ctx, db, gooseProvider, math.MaxInt64)
+		} else {
+			results, err = gooseProvider.Up(ctx)
+		}
 		logResults(results, logger)
 		return err
 
@@ -77,7 +83,12 @@ func RunMigrationCommandForProvider(ctx context.Context, db *sql.DB, schema, com
 		if err != nil {
 			return err
 		}
-		results, err := gooseProvider.UpTo(ctx, version)
+		var results []*goose.MigrationResult
+		if provider == "oracle" {
+			results, err = upOracle(ctx, db, gooseProvider, version)
+		} else {
+			results, err = gooseProvider.UpTo(ctx, version)
+		}
 		logResults(results, logger)
 		return err
 

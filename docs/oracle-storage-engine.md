@@ -63,6 +63,23 @@ authz_db:
   password: "<secret>"
 ```
 
+Authz applies its Oracle migrations at startup and records them in
+`AUTHZ_SCHEMA_MIGRATIONS`. Oracle commits each DDL statement on its own, so
+before a migration runs it is recorded as started (`is_applied = 0`), and it
+is marked applied (`is_applied = 1`) once it succeeds. If a migration fails or
+is interrupted, its row stays at `0` and Authz refuses to start with
+`Authz Oracle migration did not finish: manual recovery required`, naming the
+version. To recover:
+
+1. Compare the schema with that version's file in
+   `connectors/authz/pkg/store/oracle_migrations/` to see which statements were
+   applied.
+2. Either undo those changes and delete the row
+   (`DELETE FROM AUTHZ_SCHEMA_MIGRATIONS WHERE version_id = <version> AND is_applied = 0`),
+   so the migration runs again, or apply the remaining statements by hand and
+   mark it applied (`UPDATE AUTHZ_SCHEMA_MIGRATIONS SET is_applied = 1 WHERE version_id = <version>`).
+3. Restart Authz.
+
 Configure the provider explicitly:
 
 ```yaml
