@@ -9,6 +9,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
+	postgres_test "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
+	postgresDriver "gorm.io/driver/postgres"
 	"strings"
 	"testing"
 
@@ -404,4 +407,70 @@ func TestKMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261124100000_kms_key_identity")
 	}
+}
+
+// TestKMSKeyIdentityMigrationWithAKMSOnlyUser covers deployments that migrate each schema with its own user: the kms
+// migration user may have no privilege on the ca and va tables. information_schema hides such tables, so the migration
+// must still see the references there and, when it has to move one, say which privilege is missing instead of failing
+// on the foreign key.
+func TestKMSKeyIdentityMigrationWithAKMSOnlyUser(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, cfg, err := postgres_test.RunPostgresDocker(map[string]string{kmsDBName: ""}, false)
+	require.NoError(t, err)
+	defer func() { _ = cleanup() }()
+	open := func(user, password string) *gorm.DB {
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=kms sslmode=disable", cfg.Hostname, user, password, cfg.Port)
+		db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{DSN: dsn, PreferSimpleProtocol: true}), &gorm.Config{Logger: postgres.NewGormLogger(logger)})
+		require.NoError(t, err)
+		return db
+	}
+	admin := open(cfg.Username, string(cfg.Password))
+	require.NoError(t, admin.Exec(`CREATE SCHEMA IF NOT EXISTS kms`).Error)
+
+	ctx := context.Background()
+	_, err = postgres.NewMigrator(logger, admin).Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	require.NoError(t, admin.Exec(`CREATE SCHEMA ca; CREATE SCHEMA va;
+		CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, engine_id text, key_id text,
+			CONSTRAINT certificates_key_fk FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE);
+		CREATE TABLE va.crl_settings (ca_id text PRIMARY KEY, signer_engine_id text, signer_key_id text,
+			CONSTRAINT crl_settings_signer_key_fk FOREIGN KEY (signer_engine_id, signer_key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE)`).Error)
+	publicC, digestC := kmsKeyFixture(t)
+	const skiC = "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+	insertKMSKey(t, admin, digestC, "e1", publicC, `[]`, true)
+	insertKMSKey(t, admin, skiC, "e1", publicC, `[]`, true)
+	require.NoError(t, admin.Exec(`INSERT INTO ca.certificates VALUES ('s1', 'e1', ?)`, skiC).Error)
+
+	// a user that owns the kms schema and nothing else
+	require.NoError(t, admin.Exec(`CREATE ROLE kmsmig LOGIN PASSWORD 'kmsmig';
+		GRANT USAGE, CREATE ON SCHEMA kms TO kmsmig;
+		ALTER TABLE kms.kms_keys OWNER TO kmsmig;
+		ALTER TABLE kms.goose_db_version OWNER TO kmsmig;
+		ALTER SEQUENCE kms.goose_db_version_id_seq OWNER TO kmsmig`).Error)
+	kmsUser := open("kmsmig", "kmsmig")
+
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ca.certificates", "the error names the table")
+	assert.Contains(t, err.Error(), "UPDATE", "and the privilege the migration needs")
+	assert.NotContains(t, err.Error(), "violates foreign key constraint")
+
+	// SELECT alone is not enough: the reference has to be updated
+	require.NoError(t, admin.Exec(`GRANT USAGE ON SCHEMA ca, va TO kmsmig; GRANT SELECT ON ca.certificates, va.crl_settings TO kmsmig`).Error)
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SELECT, UPDATE on ca.certificates", "a user with SELECT only is told it lacks UPDATE")
+	assert.NotContains(t, err.Error(), "permission denied")
+
+	// with the documented grants it goes through and moves the reference
+	require.NoError(t, admin.Exec(`GRANT USAGE ON SCHEMA ca, va TO kmsmig;
+		GRANT SELECT, UPDATE ON ca.certificates, va.crl_settings TO kmsmig`).Error)
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.NoError(t, err)
+	var keyID string
+	require.NoError(t, admin.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = 's1'`).Scan(&keyID).Error)
+	assert.Equal(t, digestC, keyID)
 }

@@ -56,10 +56,16 @@ DECLARE
     moved jsonb;
     -- A ca schema that has not run its migrations yet (a 3.8 database) has no key_id in ca.certificates: the CA migration
     -- that adds it also relinks every certificate to its key by public key. Only a reference that exists is moved.
-    certificates_reference boolean := EXISTS (SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'ca' AND table_name = 'certificates' AND column_name IN ('engine_id', 'key_id') HAVING count(*) = 2);
-    signer_reference boolean := EXISTS (SELECT 1 FROM information_schema.columns
-        WHERE table_schema = 'va' AND table_name = 'crl_settings' AND column_name IN ('signer_engine_id', 'signer_key_id') HAVING count(*) = 2);
+    -- The catalog is read rather than information_schema, which hides the tables the migration user has no privilege on
+    -- (each schema may be migrated by its own user).
+    certificates_table oid := (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'ca' AND c.relname = 'certificates' AND c.relkind = 'r');
+    signer_table oid := (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'va' AND c.relname = 'crl_settings' AND c.relkind = 'r');
+    certificates_reference boolean := (SELECT count(*) = 2 FROM pg_attribute
+        WHERE attrelid = certificates_table AND attname IN ('engine_id', 'key_id') AND NOT attisdropped);
+    signer_reference boolean := (SELECT count(*) = 2 FROM pg_attribute
+        WHERE attrelid = signer_table AND attname IN ('signer_engine_id', 'signer_key_id') AND NOT attisdropped);
 BEGIN
     FOR grp IN
         SELECT digest, engine_id FROM kms_keys GROUP BY digest, engine_id HAVING count(*) > 1 ORDER BY engine_id, digest
@@ -83,6 +89,15 @@ BEGIN
         FOR ghost IN SELECT * FROM kms_keys WHERE digest = grp.digest AND engine_id = grp.engine_id AND key_id <> grp.digest LOOP
             RAISE NOTICE 'removing key % of engine %: it is the public key of %, which the engine holds under that name', ghost.key_id, ghost.engine_id, grp.digest;
 
+            -- has_table_privilege with a list of privileges answers whether ANY of them is held: each is checked alone
+            IF certificates_reference AND NOT (has_schema_privilege('ca', 'USAGE') AND has_table_privilege(certificates_table, 'SELECT') AND has_table_privilege(certificates_table, 'UPDATE')) THEN
+                RAISE EXCEPTION 'removing the duplicate key % of engine % moves the references of ca.certificates to %, and the migration user lacks USAGE on schema ca or SELECT, UPDATE on ca.certificates. Grant them before migrating',
+                    ghost.key_id, ghost.engine_id, grp.digest;
+            END IF;
+            IF signer_reference AND NOT (has_schema_privilege('va', 'USAGE') AND has_table_privilege(signer_table, 'SELECT') AND has_table_privilege(signer_table, 'UPDATE')) THEN
+                RAISE EXCEPTION 'removing the duplicate key % of engine % moves the references of va.crl_settings to %, and the migration user lacks USAGE on schema va or SELECT, UPDATE on va.crl_settings. Grant them before migrating',
+                    ghost.key_id, ghost.engine_id, grp.digest;
+            END IF;
             IF certificates_reference THEN
                 EXECUTE 'UPDATE ca.certificates SET key_id = $1 WHERE engine_id = $2 AND key_id = $3'
                     USING grp.digest, ghost.engine_id, ghost.key_id;
