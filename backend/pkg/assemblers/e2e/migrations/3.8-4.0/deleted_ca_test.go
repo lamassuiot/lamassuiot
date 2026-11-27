@@ -63,3 +63,53 @@ func TestUpgrade38To40OfACADeletedIn38(t *testing.T) {
 	require.Equal(t, rows, e.kmsRows(), "the import changes no row")
 	require.Equal(t, []string{a.Digest}, e.engineFiles(), "the import writes no engine file")
 }
+
+// TestUpgrade38To40OfAPreKMSCADeletedIn38 upgrades a CA from before the KMS that 3.8 deleted: B, whose engine holds its
+// key under its SKI, registered under that SKI by the 3.8.x ca-to-kms-migration. Its certificates survive the deletion,
+// so the ca migration registers their public key in the KMS. That row is named by the digest of the key, not by the SKI
+// the key had, so importing the key again adds the private key to it.
+//
+// DeleteCA of backend/v3.8.1 deletes the key by the SKI of the certificate, which names the row the tool registered and
+// the object the engine holds: DeleteKeyByID removes both. Phase 1 writes that state with SQL.
+func TestUpgrade38To40OfAPreKMSCADeletedIn38(t *testing.T) {
+	e := newEnv(t, variantGhost)
+	b := e.fx["B"]
+	serial := bhelpers.SerialNumberToHexString(b.Cert.SerialNumber)
+
+	// Phase 1: B imported before the KMS, registered by the 3.8.x tool, then revoked and deleted, all in 3.8. The
+	// deletion removed the row and the engine object, so neither is written.
+	e.insertCA(b, "IMPORTED_WITH_KEY")
+	e.exec(postgres.VA_SCHEMA, `INSERT INTO va_role (ca_ski, crl_subject_key_id_signer, crl_validity, crl_refresh_interval,
+		crl_regenerate_on_revoke, latest_crl_version, latest_crl_valid_from, latest_crl_valid_until)
+		VALUES (?, ?, '168h0m0s', '166h0m0s', true, 1, now(), now() + interval '7 days')`, b.SKI, b.SKI)
+	e.exec(postgres.CA_SCHEMA, `UPDATE certificates SET status = 'REVOKED', revocation_timestamp = now() WHERE serial_number = ?`, serial)
+	e.exec(postgres.CA_SCHEMA, `DELETE FROM ca_certificates WHERE id = ?`, e.caID["B"])
+	require.Zero(t, e.kmsRowCount(), "kms_keys rows in 3.8")
+	require.Empty(t, e.engineFiles(), "engine files in 3.8")
+
+	// Phase 2: the upgrade, in the production order kms -> ca-to-kms-migration -> ca -> va.
+	e.migrate(postgres.KMS_SCHEMA)
+	require.Equal(t, catokms.Result{}, e.runTool(), "the tool reads existing CAs only, and B is deleted")
+	e.migrate(postgres.CA_SCHEMA)
+	e.migrate(postgres.VA_SCHEMA)
+
+	rows := e.kmsRows()
+	require.Len(t, rows, 1, "the ca migration registers the public key of the certificates of B")
+	orphan := rows[b.Digest]
+	require.Equal(t, b.Digest, orphan.KeyID, "the row is named by the digest of the key, not by its SKI")
+	require.NotEqual(t, skiB, orphan.KeyID)
+	require.False(t, orphan.HasPrivateKey)
+	require.Empty(t, e.engineFiles())
+
+	// Phase 3: importing the key of B again adds the private key to that row.
+	srv := e.startServices()
+	key, err := srv.KMS.HttpKMSSDK.ImportKey(context.Background(), services.ImportKeyInput{PrivateKey: b.Key, EngineID: engineID})
+	require.NoError(t, err)
+	require.Equal(t, b.Digest, key.KeyID)
+	require.True(t, key.HasPrivateKey)
+	after := e.kmsRows()
+	require.Len(t, after, 1, "no second row")
+	require.Equal(t, orphan.ID, after[b.Digest].ID, "the row of the certificates is the one that gets the key")
+	require.True(t, after[b.Digest].HasPrivateKey)
+	require.Equal(t, []string{b.Digest}, e.engineFiles())
+}

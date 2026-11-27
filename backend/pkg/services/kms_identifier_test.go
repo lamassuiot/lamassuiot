@@ -2,6 +2,9 @@ package services
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"io"
 	"slices"
 	"strings"
@@ -10,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
 	"github.com/sirupsen/logrus"
@@ -143,15 +147,14 @@ func TestGetKeyResolvesIdentifiers(t *testing.T) {
 		require.Equal(t, "e1", key.EngineID)
 	})
 
-	t.Run("a digest that is also the name of one of its copies resolves to that copy", func(t *testing.T) {
+	t.Run("a digest held by several engines needs the engine, even when one copy is named by it", func(t *testing.T) {
 		repo := identifierFixture()
 		dig := strings.Repeat("5e", 32)
 		repo.keys = append(repo.keys,
 			&models.Key{ID: "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c06", Digest: dig, KeyID: dig, EngineID: "e1", Aliases: []string{}},
 			&models.Key{ID: "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c07", Digest: dig, KeyID: "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678", EngineID: "e2", Aliases: []string{}})
-		key, err := newIdentifierService(repo).GetKey(ctx, services.GetKeyInput{Identifier: dig})
-		require.NoError(t, err)
-		require.Equal(t, "e1", key.EngineID)
+		_, err := newIdentifierService(repo).GetKey(ctx, services.GetKeyInput{Identifier: dig})
+		require.ErrorIs(t, err, errs.ErrKeyEngineRequired, "no copy is picked for the caller")
 	})
 
 	t.Run("a digest held by several engines needs the engine", func(t *testing.T) {
@@ -215,5 +218,48 @@ func TestUpdateKeyAliasesRefusesIdentifierShapes(t *testing.T) {
 
 	t.Run("the name of a key in its engine is still refused", func(t *testing.T) {
 		require.ErrorIs(t, update(skiNamed, models.PatchAdd), errs.ErrKeyAliasCollidesWithKeyID)
+	})
+}
+
+// A public key finds every copy of its key by digest, including a copy its engine still holds under another name (the
+// SKI of a CA imported before the KMS, in an engine that was not normalized).
+func TestGetKeysByPublicKeyFindsEveryCopyByDigest(t *testing.T) {
+	ctx := context.Background()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	dig, err := chelpers.PublicKeyDigest(&priv.PublicKey)
+	require.NoError(t, err)
+
+	repo := &identifierRepo{keys: []*models.Key{
+		{ID: idOne, Digest: dig, KeyID: dig, EngineID: "e1"},
+		{ID: idTwo, Digest: dig, KeyID: skiNamed, EngineID: "e2"},
+		{ID: idThree, Digest: digestOne, KeyID: digestOne, EngineID: "e1"},
+	}}
+	svc := newIdentifierService(repo)
+
+	ids := func(keys []*models.Key) []string {
+		out := []string{}
+		for _, k := range keys {
+			out = append(out, k.ID)
+		}
+		return out
+	}
+
+	t.Run("without an engine, every copy", func(t *testing.T) {
+		keys, err := svc.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: &priv.PublicKey})
+		require.NoError(t, err)
+		require.ElementsMatch(t, []string{idOne, idTwo}, ids(keys))
+	})
+
+	t.Run("with an engine, its copy whatever its name", func(t *testing.T) {
+		keys, err := svc.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: &priv.PublicKey, EngineID: "e2"})
+		require.NoError(t, err)
+		require.Equal(t, []string{idTwo}, ids(keys))
+	})
+
+	t.Run("with an engine that has no copy, none", func(t *testing.T) {
+		keys, err := svc.GetKeysByPublicKey(ctx, services.GetKeysByPublicKeyInput{PublicKey: &priv.PublicKey, EngineID: "e3"})
+		require.NoError(t, err)
+		require.Empty(t, keys)
 	})
 }

@@ -199,4 +199,4 @@ A key left as it was keeps its name until the cause in the warning is fixed and 
 go test ./backend/pkg/migration/catokms/...
 ```
 
-The tests use in-memory mock storage implementations and need no external dependencies, except `TestCheckKMSSchema`, which starts a PostgreSQL container and needs Docker.
+The tests use in-memory mock storage implementations and need no external dependencies, except `TestCheckKMSSchema` and `TestMigrateWithConfigRunsBeforeTheCASchemaIsMigrated`, which start a PostgreSQL container and need Docker.

@@ -73,6 +73,16 @@ func TestCertificateKeyForeignKeyMigration(t *testing.T) {
 		require.ErrorContains(t, err, "kms schema not found")
 	})
 
+	t.Run("it needs the kms schema migrated, not the one 3.8 left", func(t *testing.T) {
+		// kms_keys as 3.8 leaves it: no digest column, which the registration of the keys of deleted CAs writes
+		require.NoError(t, con.Exec(`CREATE SCHEMA kms; CREATE TABLE kms.kms_keys (key_id text NOT NULL, engine_id text NOT NULL,
+			public_key text NOT NULL, CONSTRAINT kms_keys_pkey PRIMARY KEY (key_id, engine_id))`).Error)
+		_, err := m.Goose.ApplyVersion(ctx, target, true)
+		require.ErrorContains(t, err, "kms.kms_keys has no digest column")
+		require.ErrorContains(t, err, "migrate the kms schema before the ca schema")
+		require.NoError(t, con.Exec(`DROP SCHEMA kms CASCADE`).Error)
+	})
+
 	// the table the kms migrations create; the defaults only shorten the fixture inserts below
 	require.NoError(t, con.Exec(`CREATE SCHEMA IF NOT EXISTS kms`).Error)
 	require.NoError(t, con.Exec(`CREATE TABLE kms.kms_keys (
@@ -217,7 +227,7 @@ func TestCertificateLegacyForeignKeyValidation(t *testing.T) {
 	cleanup, con := RunDB(t, logger, CADBName)
 	defer cleanup()
 	require.NoError(t, con.Exec(`CREATE SCHEMA kms;
- CREATE TABLE kms.kms_keys (key_id text, engine_id text, public_key text, PRIMARY KEY (key_id, engine_id));
+ CREATE TABLE kms.kms_keys (key_id text, engine_id text, public_key text, digest text, PRIMARY KEY (key_id, engine_id));
  CREATE TABLE certificates (serial_number text PRIMARY KEY, engine_id text, key_id text, certificate text, subject_common_name text);
  CREATE TABLE ca_certificates (id text, serial_number text);
  INSERT INTO certificates VALUES ('orphan', 'engine', 'missing', NULL, 'Orphan');

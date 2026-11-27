@@ -104,5 +104,5 @@ docker run --rm lamassu/lamassu-db-migration:latest \
 - A failed migration: run `status` and check the `goose_db_version` table to see what was applied. Fix the database state before retrying.
 - "could not extract search_path from connection string" error: the connection string has no `search_path=<schema>`.
 - "invalid schema" error: `search_path` is not one of the supported schemas.
-- The PostgreSQL user needs `CREATE` on the database and `SELECT, INSERT, UPDATE, DELETE` on the tables of the schema it migrates. It also needs to be able to create `goose_db_version`. The `ca` and `va` migrations need additional privileges on the `kms` and `ca` schemas: see [Cross-schema privileges](#cross-schema-privileges).
+- The PostgreSQL user needs `CREATE` on the database and `SELECT, INSERT, UPDATE, DELETE` on the tables of the schema it migrates. It also needs to be able to create `goose_db_version`. The `ca`, `va` and `kms` migrations may need additional privileges on other schemas: see [Cross-schema privileges](#cross-schema-privileges).
 - `permission denied for table certificates` or `permission denied for table kms_keys` during the `va` or `ca` migration: the user lacks `REFERENCES` or `SELECT` on the table of the other schema. Grant it and run that schema again.

@@ -375,6 +375,19 @@ func TestKMSKeyIdentityMigrationRefusesAmbiguousDuplicates(t *testing.T) {
 	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "garbled")
+
+	// The row named by the digest has the public key only, and a copy under another name claims the private key: the
+	// engine may hold the key under that other name only, so removing that copy could lose the key.
+	require.NoError(t, con.Exec(`DELETE FROM kms_keys`).Error)
+	publicD, digestD := kmsKeyFixture(t)
+	insertKMSKey(t, con, digestD, "e1", publicD, `[]`, false)
+	insertKMSKey(t, con, "ski-of-d", "e1", publicD, `[]`, true)
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "same public key")
+	assert.Contains(t, err.Error(), digestD)
+	require.NoError(t, con.Raw(`SELECT count(*) FROM kms_keys WHERE engine_id = 'e1' AND key_id IN (?, 'ski-of-d')`, digestD).Scan(&rows).Error)
+	assert.EqualValues(t, 2, rows, "neither copy is removed")
 }
 
 func TestKMSMigrations(t *testing.T) {

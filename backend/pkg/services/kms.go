@@ -329,10 +329,6 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 			lFunc.Errorf("something went wrong while checking if digest '%s' exists in storage engine: %s", input.Identifier, err)
 			return nil, err
 		}
-		// A copy named by the digest itself is the one a bare key_id addressed before keys had a digest.
-		if named := slices.DeleteFunc(slices.Clone(copies), func(k *models.Key) bool { return k.KeyID != strings.ToLower(input.Identifier) }); len(copies) > 1 && len(named) == 1 {
-			return named[0], nil
-		}
 		if len(copies) > 0 {
 			return singleCopy(lFunc, input.Identifier, copies)
 		}
@@ -394,31 +390,30 @@ func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input serv
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// Every crypto engine names its keys this way, so the keyID follows from the public key alone.
-	keyID, err := chelpers.PublicKeyDigest(input.PublicKey)
+	// Every copy of the key carries the digest of its public key, whatever name its engine holds it under: a key of a
+	// CA imported before the KMS keeps its SKI until it is normalized.
+	digest, err := chelpers.PublicKeyDigest(input.PublicKey)
 	if err != nil {
-		lFunc.Errorf("could not compute the key ID of the public key: %s", err)
+		lFunc.Errorf("could not compute the digest of the public key: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.EngineID == "" {
-		keys, err := svc.kmsStorage.SelectByKeyID(ctx, keyID)
-		if err != nil {
-			lFunc.Errorf("something went wrong while looking up key '%s' in storage engine: %s", keyID, err)
-			return nil, err
-		}
-		return keys, nil
-	}
-
-	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, input.EngineID)
+	copies, err := svc.kmsStorage.SelectByDigest(ctx, digest)
 	if err != nil {
-		lFunc.Errorf("something went wrong while looking up key '%s' in engine '%s': %s", keyID, input.EngineID, err)
+		lFunc.Errorf("something went wrong while looking up digest '%s' in storage engine: %s", digest, err)
 		return nil, err
 	}
-	if !exists {
-		return []*models.Key{}, nil
+	if input.EngineID == "" {
+		return copies, nil
 	}
-	return []*models.Key{key}, nil
+
+	keys := []*models.Key{}
+	for _, k := range copies {
+		if k.EngineID == input.EngineID {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
 }
 
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {

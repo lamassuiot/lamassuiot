@@ -62,6 +62,16 @@ func upCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
 	if !hasKMS {
 		return errors.New("kms schema not found: migrate the kms schema before the ca schema")
 	}
+	// The keys of deleted CAs are registered with their digest, which the kms migrations add: the kms_keys of 3.8 has
+	// none. The catalog is read rather than information_schema, which hides the tables the migration user cannot read.
+	var hasDigest bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_attribute
+		WHERE attrelid = 'kms.kms_keys'::regclass AND attname = 'digest' AND NOT attisdropped)`).Scan(&hasDigest); err != nil {
+		return err
+	}
+	if !hasDigest {
+		return errors.New("kms schema not migrated: kms.kms_keys has no digest column; migrate the kms schema before the ca schema")
+	}
 
 	for _, query := range []string{
 		"ALTER TABLE certificates ALTER COLUMN key_id DROP NOT NULL;",
