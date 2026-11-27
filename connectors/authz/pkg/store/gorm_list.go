@@ -207,19 +207,7 @@ func applyAuthzFilter(db *gorm.DB, filter resources.FilterOption) (*gorm.DB, err
 		return applyAuthzOrderedFilter(db, column, value, filter.FilterOperation, ">=")
 	case resources.StringArrayContains, resources.StringArrayContainsIgnoreCase:
 		ignoreCase := filter.FilterOperation == resources.StringArrayContainsIgnoreCase
-		if value == "" {
-			path := `$[*]?(@ == "")`
-			if ignoreCase {
-				path = `$[*]?(@.lower() == "")`
-			}
-			return db.Where(clause.Expr{SQL: "JSON_EXISTS(?, '" + path + "' ERROR ON ERROR)", Vars: []any{column}}), nil
-		}
-		path := `$[*]?(@ == $target)`
-		if ignoreCase {
-			path = `$[*]?(@.lower() == $target)`
-			value = strings.ToLower(value)
-		}
-		return db.Where(clause.Expr{SQL: "JSON_EXISTS(?, '" + path + "' PASSING ? AS \"target\" ERROR ON ERROR)", Vars: []any{column, value}}), nil
+		return db.Where(oraclestorage.JSONStringArrayContains(column, value, ignoreCase)), nil
 	case resources.JsonPathExpression:
 		expression, err := oraclestorage.CompileJSONPathPredicate(value, column)
 		if err != nil {

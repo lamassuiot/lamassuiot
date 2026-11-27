@@ -343,6 +343,18 @@ func CompileJSONPathPredicate(expression string, column clause.Column) (clause.E
 	return compileJSONPredicate(expression, column)
 }
 
+// JSONStringArrayContains returns a predicate that matches rows whose JSON
+// array column contains value. It writes the SQL/JSON path as a literal and
+// passes the value as a bind, so it can be used where GORM would read a "?"
+// inside the path as a bind placeholder. With ignoreCase, array items are
+// compared in lower case.
+func JSONStringArrayContains(column clause.Column, value string, ignoreCase bool) clause.Expression {
+	if ignoreCase {
+		return jsonArrayContainsIgnoreCase{column: column, value: strings.ToLower(value)}
+	}
+	return jsonArrayContains{column: column, value: value}
+}
+
 func escapeLike(value string) string {
 	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }
