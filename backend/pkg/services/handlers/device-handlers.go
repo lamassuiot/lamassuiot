@@ -32,16 +32,6 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 		return err
 	}
 
-	deviceID := cert.Updated.Certificate.Subject.CommonName
-	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
-		ID: deviceID,
-	})
-	if err != nil {
-		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
-		lMessaging.Error(err)
-		return err
-	}
-
 	var attachedBy models.CAAttachedToDevice
 	hasKey, err := helpers.GetMetadataToStruct(cert.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy)
 	if err != nil {
@@ -52,6 +42,25 @@ func updateCertStatusHandler(ctx context.Context, event *event.Event, svc servic
 
 	if !hasKey {
 		lMessaging.Tracef("skipping event %s, Certificate doesn't have %s key", event.Type(), models.DMSAttachedToDeviceKey)
+		return nil
+	}
+
+	deviceID := attachedBy.DeviceID
+	if deviceID == "" {
+		deviceID = cert.Updated.Certificate.Subject.CommonName
+	}
+	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
+		ID: deviceID,
+	})
+	if err != nil {
+		err = fmt.Errorf("could not get device %s: %s", deviceID, err)
+		lMessaging.Error(err)
+		return err
+	}
+
+	// The device manager does not write the slot of a decommissioned device, so a bound device can have none.
+	if dev.IdentitySlot == nil {
+		lMessaging.Debugf("skipping event %s, device %s has no identity slot", event.Type(), deviceID)
 		return nil
 	}
 
@@ -100,7 +109,17 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return err
 	}
 
-	deviceID := certUpdate.Updated.Subject.CommonName
+	// The device the DMS bound the certificate to. Bindings that recorded none, or a value the DMS did not write (the
+	// metadata accepts any patch), fall back to the CommonName.
+	var attachedBy models.CAAttachedToDevice
+	if _, err := helpers.GetMetadataToStruct(certUpdate.Updated.Metadata, models.DMSAttachedToDeviceKey, &attachedBy); err != nil {
+		lMessaging.Warnf("could not decode metadata with key %s, using the certificate CommonName: %s", models.DMSAttachedToDeviceKey, err)
+		attachedBy = models.CAAttachedToDevice{}
+	}
+	deviceID := attachedBy.DeviceID
+	if deviceID == "" {
+		deviceID = certUpdate.Updated.Subject.CommonName
+	}
 	dev, err := svc.GetDeviceByID(ctx, services.GetDeviceByIDInput{
 		ID: deviceID,
 	})
@@ -110,7 +129,13 @@ func updateCertMetaHandler(ctx context.Context, event *event.Event, svc services
 		return err
 	}
 
-	if dev.IdentitySlot != nil && dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
+	// The device manager does not write the slot of a decommissioned device, so a bound device can have none.
+	if dev.IdentitySlot == nil {
+		lMessaging.Debugf("skipping event %s, device %s has no identity slot", event.Type(), deviceID)
+		return nil
+	}
+
+	if dev.IdentitySlot.Secrets[dev.IdentitySlot.ActiveVersion] != certUpdate.Updated.SerialNumber {
 		//event is not for the active certificate. Skip
 		return nil
 	}

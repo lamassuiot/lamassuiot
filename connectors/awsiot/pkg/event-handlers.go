@@ -450,6 +450,16 @@ func updateDeviceMetadataHandler(ctx context.Context, event *event.Event, svc AW
 	return nil
 }
 
+// boundDeviceID returns the ID of the device cert is bound to, which names its thing: the device the DMS recorded in
+// the certificate metadata when it bound it, or the certificate CommonName when that metadata names none.
+func boundDeviceID(cert models.Certificate) string {
+	var attachedTo models.CAAttachedToDevice
+	if _, err := helpers.GetMetadataToStruct(cert.Metadata, models.DMSAttachedToDeviceKey, &attachedTo); err == nil && attachedTo.DeviceID != "" {
+		return attachedTo.DeviceID
+	}
+	return cert.Certificate.Subject.CommonName
+}
+
 func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSCloudConnectorService, logger *logrus.Entry) error {
 	metadataKey := AWSIoTMetadataKey(svc.GetConnectorID())
 
@@ -475,7 +485,7 @@ func bindDeviceIdentityHandler(ctx context.Context, event *event.Event, svc AWSC
 	}
 
 	if dmsAwsAutomationConfig.RegistrationMode == AutomaticAWSIoTRegistrationMode {
-		thingID := bindEvent.Certificate.Subject.CommonName
+		thingID := boundDeviceID(*bindEvent.Certificate)
 		logrus.Infof("registering %s device", thingID)
 		err = svc.RegisterAndAttachThing(ctx, RegisterAndAttachThingInput{
 			DeviceID:               thingID,
