@@ -27,6 +27,14 @@ func create(db *gorm.DB) {
 		db.AddError(fmt.Errorf("oracle dialect: explicit RETURNING is not supported"))
 		return
 	}
+	// Generated values are written back to the created struct after the
+	// INSERT. A slice or array destination, even with one element, would
+	// insert the row and then fail while setting them, so reject it before
+	// any SQL runs.
+	if kind := stmt.ReflectValue.Kind(); kind == reflect.Slice || kind == reflect.Array {
+		db.AddError(fmt.Errorf("oracle dialect: creating a %s is not supported, create each row separately", kind))
+		return
+	}
 	values := callbacks.ConvertToCreateValues(stmt)
 	if len(values.Values) != 1 {
 		db.AddError(fmt.Errorf("oracle dialect: expected one row, got %d", len(values.Values)))
