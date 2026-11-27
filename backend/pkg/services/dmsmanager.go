@@ -782,15 +782,21 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 			return nil, fmt.Errorf("device already registered to another DMS")
 		}
 
-		if enrollSettings.EnableReplaceableEnrollment {
+		if device.Status == models.DeviceDecommissioned {
+			lFunc.Errorf("aborting enrollment. device '%s' is decommissioned", csr.Subject.CommonName)
+			return nil, fmt.Errorf("device decommissioned")
+		}
+
+		switch {
+		case device.IdentitySlot == nil:
+			// A registered device without identity is enrolling for the first time: there is nothing to replace.
+			lFunc.Debugf("device '%s' has no identity yet. Continuing with its first enrollment", csr.Subject.CommonName)
+		case enrollSettings.EnableReplaceableEnrollment:
 			lFunc.Debugf("DMS allows new enrollments. Continuing enrollment for device '%s'", csr.Subject.CommonName)
 			//revoke active certificate
 			defer func() {
 				lFunc = lFunc.WithField("step", "PostEnroll")
 				lFunc.Infof("starting PostEnroll process")
-				if device.IdentitySlot == nil {
-					device.IdentitySlot = &models.Slot[string]{}
-				}
 				_, err = svc.caClient.UpdateCertificateStatus(ctx, services.UpdateCertificateStatusInput{
 					SerialNumber:     device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion],
 					NewStatus:        models.StatusRevoked,
@@ -804,8 +810,8 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 
 				lFunc.Infof("PostEnroll process completed successfully")
 			}()
-		} else {
-			lFunc.Debugf("aborting enrollment. DMS forbids new enrollments. consider switching NewEnrollment option ON in the DMS")
+		default:
+			lFunc.Debugf("aborting enrollment. device '%s' already has an identity and the DMS forbids replacing it. enable enable_replaceable_enrollment in the DMS or renew with simplereenroll", csr.Subject.CommonName)
 			return nil, fmt.Errorf("forbiddenNewEnrollment")
 		}
 	}
