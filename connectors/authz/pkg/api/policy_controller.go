@@ -107,7 +107,7 @@ func (ctrl *PolicyController) ListPolicies(c *gin.Context) {
 
 	policies, nextBookmark, err := ctrl.policyManager.ListPolicies(c.Request.Context(), queryParams)
 	if err != nil {
-		replyInternalError(c, "Failed to list policies", err)
+		replyListError(c, "Failed to list policies", err)
 		return
 	}
 

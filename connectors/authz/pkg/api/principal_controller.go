@@ -85,10 +85,7 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 
 	principals, nextBookmark, err := ctrl.manager.ListPrincipals(c.Request.Context(), queryParams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to list principals",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyListError(c, "Failed to list principals", err)
 		return
 	}
 
@@ -220,10 +217,7 @@ func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 
 	grants, nextBookmark, err := ctrl.manager.GetPrincipalPolicies(c.Request.Context(), id, queryParams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyListError(c, "Failed to get policies", err)
 		return
 	}
 

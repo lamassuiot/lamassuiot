@@ -1,11 +1,14 @@
 package store
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/dialect"
 	"gorm.io/gorm"
@@ -44,5 +47,21 @@ func TestApplyAuthzFilterArrayContainsBindsValueOutsidePath(t *testing.T) {
 		if len(stmt.Vars) != len(tc.wantVars) || (len(tc.wantVars) > 0 && !reflect.DeepEqual(stmt.Vars, tc.wantVars)) {
 			t.Errorf("op %d value %q: vars %#v, want %#v", tc.op, tc.value, stmt.Vars, tc.wantVars)
 		}
+	}
+}
+
+func TestListAuthzRowsReportsInvalidQueries(t *testing.T) {
+	for name, params := range map[string]*resources.QueryParameters{
+		"JSONPath sort": {Sort: resources.SortOptions{SortField: "auth_config", SortMode: resources.SortModeAsc, JsonPathExpr: "$.issuer"}},
+		"sort mode":     {Sort: resources.SortOptions{SortField: "name", SortMode: "sideways"}},
+		"date filter":   {Filters: []resources.FilterOption{{Field: "created_at", FilterOperation: resources.DateAfter, Value: "yesterday"}}},
+		"number filter": {Filters: []resources.FilterOption{{Field: "id", FilterOperation: resources.NumberEqual, Value: "one"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := listAuthzRows(context.Background(), oracleDryRun(t), &models.Principal{}, "id", params, nil, false, func(models.Principal) {})
+			if !errors.Is(err, ErrInvalidListQuery) {
+				t.Fatalf("error = %v, want ErrInvalidListQuery", err)
+			}
+		})
 	}
 }

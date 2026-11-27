@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
@@ -14,6 +15,15 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
+
+// ErrInvalidListQuery reports a list request whose filter or sort the Authz
+// database cannot evaluate. It is caused by the request, so the API answers
+// it with 400 instead of 500.
+var ErrInvalidListQuery = errors.New("invalid list query")
+
+func invalidListQuery(err error) error {
+	return fmt.Errorf("%w: %w", ErrInvalidListQuery, err)
+}
 
 var authzColumnPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var authzLikeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
@@ -32,14 +42,14 @@ func listAuthzRows[T any](ctx context.Context, db *gorm.DB, model *T, primaryKey
 	var sortColumn clause.Column
 	if page.Sort.SortField != "" {
 		if page.Sort.JsonPathExpr != "" {
-			return "", fmt.Errorf("Authz database JSONPath sorting is not supported")
+			return "", invalidListQuery(fmt.Errorf("sorting by a JSONPath expression is not supported by the Oracle Authz database"))
 		}
 		sortColumn, err = authzSafeColumn(page.Sort.SortField)
 		if err != nil {
-			return "", err
+			return "", invalidListQuery(err)
 		}
 		if page.Sort.SortMode != resources.SortModeAsc && page.Sort.SortMode != resources.SortModeDesc {
-			return "", fmt.Errorf("invalid sort mode %q", page.Sort.SortMode)
+			return "", invalidListQuery(fmt.Errorf("invalid sort mode %q", page.Sort.SortMode))
 		}
 	}
 
@@ -51,7 +61,7 @@ func listAuthzRows[T any](ctx context.Context, db *gorm.DB, model *T, primaryKey
 	for _, filter := range page.Filters {
 		base, err = applyAuthzFilter(base, filter)
 		if err != nil {
-			return "", err
+			return "", invalidListQuery(err)
 		}
 	}
 

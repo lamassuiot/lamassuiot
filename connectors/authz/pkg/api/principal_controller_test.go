@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,15 +13,23 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/service"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
+	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// recordingPrincipalService captures CreatePrincipal calls. The other
-// PrincipalService methods are not used by these tests.
+// recordingPrincipalService captures CreatePrincipal calls and returns listErr
+// from ListPrincipals. The other PrincipalService methods are not used by
+// these tests.
 type recordingPrincipalService struct {
 	service.PrincipalService
 	created []*models.Principal
+	listErr error
+}
+
+func (s *recordingPrincipalService) ListPrincipals(context.Context, *resources.QueryParameters) ([]*models.Principal, string, error) {
+	return nil, "", s.listErr
 }
 
 func (s *recordingPrincipalService) CreatePrincipal(_ context.Context, p *models.Principal) error {
@@ -66,4 +76,21 @@ func TestCreatePrincipal_WithoutAuthConfig(t *testing.T) {
 	require.Len(t, svc.created, 1)
 	assert.Equal(t, "oidc", svc.created[0].Type)
 	assert.Empty(t, svc.created[0].AuthConfig)
+}
+
+func TestListPrincipals_InvalidQueryIsBadRequest(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, tc := range []struct {
+		err  error
+		want int
+	}{
+		{fmt.Errorf("list principals: %w", fmt.Errorf("%w: sorting by a JSONPath expression is not supported", store.ErrInvalidListQuery)), http.StatusBadRequest},
+		{errors.New("connection refused"), http.StatusInternalServerError},
+	} {
+		router := gin.New()
+		router.GET("/principals", NewPrincipalController(&recordingPrincipalService{listErr: tc.err}).ListPrincipals)
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/principals", nil))
+		assert.Equal(t, tc.want, rec.Code, tc.err.Error())
+	}
 }

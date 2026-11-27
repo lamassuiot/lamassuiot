@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 	"github.com/lamassuiot/lamassuiot/v4/backend/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/api/dto"
+	"github.com/lamassuiot/lamassuiot/v4/connectors/authz/pkg/store"
 )
 
 // replyBadRequest writes a 400 with a validation error detail. Used for both
@@ -15,6 +17,19 @@ func replyBadRequest(c *gin.Context, err error) {
 		Error:   "Invalid request",
 		Details: map[string]string{"validation": err.Error()},
 	})
+}
+
+// replyListError writes a 400 when a list request has a filter or sort the
+// store cannot evaluate, and a 500 with the given message otherwise.
+func replyListError(c *gin.Context, msg string, err error) {
+	if errors.Is(err, store.ErrInvalidListQuery) {
+		c.JSON(http.StatusBadRequest, dto.ErrorResponse{
+			Error:   "Invalid filter",
+			Details: map[string]string{"error": err.Error()},
+		})
+		return
+	}
+	replyInternalError(c, msg, err)
 }
 
 // replyInternalError writes a 500 with the given message and error detail.
