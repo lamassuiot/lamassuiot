@@ -33,11 +33,13 @@ func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 	}
 
 	principal := &models.Principal{
-		ID:         req.ID,
-		Name:       req.Name,
-		Type:       req.Type,
-		AuthConfig: *req.AuthConfig,
-		Active:     active,
+		ID:     req.ID,
+		Name:   req.Name,
+		Type:   req.Type,
+		Active: active,
+	}
+	if req.AuthConfig != nil {
+		principal.AuthConfig = *req.AuthConfig
 	}
 	if req.Description != nil {
 		principal.Description = *req.Description

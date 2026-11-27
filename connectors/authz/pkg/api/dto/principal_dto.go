@@ -12,7 +12,7 @@ type CreatePrincipalRequest struct {
 	ID          string             `json:"id"`
 	Name        string             `json:"name" binding:"required,min=1,max=255"`
 	Description *string            `json:"description,omitempty" binding:"omitempty,max=1024"`
-	Type        string             `json:"type"`
+	Type        string             `json:"type" binding:"required"`
 	AuthConfig  *models.AuthConfig `json:"auth_config"`
 	Active      *bool              `json:"active"` // pointer to allow explicit false
 }

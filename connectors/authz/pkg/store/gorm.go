@@ -44,6 +44,11 @@ func (s *GormPrincipalStore) Create(ctx context.Context, p *models.Principal) er
 	if p.Name == "" {
 		return fmt.Errorf("principal name is required")
 	}
+	// Oracle stores '' as NULL, which violates the NOT NULL type column, while
+	// PostgreSQL would accept it. Reject it up front so both providers agree.
+	if p.Type == "" {
+		return fmt.Errorf("principal type is required")
+	}
 	if err := s.db.WithContext(ctx).Create(p).Error; err != nil {
 		return fmt.Errorf("create principal: %w", err)
 	}
