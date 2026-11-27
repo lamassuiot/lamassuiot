@@ -44,7 +44,7 @@ func TestJSONPathOrderBuildsOracleExpressionAndStableTieBreaker(t *testing.T) {
 	}})
 	stmt.Build("ORDER BY")
 	sql := stmt.SQL.String()
-	for _, expected := range []string{"lamassu_json_sort_key(CASE WHEN", "JSON_VALUE(\"DEVICE\".\"METADATA\"", "'$.\"env\".\"priority\".numberOnly()'", "RETURNING NUMBER", "THEN TO_CLOB('0') WHEN", "REGEXP_LIKE(", "TO_TIMESTAMP(", "AS TIMESTAMP(6)", "FF9", "FF6", "JSON_QUERY(\"DEVICE\".\"METADATA\"", "RETURNING CLOB NULL ON EMPTY ERROR ON ERROR", "RETURNING CLOB NULL ON EMPTY NULL ON ERROR", "@.type() == \"array\" || @.type() == \"object\"", "@.stringOnly() == \"\"", "THEN TO_CLOB(CHR(1))", `ELSE NULL END ASC NULLS FIRST, JSON_VALUE("DEVICE"."METADATA", '$."env"."priority".numberOnly()' RETURNING NUMBER NULL ON EMPTY NULL ON ERROR) ASC NULLS FIRST, NLSSORT("DEVICE"."ID", 'NLS_SORT=BINARY')`} {
+	for _, expected := range []string{"lamassu_json_sort_key(CASE WHEN", "JSON_VALUE(\"DEVICE\".\"METADATA\"", "'$.\"env\".\"priority\".numberOnly()'", "RETURNING NUMBER", "THEN TO_CLOB('0') WHEN", "REGEXP_LIKE(", "TO_TIMESTAMP(", "AS TIMESTAMP(6)", "FF9", "FF6", "JSON_QUERY(\"DEVICE\".\"METADATA\"", "RETURNING CLOB NULL ON EMPTY ERROR ON ERROR", "RETURNING CLOB NULL ON EMPTY NULL ON ERROR", "@.type() == \"array\" || @.type() == \"object\"", "@.stringOnly() == \"\"", "THEN TO_CLOB(CHR(1))", "'YYYY-MM-DD HH24:MI:SS') || '.000000' END", `ELSE NULL END ASC NULLS FIRST, JSON_VALUE("DEVICE"."METADATA", '$."env"."priority".numberOnly()' RETURNING NUMBER NULL ON EMPTY NULL ON ERROR) ASC NULLS FIRST, NLSSORT("DEVICE"."ID", 'NLS_SORT=BINARY')`} {
 		if !strings.Contains(sql, expected) {
 			t.Errorf("ORDER BY SQL %q missing %q", sql, expected)
 		}

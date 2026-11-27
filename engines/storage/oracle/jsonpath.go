@@ -106,9 +106,11 @@ func (e jsonPathOrder) Build(builder clause.Builder) {
 	writeValue("VARCHAR2(4000)", "")
 	builder.WriteString(") > 10 THEN ")
 	writeTimestampKey()
+	// A date-only value gets the same key as a datetime at midnight with a zero
+	// fraction, as in PostgreSQL's timestamp cast.
 	builder.WriteString(" ELSE TO_CHAR(TO_TIMESTAMP(SUBSTR(")
 	writeValue("VARCHAR2(4000)", "")
-	builder.WriteString(", 1, 10) || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'YYYY-MM-DD HH24:MI:SS') || '000000' END) WHEN ")
+	builder.WriteString(", 1, 10) || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS'), 'YYYY-MM-DD HH24:MI:SS') || '.000000' END) WHEN ")
 	writeExists(`?(@.type() == "array" || @.type() == "object" )`)
 	builder.WriteString(" THEN JSON_QUERY(")
 	builder.WriteQuoted(e.column)

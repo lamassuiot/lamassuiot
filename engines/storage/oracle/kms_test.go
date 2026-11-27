@@ -601,6 +601,7 @@ func testOracleJSONPathSort(t *testing.T, ctx context.Context, repos ...storage.
 		{engineID: "sort-number", metadata: map[string]any{"value": 2}},
 		{engineID: "sort-date", metadata: map[string]any{"value": "2025-01-01T00:00:00Z"}},
 		{engineID: "sort-date-low", metadata: map[string]any{"value": "2025-01-01T00:00:00.0000004Z"}},
+		{engineID: "sort-date-only", metadata: map[string]any{"value": "2025-01-01"}},
 		{engineID: "sort-date-up", metadata: map[string]any{"value": "2025-01-01T00:00:00.0000005Z"}},
 		{engineID: "sort-array", metadata: map[string]any{"value": []int{1}}},
 		{engineID: "sort-array-long", metadata: map[string]any{"value": []string{strings.Repeat("a", 5000)}}},
@@ -631,9 +632,9 @@ func testOracleJSONPathSort(t *testing.T, ctx context.Context, repos ...storage.
 	params := &resources.QueryParameters{
 		PageSize: 20,
 		Sort:     resources.SortOptions{SortField: "metadata", SortMode: resources.SortModeAsc, JsonPathExpr: "$.value"},
-		Filters:  []resources.FilterOption{{Field: "engine_id", FilterOperation: resources.StringIn, Value: "sort-missing,sort-null,sort-empty,sort-number,sort-date,sort-date-low,sort-date-up,sort-array-long,sort-array,sort-text,sort-object-long,sort-object"}},
+		Filters:  []resources.FilterOption{{Field: "engine_id", FilterOperation: resources.StringIn, Value: "sort-missing,sort-null,sort-empty,sort-number,sort-date,sort-date-low,sort-date-only,sort-date-up,sort-array-long,sort-array,sort-text,sort-object-long,sort-object"}},
 	}
-	expected := []string{"sort-missing", "sort-null", "sort-empty", "sort-number", "sort-date", "sort-date-low", "sort-date-up", "sort-array-long", "sort-array", "sort-text", "sort-object-long", "sort-object"}
+	expected := []string{"sort-missing", "sort-null", "sort-empty", "sort-number", "sort-date", "sort-date-low", "sort-date-only", "sort-date-up", "sort-array-long", "sort-array", "sort-text", "sort-object-long", "sort-object"}
 	for i, repo := range repos {
 		var actual []string
 		_, err := repo.SelectAll(ctx, storage.StorageListRequest[models.Key]{
