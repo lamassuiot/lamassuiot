@@ -28,10 +28,11 @@ type estHttpRoutes struct {
 }
 
 // estErrorStatus is the HTTP status of an enrollment the service rejected. A device whose status does not allow it (a
-// decommissioned device) is refused for good: 428, a 4xx, so that the client does not retry as it would after a 5xx.
+// decommissioned device) conflicts with the request: 409, a 4xx, so that the client does not retry as it would after a
+// 5xx.
 func estErrorStatus(err error) int {
 	if errors.Is(err, errs.ErrDeviceInvalidStatus) {
-		return http.StatusPreconditionRequired
+		return http.StatusConflict
 	}
 	return http.StatusInternalServerError
 }

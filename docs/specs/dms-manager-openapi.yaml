@@ -338,7 +338,7 @@ paths:
               schema:
                 type: string
                 format: byte
-        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
+        '409': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/simplereenroll:
@@ -393,7 +393,7 @@ paths:
               schema:
                 type: string
                 format: byte
-        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
+        '409': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
   /.well-known/est/serverkeygen:
@@ -448,7 +448,7 @@ paths:
               schema:
                 type: string
                 format: byte
-        '428': { $ref: '#/components/responses/DeviceNotEnrollable' }
+        '409': { $ref: '#/components/responses/DeviceNotEnrollable' }
         '500': { $ref: '#/components/responses/InternalError' }
 
 components:

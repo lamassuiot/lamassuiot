@@ -189,7 +189,7 @@ func TestEnrollReenroll(t *testing.T) {
 			url:            "/.well-known/est/aps/simpleenroll",
 			contentType:    "application/pkcs10",
 			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
-			expectedStatus: http.StatusPreconditionRequired,
+			expectedStatus: http.StatusConflict,
 			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
 			mockSetup: func(m *smock.MockESTService) {
 				m.On("Enroll", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), errs.ErrDeviceInvalidStatus)
@@ -201,7 +201,7 @@ func TestEnrollReenroll(t *testing.T) {
 			url:            "/.well-known/est/aps/simplereenroll",
 			contentType:    "application/pkcs10",
 			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
-			expectedStatus: http.StatusPreconditionRequired,
+			expectedStatus: http.StatusConflict,
 			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
 			mockSetup: func(m *smock.MockESTService) {
 				m.On("Reenroll", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), errs.ErrDeviceInvalidStatus)
@@ -318,7 +318,7 @@ func TestServerKeyGen(t *testing.T) {
 			url:            "/.well-known/est/aps/serverkeygen",
 			contentType:    "application/pkcs10",
 			body:           base64.StdEncoding.EncodeToString(csrDERBlock.Bytes),
-			expectedStatus: http.StatusPreconditionRequired,
+			expectedStatus: http.StatusConflict,
 			expectedError:  errs.ErrDeviceInvalidStatus.Error(),
 			mockSetup: func(m *smock.MockESTService) {
 				m.On("ServerKeyGen", mock.Anything, mock.Anything, "aps").Return((*x509.Certificate)(nil), nil, errs.ErrDeviceInvalidStatus)
