@@ -201,34 +201,4 @@ func TestESTEnrollRegisteredDeviceWithoutIdentity(t *testing.T) {
 			assert.Empty(t, certs, "no certificate may be issued for a decommissioned device")
 		})
 	}
-
-	// A device can be decommissioned after the enrollment checked it and before the CA signed. Binding must then
-	// fail instead of reporting success for a certificate the device does not hold.
-	t.Run("BindIdentityToDeviceRejectsDecommissionedDevice", func(t *testing.T) {
-		f := setup(t, models.PreRegistration, false)
-		deviceID := registerDevice(t, f.dms.ID)
-		crt, err := testServers.CA.Service.SignCertificate(ctx, services.SignCertificateInput{
-			CAID:              f.enrollCA.ID,
-			CertRequest:       (*models.X509CertificateRequest)(newCSR(deviceID)),
-			IssuanceProfileID: f.enrollCA.ProfileID,
-		})
-		require.NoError(t, err)
-		_, err = testServers.DeviceManager.Service.UpdateDeviceStatus(ctx, services.UpdateDeviceStatusInput{
-			ID:        deviceID,
-			NewStatus: models.DeviceDecommissioned,
-		})
-		require.NoError(t, err, "could not decommission device")
-
-		_, err = dmsMgr.Service.BindIdentityToDevice(ctx, services.BindIdentityToDeviceInput{
-			DeviceID:                deviceID,
-			CertificateSerialNumber: crt.SerialNumber,
-			BindMode:                models.DeviceEventTypeProvisioned,
-		})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "device decommissioned")
-
-		device, err := testServers.DeviceManager.Service.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
-		require.NoError(t, err)
-		assert.Nil(t, device.IdentitySlot)
-	})
 }

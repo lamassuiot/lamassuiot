@@ -879,14 +879,6 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	})
 	if err != nil {
 		lFunc.Errorf("could not assign certificate to device '%s': %s", csr.Subject.CommonName, err)
-		svc.revokeUnboundCertificate(ctx, lFunc, crt.SerialNumber)
-		return nil, err
-	}
-
-	// The device was read before the CA signed, and binding does not fail when the device was decommissioned or
-	// got another identity in the meantime. Do not hand out a certificate the device does not hold.
-	if err = svc.checkCertificateBound(ctx, lFunc, device.ID, crt.SerialNumber); err != nil {
-		svc.revokeUnboundCertificate(ctx, lFunc, crt.SerialNumber)
 		return nil, err
 	}
 
@@ -896,46 +888,6 @@ func (svc DMSManagerServiceBackend) Enroll(ctx context.Context, csr *x509.Certif
 	lFunc.Infof("enrollment process completed successfully")
 
 	return (*x509.Certificate)(crt.Certificate), nil
-}
-
-// checkCertificateBound verifies that the device holds the certificate with the given serial number as its active
-// identity. A device that cannot be read is not reported as a failure: the certificate was bound just before, and
-// revoking it on a transient read error would leave a healthy device without identity.
-func (svc DMSManagerServiceBackend) checkCertificateBound(ctx context.Context, lFunc *logrus.Entry, deviceID string, serialNumber string) error {
-	device, err := svc.deviceManagerCli.GetDeviceByID(ctx, services.GetDeviceByIDInput{ID: deviceID})
-	if err != nil {
-		lFunc.Warnf("could not check that certificate %s is bound to device '%s': %s", serialNumber, deviceID, err)
-		return nil
-	}
-
-	if device.Status == models.DeviceDecommissioned {
-		lFunc.Errorf("aborting enrollment. device '%s' was decommissioned while it was enrolling", deviceID)
-		return fmt.Errorf("device decommissioned")
-	}
-
-	if device.IdentitySlot == nil || device.IdentitySlot.Secrets[device.IdentitySlot.ActiveVersion] != serialNumber {
-		lFunc.Errorf("aborting enrollment. certificate %s is not the active identity of device '%s'", serialNumber, deviceID)
-		return fmt.Errorf("certificate could not be bound to the device")
-	}
-
-	return nil
-}
-
-// revokeUnboundCertificate revokes a certificate that was issued to a device but could not be bound to it, so it
-// does not stay valid without the device identity tracking it.
-func (svc DMSManagerServiceBackend) revokeUnboundCertificate(ctx context.Context, lFunc *logrus.Entry, serialNumber string) {
-	// The revocation is cleanup that must run even if the request was canceled.
-	_, err := svc.caClient.UpdateCertificateStatus(context.WithoutCancel(ctx), services.UpdateCertificateStatusInput{
-		SerialNumber:     serialNumber,
-		NewStatus:        models.StatusRevoked,
-		RevocationReason: ocsp.CessationOfOperation,
-	})
-	if err != nil {
-		lFunc.Errorf("could not revoke certificate %s that was not bound to its device: %s", serialNumber, err)
-		return
-	}
-
-	lFunc.Warnf("revoked certificate %s because it was not bound to its device", serialNumber)
 }
 
 func (svc DMSManagerServiceBackend) Reenroll(ctx context.Context, csr *x509.CertificateRequest, aps string) (*x509.Certificate, error) {
@@ -1386,13 +1338,6 @@ func (svc DMSManagerServiceBackend) BindIdentityToDevice(ctx context.Context, in
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	// UpdateDeviceIdentitySlot ignores decommissioned devices without an error, so binding would report success
-	// while the device keeps no identity.
-	if device.Status == models.DeviceDecommissioned {
-		lFunc.Errorf("could not bind certificate %s. device '%s' is decommissioned", input.CertificateSerialNumber, device.ID)
-		return nil, fmt.Errorf("device decommissioned")
 	}
 
 	dms, err := svc.GetDMSByID(ctx, services.GetDMSByIDInput{
