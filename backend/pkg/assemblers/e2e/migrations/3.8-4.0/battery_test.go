@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
+	"math/big"
 	"testing"
 	"time"
 
@@ -89,6 +90,9 @@ func (e *env) issuanceBattery(t *testing.T, srv *tests.TestServer, name string, 
 		byID := downloadCRL(t, srv, rootCA.ID, root)
 		require.Equal(t, byID.Raw, bySKI.Raw, "CRL of %s at /crl/<SKI> and /crl/<CA id>", name)
 		require.Contains(t, revokedSerials(bySKI), l1.Certificate.SerialNumber)
+		// It is the first CRL the root issues on v4, and it continues the numbering of 3.8: RFC 5280 5.2.3 requires
+		// CRL numbers to increase, so a client holding the last CRL of 3.8 accepts it.
+		require.Equal(t, new(big.Int).Add(e.crl38[name].Number, big.NewInt(1)), bySKI.Number, "number of the first v4 CRL of %s", name)
 	} else {
 		// A CA that did not come from 3.8 has no URL by SKI, even when its SKI is its digest (F).
 		_, err := srv.VA.HttpVASDK.GetCRL(ctx, services.GetCRLResponseInput{ID: hex.EncodeToString(root.SubjectKeyId), Issuer: root, VerifyResponse: true})
