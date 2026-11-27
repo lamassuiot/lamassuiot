@@ -28,7 +28,7 @@ func (r *kmsHttpRoutes) handleError(ctx *gin.Context, err error) {
 		ctx.JSON(404, gin.H{"err": err.Error()})
 	case errors.Is(err, errs.ErrKeyEngineRequired), errors.Is(err, errs.ErrKeyAliasCollidesWithKeyID), errors.Is(err, errs.ErrKeyAliasReservedFormat), errors.Is(err, errs.ErrValidateBadRequest):
 		ctx.JSON(400, gin.H{"err": err.Error()})
-	case errors.Is(err, errs.ErrKeyInUse):
+	case errors.Is(err, errs.ErrKeyInUse), errors.Is(err, errs.ErrKeyAlreadyExists):
 		ctx.JSON(409, gin.H{"err": err.Error()})
 	default:
 		ctx.JSON(500, gin.H{"err": err.Error()})

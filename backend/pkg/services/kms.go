@@ -622,6 +622,32 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 
 	engineInstance := *engine
 
+	var publicKey crypto.PublicKey
+	switch k := input.PrivateKey.(type) {
+	case *rsa.PrivateKey:
+		publicKey = &k.PublicKey
+	case *ecdsa.PrivateKey:
+		publicKey = &k.PublicKey
+	default:
+		lFunc.Errorf("unsupported private key type")
+		return nil, errors.New("unsupported private key type")
+	}
+
+	// The engine stores a public key once: a row of this engine may already carry it. It is the same key when the
+	// engine holds it under the name of that row. Otherwise the row is one the engine lost the object of (the key of a
+	// deleted CA left behind) or one with the public key only, and the imported key takes it over.
+	existing, err := svc.rowOfPublicKey(ctx, publicKey, engineID)
+	if err != nil {
+		lFunc.Errorf("could not look up the public key of the imported key: %s", err)
+		return nil, err
+	}
+	if existing != nil && existing.HasPrivateKey {
+		if _, err := engineInstance.GetPrivateKeyByID(ctx, existing.KeyID); err == nil {
+			lFunc.Infof("engine %s already holds this key as %s", engineID, existing.KeyID)
+			return nil, errs.ErrKeyAlreadyExists
+		}
+	}
+
 	var (
 		keyID     string
 		signer    crypto.Signer
@@ -661,8 +687,11 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		return nil, errors.New("failed to import private key")
 	}
 
-	publicKey := signer.Public()
-	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if existing != nil {
+		return svc.takeOverKeyRow(ctx, lFunc, existing, keyID, engineID, input.Name)
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(signer.Public())
 	if err != nil {
 		lFunc.Errorf("failed to marshal public key: %s", err)
 		return nil, errors.New("failed to marshal public key")
@@ -698,6 +727,57 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
+}
+
+// rowOfPublicKey returns the row of the engine that carries the public key, or nil.
+func (svc *KMSServiceBackend) rowOfPublicKey(ctx context.Context, publicKey crypto.PublicKey, engineID string) (*models.Key, error) {
+	digest, err := chelpers.PublicKeyDigest(publicKey)
+	if err != nil {
+		return nil, err
+	}
+	copies, err := svc.kmsStorage.SelectByDigest(ctx, digest)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range copies {
+		if k.EngineID == engineID {
+			return k, nil
+		}
+	}
+	return nil, nil
+}
+
+// takeOverKeyRow makes the row of a key the engine did not hold refer to the key just imported under keyID: it takes
+// that name, keeping its old one as an alias (the certificates that reference it follow), and records the private key.
+func (svc *KMSServiceBackend) takeOverKeyRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, keyID, engineID, name string) (*models.Key, error) {
+	if row.KeyID != keyID {
+		renamed, err := svc.kmsStorage.RenameKey(ctx, engineID, row.KeyID, keyID, func() error { return nil })
+		if err != nil {
+			lFunc.Errorf("could not rename key %s of engine %s to %s: %s", row.KeyID, engineID, keyID, err)
+			return nil, err
+		}
+		if !renamed {
+			return nil, fmt.Errorf("key %s of engine %s changed while it was being imported", row.KeyID, engineID)
+		}
+	}
+	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, engineID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("key %s of engine %s changed while it was being imported", keyID, engineID)
+	}
+	key.HasPrivateKey = true
+	if key.Name == "" {
+		key.Name = name
+	}
+	updated, err := svc.kmsStorage.Update(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	updated.PKCS11URI = buildPKCS11ID(engineID, keyID, "private")
+	lFunc.Infof("key %s of engine %s (was %s) now holds the imported private key", keyID, engineID, row.KeyID)
+	return updated, nil
 }
 
 func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engine cryptoengines.CryptoEngine) error {

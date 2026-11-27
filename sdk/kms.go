@@ -112,7 +112,9 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 		Name:       input.Name,
 		Tags:       input.Tags,
 		Metadata:   input.Metadata,
-	}, map[int][]error{})
+	}, map[int][]error{
+		409: {errs.ErrKeyAlreadyExists},
+	})
 	if err != nil {
 		return nil, err
 	}

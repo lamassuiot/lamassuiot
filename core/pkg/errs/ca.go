@@ -51,6 +51,8 @@ var (
 	ErrKeyAliasReservedFormat error = errors.New("alias must not look like a key id (UUID), a key digest (64 hexadecimal digits) or a pkcs11 URI")
 	// Resources such as certificates are bound to the key, so deleting it would leave them unable to sign.
 	ErrKeyInUse error = errors.New("key is in use")
+	// The engine already holds a key with the same public key, under the name its row carries.
+	ErrKeyAlreadyExists error = errors.New("key already exists")
 
 	// CreateCertificate
 	ErrInvalidKeySpec error = errors.New("invalid key spec: exactly one of (Type+Bits) or KeyIdentifier must be provided")

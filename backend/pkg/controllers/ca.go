@@ -30,6 +30,7 @@ func writeCACreationError(ctx *gin.Context, err error) {
 		status int
 	}{
 		{errs.ErrCAAlreadyExists, http.StatusConflict},
+		{errs.ErrKeyAlreadyExists, http.StatusConflict},
 		{errs.ErrIssuanceProfileNotFound, http.StatusNotFound},
 		{errs.ErrValidateBadRequest, http.StatusBadRequest},
 		{errs.ErrCAType, http.StatusBadRequest},
