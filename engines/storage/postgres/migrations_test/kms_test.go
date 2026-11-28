@@ -1,11 +1,25 @@
 package migrationstest
 
 import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"fmt"
+	postgres_test "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/test"
+	postgresDriver "gorm.io/driver/postgres"
+	"strings"
 	"testing"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -135,6 +149,247 @@ func migrationTest_KMS_20261030120100_drop_legacy_key_bindings(t *testing.T, log
 	assert.JSONEq(t, `{"owner": "team-a"}`, metadata("legacy-bound"))
 }
 
+// kmsKeyFixture returns a fresh public key the way the KMS stores it (the base64 of its PEM encoding)
+// and the digest the KMS names that key after.
+func kmsKeyFixture(t *testing.T) (publicKey, digest string) {
+	t.Helper()
+	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	spki, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	require.NoError(t, err)
+	digest, err = helpers.PublicKeyDigest(&priv.PublicKey)
+	require.NoError(t, err)
+	return base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki})), digest
+}
+
+func insertKMSKey(t *testing.T, con *gorm.DB, keyID, engineID, publicKey, aliases string, hasPrivateKey bool) {
+	t.Helper()
+	require.NoError(t, con.Exec(`INSERT INTO kms_keys
+		(key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, aliases, has_private_key)
+		VALUES (?, ?, '{}', ?, 'ECDSA', 256, ?, now(), ?::jsonb, ?)`,
+		keyID, engineID, "key-"+keyID, publicKey, aliases, hasPrivateKey).Error, "insert key %s", keyID)
+}
+
+func migrationTest_KMS_20261124100000_kms_key_identity(t *testing.T, logger *logrus.Entry, con *gorm.DB) {
+	// The fixtures of the earlier migrations carry placeholder public keys; the KMS never stores those.
+	require.NoError(t, con.Exec(`DELETE FROM kms_keys`).Error)
+
+	publicA := kmsPublicKey(t, opensslCACertPEM)
+	publicB, digestB := kmsKeyFixture(t)
+	publicC, digestC := kmsKeyFixture(t)
+	const skiB, skiC = "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0", "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+
+	// A: a key named by its digest, held by two engines (the private key in one, the public key in the other)
+	insertKMSKey(t, con, opensslCAKeyID, "e1", publicA, `[]`, true)
+	insertKMSKey(t, con, opensslCAKeyID, "e2", publicA, `[]`, false)
+	// B: a key of a CA imported before the KMS: the engine holds it under the SKI, nothing else registers it
+	// aliases written when nothing kept them from looking like an id or a digest: an identifier of those shapes is no
+	// longer looked up as an alias, so they could never be used
+	insertKMSKey(t, con, skiB, "e1", publicB, `["keep-me", "0190a6c4-7f3e-7b2a-9c1d-3e5f6a7b8c9d", "`+strings.ToUpper(digestC)+`"]`, true)
+	// C: the key of an imported CA registered twice: under its digest by the KMS and under its SKI by the migration tool
+	insertKMSKey(t, con, digestC, "e1", publicC, `["real-alias"]`, true)
+	insertKMSKey(t, con, skiC, "e1", publicC, `["ghost-alias"]`, true)
+
+	ApplyMigration(t, logger, con, kmsDBName)
+
+	type row struct {
+		KeyID, EngineID, ID, Digest, Aliases string
+	}
+	rows := map[string]row{}
+	var all []row
+	require.NoError(t, con.Raw(`SELECT key_id AS key_id, engine_id, id::text AS id, digest, aliases::text AS aliases FROM kms_keys`).Scan(&all).Error)
+	ids := map[string]bool{}
+	for _, r := range all {
+		rows[r.KeyID+"@"+r.EngineID] = r
+		assert.NotEmpty(t, r.ID, "every key gets an id")
+		assert.False(t, ids[r.ID], "ids are unique")
+		ids[r.ID] = true
+	}
+
+	t.Run("every key gets the digest of its public key", func(t *testing.T) {
+		assert.Equal(t, opensslCAKeyID, rows[opensslCAKeyID+"@e1"].Digest)
+		assert.Equal(t, opensslCAKeyID, rows[opensslCAKeyID+"@e2"].Digest, "the same key in another engine has the same digest")
+		assert.Equal(t, digestB, rows[skiB+"@e1"].Digest, "a key named by its SKI keeps that name and gets its real digest")
+		assert.Equal(t, digestC, rows[digestC+"@e1"].Digest)
+	})
+
+	t.Run("a key registered twice in an engine keeps the row named by its digest", func(t *testing.T) {
+		assert.Len(t, all, 4)
+		_, ghostLeft := rows[skiC+"@e1"]
+		assert.False(t, ghostLeft, "the row named by the SKI, which no engine holds, is removed")
+
+		var aliases []string
+		require.NoError(t, json.Unmarshal([]byte(rows[digestC+"@e1"].Aliases), &aliases))
+		assert.ElementsMatch(t, []string{"real-alias", "ghost-alias", skiC}, aliases,
+			"the survivor keeps what could address the removed row: its aliases and its old name")
+	})
+
+	t.Run("aliases shaped like an id or a digest are dropped, the rest kept", func(t *testing.T) {
+		var aliases []string
+		require.NoError(t, json.Unmarshal([]byte(rows[skiB+"@e1"].Aliases), &aliases))
+		assert.Equal(t, []string{"keep-me"}, aliases)
+	})
+
+	t.Run("a key cannot be registered twice in the same engine under different names", func(t *testing.T) {
+		err := con.Exec(`INSERT INTO kms_keys (key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('another-name', 'e1', '{}', 'dup', 'ECDSA', 256, ?, now(), ?)`, publicB, digestB).Error
+		assert.Error(t, err)
+	})
+
+	t.Run("the digest must have the shape of a digest", func(t *testing.T) {
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('short', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), 'abc')`).Error)
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts)
+			VALUES ('nodigest', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now())`).Error, "the digest is required")
+	})
+
+	t.Run("the id is text in the canonical form of a UUID", func(t *testing.T) {
+		var dataType string
+		require.NoError(t, con.Raw(`SELECT data_type FROM information_schema.columns
+			WHERE table_schema = 'kms' AND table_name = 'kms_keys' AND column_name = 'id'`).Scan(&dataType).Error)
+		assert.Equal(t, "text", dataType, "the authorization policies filter it as a string")
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (id, key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('not-a-uuid', 'bad-id', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), repeat('b', 64))`).Error)
+		assert.Error(t, con.Exec(`INSERT INTO kms_keys (id, key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('0190A6C4-7F3E-7B2A-9C1D-3E5F6A7B8C9D', 'upper-id', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), repeat('c', 64))`).Error,
+			"ids are stored in lowercase")
+	})
+
+	t.Run("a new key gets its id from the database", func(t *testing.T) {
+		require.NoError(t, con.Exec(`INSERT INTO kms_keys (key_id, engine_id, metadata, "name", algorithm, size, public_key, creation_ts, digest)
+			VALUES ('fresh', 'e3', '{}', 'x', 'ECDSA', 256, 'pk', now(), repeat('a', 64))`).Error)
+		var id string
+		require.NoError(t, con.Raw(`SELECT id::text FROM kms_keys WHERE key_id = 'fresh'`).Scan(&id).Error)
+		assert.Regexp(t, `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`, id)
+	})
+
+	RollbackMigration(t, logger, con, kmsDBName, "20261124100000_kms_key_identity")
+	var columns int64
+	require.NoError(t, con.Raw(`SELECT count(*) FROM information_schema.columns
+		WHERE table_schema = 'kms' AND table_name = 'kms_keys' AND column_name IN ('id', 'digest')`).Scan(&columns).Error)
+	assert.Zero(t, columns, "rolling back removes the new columns")
+}
+
+// TestKMSKeyIdentityMigrationWithReferences covers installations whose ca and va schemas already reference
+// the KMS keys: the row the migration removes may be the one a certificate or a CRL signer points at.
+func TestKMSKeyIdentityMigrationWithReferences(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, con := RunDB(t, logger, kmsDBName)
+	defer cleanup()
+
+	ctx := context.Background()
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	require.NoError(t, con.Exec(`CREATE SCHEMA ca; CREATE SCHEMA va;
+		CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, engine_id text, key_id text,
+			CONSTRAINT certificates_key_fk FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE);
+		CREATE TABLE va.crl_settings (ca_id text PRIMARY KEY, signer_engine_id text, signer_key_id text,
+			CONSTRAINT crl_settings_signer_key_fk FOREIGN KEY (signer_engine_id, signer_key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE)`).Error)
+
+	publicC, digestC := kmsKeyFixture(t)
+	const skiC = "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+	insertKMSKey(t, con, digestC, "e1", publicC, `[]`, true)
+	insertKMSKey(t, con, skiC, "e1", publicC, `[]`, true)
+	// the certificate and the CRL signer reference the row the migration removes
+	require.NoError(t, con.Exec(`INSERT INTO ca.certificates VALUES ('s1', 'e1', ?), ('s2', 'e1', ?)`, skiC, digestC).Error)
+	require.NoError(t, con.Exec(`INSERT INTO va.crl_settings VALUES ('ca1', 'e1', ?)`, skiC).Error)
+
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.NoError(t, err)
+
+	var keyID string
+	require.NoError(t, con.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = 's1'`).Scan(&keyID).Error)
+	assert.Equal(t, digestC, keyID, "a certificate that referenced the removed row references the survivor")
+	require.NoError(t, con.Raw(`SELECT signer_key_id FROM va.crl_settings WHERE ca_id = 'ca1'`).Scan(&keyID).Error)
+	assert.Equal(t, digestC, keyID, "so does a CRL signer")
+}
+
+// TestKMSKeyIdentityMigrationBefore38CAMigration covers a 3.8 database whose ca schema is already in the pki database:
+// ca.certificates exists, but the ca migrations have not run, so it has no key_id column yet (the CA migration that
+// adds it relinks the certificates to their key by public key). Duplicates the earlier tool left must still be removed.
+func TestKMSKeyIdentityMigrationBefore38CAMigration(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, con := RunDB(t, logger, kmsDBName)
+	defer cleanup()
+
+	ctx := context.Background()
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	// the shape 3.8 leaves: no key_id, the key is found through the SKI
+	require.NoError(t, con.Exec(`CREATE SCHEMA ca;
+		CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, engine_id text, subject_key_id text)`).Error)
+	// the VA schema of 3.8 holds roles keyed by SKI, no crl_settings yet
+	require.NoError(t, con.Exec(`CREATE SCHEMA va; CREATE TABLE va.va_role (ca_ski text PRIMARY KEY)`).Error)
+
+	publicC, digestC := kmsKeyFixture(t)
+	const skiC = "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+	insertKMSKey(t, con, digestC, "e1", publicC, `[]`, true)
+	insertKMSKey(t, con, skiC, "e1", publicC, `[]`, true)
+	require.NoError(t, con.Exec(`INSERT INTO ca.certificates VALUES ('s1', 'e1', ?)`, skiC).Error)
+
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.NoError(t, err, "a ca schema without key_id must not block the kms migration")
+
+	var keys int64
+	require.NoError(t, con.Raw(`SELECT count(*) FROM kms_keys WHERE digest = ?`, digestC).Scan(&keys).Error)
+	assert.EqualValues(t, 1, keys, "the duplicate is removed")
+	var kept string
+	require.NoError(t, con.Raw(`SELECT key_id FROM kms_keys WHERE digest = ?`, digestC).Scan(&kept).Error)
+	assert.Equal(t, digestC, kept)
+}
+
+// TestKMSKeyIdentityMigrationRefusesAmbiguousDuplicates: when none of the rows holding the same key in an
+// engine is named by its digest, the migration cannot tell which one the engine holds.
+func TestKMSKeyIdentityMigrationRefusesAmbiguousDuplicates(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, con := RunDB(t, logger, kmsDBName)
+	defer cleanup()
+
+	ctx := context.Background()
+	m := postgres.NewMigrator(logger, con)
+	_, err := m.Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	publicC, digestC := kmsKeyFixture(t)
+	insertKMSKey(t, con, "name-one", "e1", publicC, `[]`, true)
+	insertKMSKey(t, con, "name-two", "e1", publicC, `[]`, true)
+
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "same public key")
+	assert.Contains(t, err.Error(), digestC)
+
+	var rows int64
+	require.NoError(t, con.Raw(`SELECT count(*) FROM kms_keys`).Scan(&rows).Error)
+	assert.EqualValues(t, 2, rows, "a refused migration changes nothing")
+
+	// a public key that cannot be read is refused too, rather than given an invented digest
+	require.NoError(t, con.Exec(`DELETE FROM kms_keys WHERE key_id = 'name-two'`).Error)
+	insertKMSKey(t, con, "garbled", "e2", "not-a-public-key", `[]`, true)
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "garbled")
+
+	// The row named by the digest has the public key only, and a copy under another name claims the private key: the
+	// engine may hold the key under that other name only, so removing that copy could lose the key.
+	require.NoError(t, con.Exec(`DELETE FROM kms_keys`).Error)
+	publicD, digestD := kmsKeyFixture(t)
+	insertKMSKey(t, con, digestD, "e1", publicD, `[]`, false)
+	insertKMSKey(t, con, "ski-of-d", "e1", publicD, `[]`, true)
+	_, err = m.Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "same public key")
+	assert.Contains(t, err.Error(), digestD)
+	require.NoError(t, con.Raw(`SELECT count(*) FROM kms_keys WHERE engine_id = 'e1' AND key_id IN (?, 'ski-of-d')`, digestD).Scan(&rows).Error)
+	assert.EqualValues(t, 2, rows, "neither copy is removed")
+}
+
 func TestKMSMigrations(t *testing.T) {
 	logger := helpers.SetupLogger(config.Info, "test", "test")
 	cleanup, con := RunDB(t, logger, kmsDBName)
@@ -160,4 +415,75 @@ func TestKMSMigrations(t *testing.T) {
 	if t.Failed() {
 		t.Fatalf("failed while running migration v20261030120100_drop_legacy_key_bindings")
 	}
+
+	migrationTest_KMS_20261124100000_kms_key_identity(t, logger, con)
+	if t.Failed() {
+		t.Fatalf("failed while running migration v20261124100000_kms_key_identity")
+	}
+}
+
+// TestKMSKeyIdentityMigrationWithAKMSOnlyUser covers deployments that migrate each schema with its own user: the kms
+// migration user may have no privilege on the ca and va tables. information_schema hides such tables, so the migration
+// must still see the references there and, when it has to move one, say which privilege is missing instead of failing
+// on the foreign key.
+func TestKMSKeyIdentityMigrationWithAKMSOnlyUser(t *testing.T) {
+	logger := helpers.SetupLogger(config.Info, "test", "test")
+	cleanup, cfg, err := postgres_test.RunPostgresDocker(map[string]string{kmsDBName: ""}, false)
+	require.NoError(t, err)
+	defer func() { _ = cleanup() }()
+	open := func(user, password string) *gorm.DB {
+		dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=pki port=%d search_path=kms sslmode=disable", cfg.Hostname, user, password, cfg.Port)
+		db, err := gorm.Open(postgresDriver.New(postgresDriver.Config{DSN: dsn, PreferSimpleProtocol: true}), &gorm.Config{Logger: postgres.NewGormLogger(logger)})
+		require.NoError(t, err)
+		return db
+	}
+	admin := open(cfg.Username, string(cfg.Password))
+	require.NoError(t, admin.Exec(`CREATE SCHEMA IF NOT EXISTS kms`).Error)
+
+	ctx := context.Background()
+	_, err = postgres.NewMigrator(logger, admin).Goose.UpTo(ctx, int64(20261030120100))
+	require.NoError(t, err)
+
+	require.NoError(t, admin.Exec(`CREATE SCHEMA ca; CREATE SCHEMA va;
+		CREATE TABLE ca.certificates (serial_number text PRIMARY KEY, engine_id text, key_id text,
+			CONSTRAINT certificates_key_fk FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE);
+		CREATE TABLE va.crl_settings (ca_id text PRIMARY KEY, signer_engine_id text, signer_key_id text,
+			CONSTRAINT crl_settings_signer_key_fk FOREIGN KEY (signer_engine_id, signer_key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE)`).Error)
+	publicC, digestC := kmsKeyFixture(t)
+	const skiC = "c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"
+	insertKMSKey(t, admin, digestC, "e1", publicC, `[]`, true)
+	insertKMSKey(t, admin, skiC, "e1", publicC, `[]`, true)
+	require.NoError(t, admin.Exec(`INSERT INTO ca.certificates VALUES ('s1', 'e1', ?)`, skiC).Error)
+
+	// a user that owns the kms schema and nothing else
+	require.NoError(t, admin.Exec(`CREATE ROLE kmsmig LOGIN PASSWORD 'kmsmig';
+		GRANT USAGE, CREATE ON SCHEMA kms TO kmsmig;
+		ALTER TABLE kms.kms_keys OWNER TO kmsmig;
+		ALTER TABLE kms.goose_db_version OWNER TO kmsmig;
+		ALTER SEQUENCE kms.goose_db_version_id_seq OWNER TO kmsmig`).Error)
+	kmsUser := open("kmsmig", "kmsmig")
+
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ca.certificates", "the error names the table")
+	assert.Contains(t, err.Error(), "UPDATE", "and the privilege the migration needs")
+	assert.NotContains(t, err.Error(), "violates foreign key constraint")
+
+	// SELECT alone is not enough: the reference has to be updated
+	require.NoError(t, admin.Exec(`GRANT USAGE ON SCHEMA ca, va TO kmsmig; GRANT SELECT ON ca.certificates, va.crl_settings TO kmsmig`).Error)
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "SELECT, UPDATE on ca.certificates", "a user with SELECT only is told it lacks UPDATE")
+	assert.NotContains(t, err.Error(), "permission denied")
+
+	// with the documented grants it goes through and moves the reference
+	require.NoError(t, admin.Exec(`GRANT USAGE ON SCHEMA ca, va TO kmsmig;
+		GRANT SELECT, UPDATE ON ca.certificates, va.crl_settings TO kmsmig`).Error)
+	_, err = postgres.NewMigrator(logger, kmsUser).Goose.UpTo(ctx, int64(20261124100000))
+	require.NoError(t, err)
+	var keyID string
+	require.NoError(t, admin.Raw(`SELECT key_id FROM ca.certificates WHERE serial_number = 's1'`).Scan(&keyID).Error)
+	assert.Equal(t, digestC, keyID)
 }

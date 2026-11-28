@@ -278,10 +278,9 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// A key is identified by (key_id, engine_id). A PKCS#11 URI carries the engine in
-	// token-id and an alias is unique across engines, so both address a single key. A bare
-	// keyID is only a search: it resolves while one engine holds it and is rejected once
-	// several do, rather than silently picking a copy.
+	// A PKCS#11 URI carries the engine in token-id, an id names a single row and an alias is unique across
+	// engines, so each addresses a single key. A bare digest or keyID is only a search: it resolves while one
+	// engine holds it and is rejected once several do, rather than silently picking a copy.
 	if strings.HasPrefix(input.Identifier, "pkcs11:") {
 		lFunc.Debugf("checking if Key '%s' exists via PKCS11URI", input.Identifier)
 		engineID, keyID, _, err := parsePKCS11ID(input.Identifier)
@@ -304,8 +303,37 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return key, nil
 	}
 
-	// A keyID takes precedence over an alias, so an alias can never shadow the key whose
-	// keyID it happens to match.
+	// What is left is looked up as, in this order: the id of a key, the digest of its public key, its name in
+	// its engine (the key_id) and an alias. Each step precedes the next so that an alias never shadows the key
+	// whose id, digest or name it happens to match. An id and a digest are not looked up as an alias: an alias
+	// stored before aliases of these shapes were refused would otherwise answer for a key that does not exist.
+	isID := chelpers.IsKeyUUID(input.Identifier)
+	isDigest := chelpers.IsKeyDigest(input.Identifier)
+
+	if isID {
+		lFunc.Debugf("checking if Key '%s' exists via ID", input.Identifier)
+		exists, key, err := svc.kmsStorage.SelectExistsByID(ctx, strings.ToLower(input.Identifier))
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if key '%s' exists in storage engine: %s", input.Identifier, err)
+			return nil, err
+		}
+		if exists {
+			return key, nil
+		}
+	}
+
+	if isDigest {
+		lFunc.Debugf("checking if Key '%s' exists via digest", input.Identifier)
+		copies, err := svc.kmsStorage.SelectByDigest(ctx, strings.ToLower(input.Identifier))
+		if err != nil {
+			lFunc.Errorf("something went wrong while checking if digest '%s' exists in storage engine: %s", input.Identifier, err)
+			return nil, err
+		}
+		if len(copies) > 0 {
+			return singleCopy(lFunc, input.Identifier, copies)
+		}
+	}
+
 	lFunc.Debugf("checking if Key '%s' exists via KeyID", input.Identifier)
 	copies, err := svc.kmsStorage.SelectByKeyID(ctx, input.Identifier)
 	if err != nil {
@@ -313,17 +341,13 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 		return nil, err
 	}
 
-	if len(copies) == 1 {
-		return copies[0], nil
+	if len(copies) > 0 {
+		return singleCopy(lFunc, input.Identifier, copies)
 	}
 
-	if len(copies) > 1 {
-		engineIDs := make([]string, len(copies))
-		for i, k := range copies {
-			engineIDs[i] = k.EngineID
-		}
-		lFunc.Infof("keyID %s is held by engines %v; an engine must be specified", input.Identifier, engineIDs)
-		return nil, errs.ErrKeyEngineRequired
+	if isID || isDigest {
+		lFunc.Infof("key %s can not be found in storage engine via id, digest or keyID", input.Identifier)
+		return nil, errs.ErrKeyNotFound
 	}
 
 	lFunc.Debugf("checking if Key '%s' exists via Alias", input.Identifier)
@@ -341,6 +365,22 @@ func (svc *KMSServiceBackend) GetKey(ctx context.Context, input services.GetKeyI
 	return key, nil
 }
 
+// singleCopy returns the key an identifier found in the storage. The same digest or keyID can live in several
+// engines at once, and then it does not address a single key: the caller must say which, rather than have a
+// copy picked silently.
+func singleCopy(lFunc *logrus.Entry, identifier string, copies []*models.Key) (*models.Key, error) {
+	if len(copies) == 1 {
+		return copies[0], nil
+	}
+
+	engineIDs := make([]string, len(copies))
+	for i, k := range copies {
+		engineIDs[i] = k.EngineID
+	}
+	lFunc.Infof("identifier %s is held by engines %v; an engine must be specified", identifier, engineIDs)
+	return nil, errs.ErrKeyEngineRequired
+}
+
 func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input services.GetKeysByPublicKeyInput) ([]*models.Key, error) {
 	lFunc := chelpers.ConfigureLogger(ctx, svc.logger)
 
@@ -350,31 +390,30 @@ func (svc *KMSServiceBackend) GetKeysByPublicKey(ctx context.Context, input serv
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	// Every crypto engine names its keys this way, so the keyID follows from the public key alone.
-	keyID, err := chelpers.PublicKeyDigest(input.PublicKey)
+	// Every copy of the key carries the digest of its public key, whatever name its engine holds it under: a key of a
+	// CA imported before the KMS keeps its SKI until it is normalized.
+	digest, err := chelpers.PublicKeyDigest(input.PublicKey)
 	if err != nil {
-		lFunc.Errorf("could not compute the key ID of the public key: %s", err)
+		lFunc.Errorf("could not compute the digest of the public key: %s", err)
 		return nil, errs.ErrValidateBadRequest
 	}
 
-	if input.EngineID == "" {
-		keys, err := svc.kmsStorage.SelectByKeyID(ctx, keyID)
-		if err != nil {
-			lFunc.Errorf("something went wrong while looking up key '%s' in storage engine: %s", keyID, err)
-			return nil, err
-		}
-		return keys, nil
-	}
-
-	exists, key, err := svc.kmsStorage.SelectExistsByKeyID(ctx, keyID, input.EngineID)
+	copies, err := svc.kmsStorage.SelectByDigest(ctx, digest)
 	if err != nil {
-		lFunc.Errorf("something went wrong while looking up key '%s' in engine '%s': %s", keyID, input.EngineID, err)
+		lFunc.Errorf("something went wrong while looking up digest '%s' in storage engine: %s", digest, err)
 		return nil, err
 	}
-	if !exists {
-		return []*models.Key{}, nil
+	if input.EngineID == "" {
+		return copies, nil
 	}
-	return []*models.Key{key}, nil
+
+	keys := []*models.Key{}
+	for _, k := range copies {
+		if k.EngineID == input.EngineID {
+			keys = append(keys, k)
+		}
+	}
+	return keys, nil
 }
 
 func (svc *KMSServiceBackend) GetKeyStats(ctx context.Context, input services.GetKeyStatsInput) (*models.KeyStats, error) {
@@ -582,6 +621,44 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 
 	engineInstance := *engine
 
+	var publicKey crypto.PublicKey
+	switch k := input.PrivateKey.(type) {
+	case *rsa.PrivateKey:
+		publicKey = &k.PublicKey
+	case *ecdsa.PrivateKey:
+		publicKey = &k.PublicKey
+	default:
+		lFunc.Errorf("unsupported private key type")
+		return nil, errors.New("unsupported private key type")
+	}
+
+	// The engine stores a public key once: a row of this engine may already carry it. Every engine names an imported
+	// key after its digest, so a row under another name (a key of a CA imported before the KMS, held under its SKI) is
+	// refused before anything is written to the engine. A row named by the digest is the same key when the engine holds
+	// it; otherwise it has the public key only (the key of a deleted CA) or the engine lost its key, and the imported
+	// private key is added to it.
+	// The errors of the storage and of the engine are logged, not returned: their text can carry hosts, URLs or ARNs.
+	existing, err := svc.rowOfPublicKey(ctx, publicKey, engineID)
+	if err != nil {
+		lFunc.Errorf("could not look up the public key of the imported key: %s", err)
+		return nil, errors.New("could not look up the public key of the imported key")
+	}
+	if existing != nil && existing.KeyID != existing.Digest {
+		lFunc.Infof("engine %s already stores this public key as key %s", engineID, existing.KeyID)
+		return nil, fmt.Errorf("%w: engine %s stores this public key as key %s", errs.ErrKeyAlreadyExists, engineID, existing.KeyID)
+	}
+	if existing != nil && existing.HasPrivateKey {
+		held, err := engineHolds(ctx, engineInstance, existing.KeyID)
+		if err != nil {
+			lFunc.Errorf("could not tell whether engine %s holds key %s: %s", engineID, existing.KeyID, err)
+			return nil, errors.New("could not tell whether the crypto engine already holds the key")
+		}
+		if held {
+			lFunc.Infof("engine %s already holds this key as %s", engineID, existing.KeyID)
+			return nil, errs.ErrKeyAlreadyExists
+		}
+	}
+
 	var (
 		keyID     string
 		signer    crypto.Signer
@@ -621,8 +698,11 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		return nil, errors.New("failed to import private key")
 	}
 
-	publicKey := signer.Public()
-	pubBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if existing != nil {
+		return svc.addPrivateKeyToRow(ctx, lFunc, existing, input.Name)
+	}
+
+	pubBytes, err := x509.MarshalPKIXPublicKey(signer.Public())
 	if err != nil {
 		lFunc.Errorf("failed to marshal public key: %s", err)
 		return nil, errors.New("failed to marshal public key")
@@ -658,6 +738,56 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	}
 
 	return svc.kmsStorage.Insert(ctx, &kmsKey)
+}
+
+// engineHolds reports whether the engine holds a key under that name. Failing to read it is not proof that the key is
+// gone (an HSM session that dropped, a throttled vault): the list of the keys of the engine settles it, and when that
+// fails too the answer is unknown.
+func engineHolds(ctx context.Context, engine cryptoengines.CryptoEngine, keyID string) (bool, error) {
+	if _, err := engine.GetPrivateKeyByID(ctx, keyID); err == nil {
+		return true, nil
+	}
+	ids, err := engine.ListPrivateKeyIDs(ctx)
+	if err != nil {
+		return false, err
+	}
+	return slices.Contains(ids, keyID), nil
+}
+
+// rowOfPublicKey returns the row of the engine that carries the public key, or nil.
+func (svc *KMSServiceBackend) rowOfPublicKey(ctx context.Context, publicKey crypto.PublicKey, engineID string) (*models.Key, error) {
+	digest, err := chelpers.PublicKeyDigest(publicKey)
+	if err != nil {
+		return nil, err
+	}
+	copies, err := svc.kmsStorage.SelectByDigest(ctx, digest)
+	if err != nil {
+		return nil, err
+	}
+	for _, k := range copies {
+		if k.EngineID == engineID {
+			return k, nil
+		}
+	}
+	return nil, nil
+}
+
+// addPrivateKeyToRow records the private key just imported in the row that already carries its public key under the
+// same name, one whose key the engine did not hold. The row was read before the import, so only the private key and an
+// empty name are written: what was saved in the row meanwhile is kept.
+func (svc *KMSServiceBackend) addPrivateKeyToRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, name string) (*models.Key, error) {
+	updated, err := svc.kmsStorage.RecordPrivateKey(ctx, row.KeyID, row.EngineID, name)
+	if errors.Is(err, errs.ErrKeyNotFound) {
+		lFunc.Errorf("key %s of engine %s was deleted while its private key was imported", row.KeyID, row.EngineID)
+		return nil, err
+	}
+	if err != nil {
+		lFunc.Errorf("could not record the private key of key %s of engine %s: %s", row.KeyID, row.EngineID, err)
+		return nil, errors.New("could not record the imported private key")
+	}
+	updated.PKCS11URI = buildPKCS11ID(row.EngineID, row.KeyID, "private")
+	lFunc.Infof("key %s of engine %s now holds the imported private key", row.KeyID, row.EngineID)
+	return updated, nil
 }
 
 func (svc *KMSServiceBackend) checkKeySpecEngineCompliance(keyType string, size int, engine cryptoengines.CryptoEngine) error {
@@ -732,6 +862,13 @@ func (svc *KMSServiceBackend) UpdateKeyAliases(ctx context.Context, input servic
 			if !ok {
 				lFunc.Errorf("invalid alias value type for key '%s'", input.ID)
 				return nil, fmt.Errorf("invalid alias value type")
+			}
+
+			// An identifier shaped like an id, a digest or a pkcs11 URI is read as that (see GetKey), so such
+			// an alias would never resolve to this key.
+			if chelpers.IsKeyUUID(alias) || chelpers.IsKeyDigest(alias) || strings.HasPrefix(alias, "pkcs11:") {
+				lFunc.Errorf("alias '%s' has the shape of a key id, a digest or a pkcs11 URI", alias)
+				return nil, errs.ErrKeyAliasReservedFormat
 			}
 
 			// Check for duplicate aliases

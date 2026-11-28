@@ -8,14 +8,18 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"slices"
+	"sort"
 	"time"
 
 	storagebuilder "github.com/lamassuiot/lamassuiot/v4/backend/pkg/storage/builder"
 	cconfig "github.com/lamassuiot/lamassuiot/v4/core/pkg/config"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // Result summarises the outcome of a migration run.
@@ -50,7 +54,9 @@ func Migrate(ctx context.Context, logger *log.Entry, caStorage CALister, kmsStor
 // Lamassu service config.
 //
 // CAs are read from the ca tables, not through the CA repository: the tool runs before the ca
-// migrations, which need the keys it registers, and the repository reads what they create.
+// migrations, which need the keys it registers, and the repository reads what they create. For the
+// same reason it runs on the kms schema of 3.8: the upgrade order is this tool, then the kms, ca and
+// va migrations. Run again after the upgrade, it reads the migrated kms schema.
 func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconfig.PluggableStorageEngine, dryRun bool) (Result, error) {
 	engine, err := storagebuilder.BuildStorageEngine(logger, storageConf)
 	if err != nil {
@@ -68,12 +74,40 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 	if err != nil {
 		return Result{}, fmt.Errorf("get CA storage: %w", err)
 	}
-	kmsStorage, err := engine.GetKMSStorage()
+	kmsDB, err := postgres.CreatePostgresDBConnection(logger, pg.Config, postgres.KMS_SCHEMA)
 	if err != nil {
-		return Result{}, fmt.Errorf("get KMS storage: %w", err)
+		return Result{}, fmt.Errorf("connect to KMS storage: %w", err)
+	}
+	identity, err := hasKeyIdentity(kmsDB)
+	if err != nil {
+		return Result{}, err
+	}
+	var kmsStorage storage.KMSKeysRepo
+	if identity {
+		kmsStorage, err = engine.GetKMSStorage()
+		if err != nil {
+			return Result{}, fmt.Errorf("get KMS storage: %w", err)
+		}
+	} else {
+		logger.Infof("the kms schema has no key identity yet: registering the keys in the kms schema of 3.8, whose migration computes their digest")
+		kmsStorage, err = newLegacyKMSKeys(ctx, kmsDB)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 
 	return Migrate(ctx, logger, caStorage, kmsStorage, dryRun)
+}
+
+// hasKeyIdentity reports whether the kms schema has the key identity migration (kms_keys.digest), which the KMS
+// repository needs. Without it the tool writes the columns of the kms schema of 3.8.
+func hasKeyIdentity(db *gorm.DB) (bool, error) {
+	var migrated bool
+	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns
+		WHERE table_schema = current_schema() AND table_name = 'kms_keys' AND column_name = 'digest')`).Scan(&migrated).Error; err != nil {
+		return false, fmt.Errorf("check the kms schema: %w", err)
+	}
+	return migrated, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -83,7 +117,8 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 // keyEntry accumulates all data needed to build a models.Key record.
 type keyEntry struct {
 	engineID    string
-	keyID       string // subject_key_id == KMS key_id (SHA-256 hex of PKIX public key)
+	keyID       string // the CA's subject_key_id: crypto engines before the KMS named the keys of imported CAs after it
+	digest      string // SHA-256 hex of the PKIX public key: the name the KMS gives every key it stores
 	algorithm   string
 	size        int
 	publicKey   string // base64(PEM "PUBLIC KEY")
@@ -142,10 +177,16 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage CALister) (ma
 			}
 			pubKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: pubKeyDER})
 			pubKeyB64 := base64.StdEncoding.EncodeToString(pubKeyPEM)
+			digest, err := chelpers.PublicKeyDigest(x509Cert.PublicKey)
+			if err != nil {
+				logger.Errorf("could not compute the digest of the public key of CA %s: %s", ca.ID, err)
+				return
+			}
 
 			keyMap[keyID] = &keyEntry{
 				engineID:   cert.EngineID,
 				keyID:      keyID,
+				digest:     digest,
 				algorithm:  algorithm,
 				size:       size,
 				publicKey:  pubKeyB64,
@@ -175,7 +216,17 @@ func collectKeys(ctx context.Context, logger *log.Entry, caStorage CALister) (ma
 // runMigration inserts missing keys into KMS storage (or logs what it would do in dry-run mode).
 // It returns the number of inserted (or would-insert in dry-run), skipped, and failed keys.
 func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMSKeysRepo, keyMap map[string]*keyEntry, dryRun bool) (inserted, skipped, failed int) {
-	for _, entry := range keyMap {
+	// Certificates can share a public key under different SKIs, and the KMS stores a public key once per engine. The
+	// SKIs are walked in order, so the one that names the key does not depend on the order of the map.
+	skis := make([]string, 0, len(keyMap))
+	for ski := range keyMap {
+		skis = append(skis, ski)
+	}
+	sort.Strings(skis)
+	registered := map[string]string{} // engine|digest -> SKI the key is registered under in this run
+
+	for _, ski := range skis {
+		entry := keyMap[ski]
 		if entry.conflictErr != "" {
 			logger.Errorf("skipping key %s: %s", entry.keyID, entry.conflictErr)
 			failed++
@@ -194,8 +245,33 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 
+		// The key may already be stored under another name: a CA imported since the KMS exists has it under the digest of
+		// its public key, while its SKI is the one its issuer wrote, and a certificate that shares the key of another has
+		// another SKI. Registering it again would add a row no crypto engine holds, or break the unique (digest,
+		// engine_id) of the KMS.
+		if entry.digest != "" {
+			holder := entry.engineID + "|" + entry.digest
+			if by, ok := registered[holder]; ok {
+				logger.Infof("key %s has the public key of %s, registered earlier in this run — skipping", entry.keyID, by)
+				skipped++
+				continue
+			}
+			copies, err := kmsStorage.SelectByDigest(ctx, entry.digest)
+			if err != nil {
+				logger.Errorf("could not check the public key of %s in KMS storage: %s", entry.keyID, err)
+				failed++
+				continue
+			}
+			if i := slices.IndexFunc(copies, func(k *models.Key) bool { return k.EngineID == entry.engineID }); i >= 0 {
+				logger.Infof("key %s already in KMS storage as %s, with the same public key — skipping", entry.keyID, copies[i].KeyID)
+				skipped++
+				continue
+			}
+		}
+
 		key := &models.Key{
 			KeyID:         entry.keyID,
+			Digest:        entry.digest,
 			EngineID:      entry.engineID,
 			Name:          entry.name,
 			Aliases:       []string{},
@@ -213,6 +289,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 
 		if dryRun {
 			inserted++ // count as "would insert"
+			registered[entry.engineID+"|"+entry.digest] = entry.keyID
 			continue
 		}
 
@@ -222,6 +299,7 @@ func runMigration(ctx context.Context, logger *log.Entry, kmsStorage storage.KMS
 			continue
 		}
 		inserted++
+		registered[entry.engineID+"|"+entry.digest] = entry.keyID
 	}
 
 	action := "inserted"

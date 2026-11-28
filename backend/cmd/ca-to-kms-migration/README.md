@@ -24,13 +24,25 @@ and writes the missing records into the KMS.
 1. Connects to the PostgreSQL database using the standard storage config.
 2. Reads all CA certificates of type `MANAGED` and `IMPORTED_WITH_KEY` from the
    `ca` schema.
-3. Groups certificates that share the same public key (same `subject_key_id`).
-4. For each unique key not already present in the KMS storage:
+3. Groups certificates by `subject_key_id`, in order.
+4. For each key whose public key is not already present in the KMS storage in the same
+   engine, whatever name it is stored under (its `subject_key_id`, the SHA-256 digest of
+   its public key, or the `subject_key_id` of another certificate that shares the key):
    - Derives `algorithm`, `size`, and `public_key` from the X.509 certificate stored in the CA schema.
    - Sets `has_private_key = true` and `engine_id` from the certificate record.
-5. Inserts the record into the KMS `kms_keys` table.
+5. Inserts the record into the KMS `kms_keys` table, with the `subject_key_id` as `key_id` (the name the crypto engine holds the key under) and the SHA-256 digest of its public key as `digest`. The table keeps a public key once per engine, so a key can no longer be registered twice under different names.
 
 Certificates of type `IMPORTED_WITHOUT_KEY` are skipped because there is no private key to register.
+
+A CA imported with its key since the KMS exists (3.7 and later) already has its key in the KMS
+under the digest of its public key, while its `subject_key_id` is the one its issuer wrote. The
+tool recognises that key by its digest and does not register it a second time under the
+`subject_key_id`, which would add a row that no crypto engine holds.
+
+Certificates of one engine can share a public key and carry different `subject_key_id`s, since
+each is whatever its issuer wrote. The KMS stores a public key once per engine, so the tool
+registers it once, under the lowest `subject_key_id`, and the other certificates find it. The
+`ca` migration links them to that row by public key.
 
 The operation is **idempotent**: if a key already exists in the KMS storage it is
 skipped, so the tool can be run multiple times safely.
@@ -99,6 +111,8 @@ The tool exits with code `0` on success and `1` if any key insertion failed, mak
 
 The recommended way to run this migration in a Kubernetes environment is as a Helm `pre-upgrade` hook Job. The Job runs before Helm replaces any existing resources, ensuring the KMS database is populated before the new version of the services starts.
 
+The tool applies no schema migration. The order is this tool, then the `kms`, `ca` and `va` migrations: the `ca` and `va` migrations need the keys it registers. It runs on the `kms` schema of 3.8, which has no `digest`: it finds the keys the KMS already stores by their public key, writes the columns of 3.8, and the `kms` migration computes their digest afterwards. Run again after the upgrade, it reads the migrated schema. Give this Job a hook weight lower than the Job that migrates the schemas.
+
 Create a `templates/ca-to-kms-migration-job.yaml` in your Helm chart:
 
 ```yaml
@@ -108,7 +122,7 @@ metadata:
   name: {{ include "lamassu.fullname" . }}-ca-to-kms-migration
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-10"        # run before other pre-upgrade hooks
+    "helm.sh/hook-weight": "-8"         # before the Job that migrates the schemas
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 3
@@ -185,4 +199,4 @@ A key left as it was keeps its name until the cause in the warning is fixed and 
 go test ./backend/pkg/migration/catokms/...
 ```
 
-The tests use in-memory mock storage implementations and require no external dependencies (no Docker, no database).
+The tests use in-memory mock storage implementations and need no external dependencies, except `TestHasKeyIdentity`, `TestMigrateWithConfigRunsBeforeTheCASchemaIsMigrated` and `TestMigrateWithConfigRunsBeforeTheKMSSchemaIsMigrated`, which start a PostgreSQL container and need Docker.

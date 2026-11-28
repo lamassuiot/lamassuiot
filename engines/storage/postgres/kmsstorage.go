@@ -3,9 +3,12 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/errs"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	"github.com/sirupsen/logrus"
@@ -89,6 +92,35 @@ func (db *PostgresKMSStore) SelectByKeyID(ctx context.Context, keyID string) ([]
 	return keys, nil
 }
 
+func (db *PostgresKMSStore) SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error) {
+	// ids are stored in lowercase: an id in any other case is the same id, and anything that is not a UUID matches nothing
+	if !chelpers.IsKeyUUID(id) {
+		return false, nil, nil
+	}
+
+	var elem models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("id = ?", strings.ToLower(id)).Limit(1).Find(&elem)
+	if tx.Error != nil {
+		return false, nil, tx.Error
+	}
+
+	if tx.RowsAffected == 0 {
+		return false, nil, nil
+	}
+
+	return true, &elem, nil
+}
+
+func (db *PostgresKMSStore) SelectByDigest(ctx context.Context, digest string) ([]*models.Key, error) {
+	var keys []*models.Key
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).Where("digest = ?", digest).Order("engine_id").Find(&keys)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+
+	return keys, nil
+}
+
 func (db *PostgresKMSStore) SelectExistsByName(ctx context.Context, name string) (bool, *models.Key, error) {
 	col := "name"
 	return db.querier.SelectExists(ctx, name, &col)
@@ -110,13 +142,33 @@ func (db *PostgresKMSStore) SelectExistsByAlias(ctx context.Context, alias strin
 	return true, &elem, nil
 }
 
+// Insert stores the key under the digest of its public key, which it derives when the caller has not set it:
+// within an engine a public key is stored once, so a second copy under another name is rejected.
 func (db *PostgresKMSStore) Insert(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	return db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
+	if kmsKey.Digest == "" {
+		digest, err := chelpers.StoredPublicKeyDigest(kmsKey.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("cannot store key %s: %w", kmsKey.KeyID, err)
+		}
+		kmsKey.Digest = digest
+	}
+
+	key, err := db.querier.Insert(ctx, kmsKey, kmsKey.KeyID)
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		// another import of the same key, or of another key under the same name, got there first
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyAlreadyExists, kmsKey.KeyID, kmsKey.EngineID)
+	}
+	return key, err
 }
 
 func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*models.Key, error) {
-	tx := db.querier.Session(&gorm.Session{FullSaveAssociations: true}).Table(kmsTableName).WithContext(ctx).
-		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).Save(kmsKey)
+	// An UPDATE rather than Save, which inserts the key when no row matches (one deleted or renamed meanwhile). Every
+	// column is written, zero values included, except the id and the digest, fixed when the key is stored, and the
+	// key_id and engine_id that name the row.
+	tx := db.querier.Table(kmsTableName).WithContext(ctx).
+		Where("key_id = ? AND engine_id = ?", kmsKey.KeyID, kmsKey.EngineID).
+		Select("*").Omit("id", "digest", "key_id", "engine_id").
+		Updates(kmsKey)
 	if tx.Error != nil {
 		return nil, tx.Error
 	}
@@ -126,6 +178,29 @@ func (db *PostgresKMSStore) Update(ctx context.Context, kmsKey *models.Key) (*mo
 	}
 
 	return kmsKey, nil
+}
+
+// RecordPrivateKey writes has_private_key and an empty name in one statement, rather than saving a copy of the row read
+// earlier, which would put back the values of every column as they were then.
+func (db *PostgresKMSStore) RecordPrivateKey(ctx context.Context, keyID, engineID, name string) (*models.Key, error) {
+	tx := db.db.WithContext(ctx).Exec(`UPDATE kms_keys SET has_private_key = true,
+		name = CASE WHEN COALESCE(name, '') = '' THEN ? ELSE name END
+		WHERE key_id = ? AND engine_id = ?`, name, keyID, engineID)
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	if tx.RowsAffected != 1 {
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyNotFound, keyID, engineID)
+	}
+
+	exists, key, err := db.SelectExistsByKeyID(ctx, keyID, engineID)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, fmt.Errorf("%w: key %s of engine %s", errs.ErrKeyNotFound, keyID, engineID)
+	}
+	return key, nil
 }
 
 func (db *PostgresKMSStore) Delete(ctx context.Context, keyID, engineID string) error {
@@ -183,8 +258,19 @@ func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, n
 			return err
 		}
 
+		// The old name stays as an alias, so that what still refers to the key by it finds it, unless no lookup could
+		// ever reach it: a name shaped like an id or a digest is never read as an alias, and one another key still
+		// carries resolves to that key first.
+		var others int64
+		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id <> ?", oldKeyID, engineID).Count(&others).Error; err != nil {
+			return err
+		}
+		keep := "[]"
+		if others == 0 && !chelpers.IsKeyUUID(oldKeyID) && !chelpers.IsKeyDigest(oldKeyID) {
+			keep = jsonStringArray(oldKeyID)
+		}
 		res := tx.Exec(`UPDATE kms_keys SET key_id = ?, aliases = COALESCE(aliases, '[]'::jsonb) || ?::jsonb
-			WHERE key_id = ? AND engine_id = ?`, newKeyID, jsonStringArray(oldKeyID), oldKeyID, engineID)
+			WHERE key_id = ? AND engine_id = ?`, newKeyID, keep, oldKeyID, engineID)
 		if res.Error != nil {
 			return res.Error
 		}

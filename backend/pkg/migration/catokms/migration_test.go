@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -20,6 +21,7 @@ import (
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
+	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/resources"
 	log "github.com/sirupsen/logrus"
@@ -142,9 +144,28 @@ func (m *mockKMSStorage) SelectByKeyID(_ context.Context, keyID string) ([]*mode
 	return copies, nil
 }
 
+func (m *mockKMSStorage) SelectExistsByID(context.Context, string) (bool, *models.Key, error) {
+	return false, nil, nil
+}
+func (m *mockKMSStorage) SelectByDigest(_ context.Context, digest string) ([]*models.Key, error) {
+	var copies []*models.Key
+	for _, k := range m.existing {
+		if k.Digest == digest {
+			copies = append(copies, k)
+		}
+	}
+	return copies, nil
+}
+
 func (m *mockKMSStorage) Insert(_ context.Context, key *models.Key) (*models.Key, error) {
 	if m.insertErr != nil {
 		return nil, m.insertErr
+	}
+	// kms_keys is unique per (digest, engine_id): a public key is stored once per engine, whatever its name
+	for _, k := range m.existing {
+		if key.Digest != "" && k.Digest == key.Digest && k.EngineID == key.EngineID {
+			return nil, errors.New(`duplicate key value violates unique constraint "kms_keys_digest_engine_key"`)
+		}
 	}
 	m.existing[kmsKeyIndex(key.KeyID, key.EngineID)] = key
 	m.inserted = append(m.inserted, key)
@@ -166,6 +187,9 @@ func (m *mockKMSStorage) SelectExistsByAlias(_ context.Context, _ string) (bool,
 }
 func (m *mockKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
+}
+func (m *mockKMSStorage) RecordPrivateKey(context.Context, string, string, string) (*models.Key, error) {
+	return nil, nil
 }
 func (m *mockKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 func (m *mockKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
@@ -189,6 +213,12 @@ func (c *controlledKMSStorage) SelectExistsByKeyID(ctx context.Context, keyID, e
 func (c *controlledKMSStorage) SelectByKeyID(ctx context.Context, keyID string) ([]*models.Key, error) {
 	return c.inner.SelectByKeyID(ctx, keyID)
 }
+func (c *controlledKMSStorage) SelectExistsByID(ctx context.Context, id string) (bool, *models.Key, error) {
+	return c.inner.SelectExistsByID(ctx, id)
+}
+func (c *controlledKMSStorage) SelectByDigest(ctx context.Context, digest string) ([]*models.Key, error) {
+	return c.inner.SelectByDigest(ctx, digest)
+}
 func (c *controlledKMSStorage) Insert(ctx context.Context, key *models.Key) (*models.Key, error) {
 	c.insertions++
 	if c.insertions > c.failAfter {
@@ -211,6 +241,9 @@ func (c *controlledKMSStorage) SelectExistsByAlias(_ context.Context, _ string) 
 }
 func (c *controlledKMSStorage) Update(_ context.Context, key *models.Key) (*models.Key, error) {
 	return key, nil
+}
+func (c *controlledKMSStorage) RecordPrivateKey(context.Context, string, string, string) (*models.Key, error) {
+	return nil, nil
 }
 func (c *controlledKMSStorage) Delete(_ context.Context, _, _ string) error { return nil }
 func (c *controlledKMSStorage) DeleteWith(_ context.Context, _, _ string, fn func() error) error {
@@ -807,4 +840,113 @@ func TestMigrate_CAStorageError_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error from CA storage failure, got nil")
 	}
+}
+
+// issuerSKI gives a CA the SKI an external issuer would write: the SHA-1 of the public key (RFC 5280),
+// 40 hex characters, which is not the SHA-256 digest the KMS names its keys after.
+func issuerSKI(t *testing.T, ca *models.CACertificate) {
+	t.Helper()
+	der, err := x509.MarshalPKIXPublicKey(ca.Certificate.Certificate.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha1.Sum(der)
+	ca.Certificate.SubjectKeyID = hex.EncodeToString(sum[:])
+}
+
+// A CA imported with its key since the KMS exists has its key stored under the digest of its public key,
+// while its SKI is the one its issuer wrote. Registering the key under the SKI would add a second row for
+// the same key that no crypto engine holds.
+func TestMigrate_ImportedCAWhoseKeyIsStoredUnderItsDigest_IsNotRegisteredAgain(t *testing.T) {
+	ca := newECDSACACert(t, "ca-imported", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "ImportedCA", time.Now())
+	issuerSKI(t, &ca)
+	digest := keyIDFromPub(t, ca.Certificate.Certificate.PublicKey)
+
+	kms := newMockKMSStorage()
+	kms.existing[kmsKeyIndex(digest, "engine-a")] = &models.Key{KeyID: digest, Digest: digest, EngineID: "engine-a", HasPrivateKey: true}
+
+	result, err := Migrate(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 0 || result.Skipped != 1 || result.Failed != 0 {
+		t.Errorf("result: %+v, want {0 1 0}", result)
+	}
+	if len(kms.inserted) != 0 {
+		t.Errorf("the key is already in the KMS under its digest, but %d key(s) were inserted: %+v", len(kms.inserted), kms.inserted[0])
+	}
+}
+
+// A CA imported before the KMS existed has its key in the crypto engine under its SKI and no row in the KMS:
+// the key is still registered under that name, which is how the engine holds it.
+func TestMigrate_CAImportedBeforeTheKMS_IsRegisteredUnderItsSKI(t *testing.T) {
+	ca := newECDSACACert(t, "ca-legacy", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "LegacyCA", time.Now())
+	issuerSKI(t, &ca)
+
+	kms := newMockKMSStorage()
+	result, err := Migrate(context.Background(), silentLogger(), &mockCACertStorage{certs: []models.CACertificate{ca}}, kms, false)
+	if err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if result.Inserted != 1 || len(kms.inserted) != 1 {
+		t.Fatalf("result: %+v, want exactly 1 insertion", result)
+	}
+	if got := kms.inserted[0].KeyID; got != ca.Certificate.SubjectKeyID {
+		t.Errorf("KeyID: got %q, want the SKI %q", got, ca.Certificate.SubjectKeyID)
+	}
+	// the name in the engine is the SKI, but the key is identified by the digest of its public key
+	wantDigest, err := chelpers.PublicKeyDigest((*x509.Certificate)(ca.Certificate.Certificate).PublicKey)
+	if err != nil {
+		t.Fatalf("digest: %s", err)
+	}
+	if got := kms.inserted[0].Digest; got != wantDigest {
+		t.Errorf("Digest: got %q, want %q", got, wantDigest)
+	}
+}
+
+// Two CA certificates can share a public key and carry different SKIs: the SKI is whatever each issuer wrote. The KMS
+// stores a public key once per engine, so the key is registered once and the other certificate finds it, in this run and
+// in the next ones.
+func TestMigrate_CAsSharingAPublicKey_RegisterTheKeyOnce(t *testing.T) {
+	first := newECDSACACert(t, "ca-first", "serial-1", "engine-a", models.CertificateTypeImportedWithKey, elliptic.P256(), "FirstCA", time.Now())
+	second := first
+	second.ID, second.CertificateSerialNumber = "ca-second", "serial-2"
+	second.Certificate.SerialNumber = "serial-2"
+	first.Certificate.SubjectKeyID = "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+	second.Certificate.SubjectKeyID = "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22"
+	cas := &mockCACertStorage{certs: []models.CACertificate{first, second}}
+	kms := newMockKMSStorage()
+
+	t.Run("dry run counts the key once", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, true)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Inserted: 1, Skipped: 1}) {
+			t.Fatalf("result: %+v, want {Inserted:1 Skipped:1 Failed:0}", result)
+		}
+	})
+
+	t.Run("the key is registered once under the lowest SKI", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Inserted: 1, Skipped: 1}) {
+			t.Fatalf("result: %+v, want {Inserted:1 Skipped:1 Failed:0}", result)
+		}
+		if len(kms.inserted) != 1 || kms.inserted[0].KeyID != first.Certificate.SubjectKeyID {
+			t.Fatalf("inserted: %+v, want one key named by the lowest SKI %s", kms.inserted, first.Certificate.SubjectKeyID)
+		}
+	})
+
+	t.Run("a second run changes nothing", func(t *testing.T) {
+		result, err := Migrate(context.Background(), silentLogger(), cas, kms, false)
+		if err != nil {
+			t.Fatalf("unexpected error: %s", err)
+		}
+		if result != (Result{Skipped: 2}) {
+			t.Fatalf("result: %+v, want {Inserted:0 Skipped:2 Failed:0}", result)
+		}
+	})
 }

@@ -62,6 +62,16 @@ func upCertificateKeyForeignKey(ctx context.Context, tx *sql.Tx) error {
 	if !hasKMS {
 		return errors.New("kms schema not found: migrate the kms schema before the ca schema")
 	}
+	// The keys of deleted CAs are registered with their digest, which the kms migrations add: the kms_keys of 3.8 has
+	// none. The catalog is read rather than information_schema, which hides the tables the migration user cannot read.
+	var hasDigest bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM pg_attribute
+		WHERE attrelid = 'kms.kms_keys'::regclass AND attname = 'digest' AND NOT attisdropped)`).Scan(&hasDigest); err != nil {
+		return err
+	}
+	if !hasDigest {
+		return errors.New("kms schema not migrated: kms.kms_keys has no digest column; migrate the kms schema before the ca schema")
+	}
 
 	for _, query := range []string{
 		"ALTER TABLE certificates ALTER COLUMN key_id DROP NOT NULL;",
@@ -256,15 +266,20 @@ func registerPublicKeysOfDeletedCAs(ctx context.Context, tx *sql.Tx) ([][2]strin
 		}
 		// the KMS stores public keys as the base64 of their PEM encoding
 		publicKey := base64.StdEncoding.EncodeToString(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: spki}))
+		digest, err := chelpers.PublicKeyDigest(certificate.PublicKey)
+		if err != nil {
+			logger.Warnf("cannot register the public key of certificate %s: %s", o.serialNumber, err)
+			continue
+		}
 		name := o.commonName
 		if name == "" {
 			name = o.serialNumber
 		}
 
 		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO kms.kms_keys (key_id, engine_id, name, algorithm, size, public_key, has_private_key, creation_ts, metadata, aliases, tags)
-			VALUES ($1, $2, $3, $4, $5, $6, false, now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
-			o.keyID, o.engineID, name, algorithm, size, publicKey); err != nil {
+			INSERT INTO kms.kms_keys (key_id, engine_id, name, algorithm, size, public_key, digest, has_private_key, creation_ts, metadata, aliases, tags)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, false, now(), '{}'::jsonb, '[]'::jsonb, '[]'::jsonb)`,
+			o.keyID, o.engineID, name, algorithm, size, publicKey, digest); err != nil {
 			return nil, fmt.Errorf("register the public key of certificate %s: %w", o.serialNumber, err)
 		}
 		registered = append(registered, [2]string{o.engineID, o.keyID})

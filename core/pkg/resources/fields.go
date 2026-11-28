@@ -41,6 +41,8 @@ var CAFilterableFields = map[string]FilterFieldType{
 }
 
 var KMSFilterableFields = map[string]FilterFieldType{
+	"id":              StringFilterFieldType,
+	"digest":          StringFilterFieldType,
 	"key_id":          StringFilterFieldType,
 	"engine_id":       StringFilterFieldType,
 	"has_private_key": EnumFilterFieldType,

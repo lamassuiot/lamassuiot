@@ -210,6 +210,7 @@ func (cli *httpCAClient) ImportCA(ctx context.Context, input services.ImportCAIn
 		},
 		409: {
 			errs.ErrCAAlreadyExists,
+			errs.ErrKeyAlreadyExists,
 		},
 	})
 	if err != nil {

@@ -42,6 +42,7 @@ func (cli *httpKMSClient) GetKeys(ctx context.Context, input services.GetKeysInp
 
 func (cli *httpKMSClient) GetKey(ctx context.Context, input services.GetKeyInput) (*models.Key, error) {
 	response, err := cli.get[models.Key](ctx, "/v1/keys/"+input.Identifier, nil, map[int][]error{
+		400: {errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest},
 		404: {errs.ErrKeyNotFound},
 	})
 	if err != nil {
@@ -111,7 +112,9 @@ func (cli *httpKMSClient) ImportKey(ctx context.Context, input services.ImportKe
 		Name:       input.Name,
 		Tags:       input.Tags,
 		Metadata:   input.Metadata,
-	}, map[int][]error{})
+	}, map[int][]error{
+		409: {errs.ErrKeyAlreadyExists},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +136,9 @@ func (cli *httpKMSClient) UpdateKeyMetadata(ctx context.Context, input services.
 func (cli *httpKMSClient) UpdateKeyAliases(ctx context.Context, input services.UpdateKeyAliasesInput) (*models.Key, error) {
 	response, err := cli.put[*models.Key](ctx, "/v1/keys/"+input.ID+"/alias", resources.UpdateKeyAliasesBody{
 		Patches: input.Patches,
-	}, map[int][]error{})
+	}, map[int][]error{
+		400: {errs.ErrKeyAliasReservedFormat, errs.ErrKeyAliasCollidesWithKeyID, errs.ErrKeyEngineRequired, errs.ErrValidateBadRequest},
+	})
 	if err != nil {
 		return nil, err
 	}

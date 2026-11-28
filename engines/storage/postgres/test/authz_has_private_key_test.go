@@ -41,7 +41,7 @@ func newHasPrivateKeyFixture(t *testing.T) hasPrivateKeyFixture {
 
 	insertTestKey(t, kms, "engine", "private")
 	_, err = kms.Insert(context.Background(), &models.Key{
-		KeyID: "public", EngineID: "engine", Name: "public", Algorithm: "ECDSA", Size: 256, PublicKey: "pub-public",
+		KeyID: "public", EngineID: "engine", Name: "public", Algorithm: "ECDSA", Size: 256, PublicKey: "pub-public", Digest: fakeDigest("public"),
 		HasPrivateKey: false, Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
 	})
 	require.NoError(t, err)

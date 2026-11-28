@@ -293,6 +293,8 @@
     "relations": [],
     "schema_name": "kms",
     "filterable": [
+      { "column": "id",             "type": "string"    },
+      { "column": "digest",         "type": "string"    },
       { "column": "metadata",       "type": "jsonb"     },
       { "column": "name",           "type": "string"    },
       { "column": "algorithm",      "type": "string"    },

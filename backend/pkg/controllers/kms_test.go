@@ -26,6 +26,8 @@ func TestKMSHandleErrorMapsWrappedErrors(t *testing.T) {
 		"engine required":               {errs.ErrKeyEngineRequired, http.StatusBadRequest},
 		"wrapped validation error":      {fmt.Errorf("invalid: %w", errs.ErrValidateBadRequest), http.StatusBadRequest},
 		"alias colliding with a key_id": {errs.ErrKeyAliasCollidesWithKeyID, http.StatusBadRequest},
+		"alias shaped like an id":       {errs.ErrKeyAliasReservedFormat, http.StatusBadRequest},
+		"key already held":              {fmt.Errorf("import: %w", errs.ErrKeyAlreadyExists), http.StatusConflict},
 		"unknown error":                 {fmt.Errorf("boom"), http.StatusInternalServerError},
 	} {
 		t.Run(name, func(t *testing.T) {

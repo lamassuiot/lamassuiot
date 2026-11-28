@@ -36,6 +36,7 @@ func TestKMSStoreCompositeKeyIdentity(t *testing.T) {
 			Algorithm:     "RSA",
 			Size:          2048,
 			PublicKey:     "pub",
+			Digest:        fakeDigest(keyID),
 			HasPrivateKey: hasPrivateKey,
 			CreationTS:    time.Now().UTC().Truncate(time.Second),
 			Aliases:       []string{},

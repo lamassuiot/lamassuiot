@@ -44,7 +44,7 @@ func TestCertificateViewSelect(t *testing.T) {
 	t.Run("ReferencedKeyWithoutPrivateKey", func(t *testing.T) {
 		_, err := kmsStore.Insert(context.Background(), &models.Key{
 			KeyID: "key-pub", EngineID: "engine-a", Name: "key-pub", Algorithm: "ECDSA", Size: 256,
-			PublicKey: "pub-key-pub", HasPrivateKey: false, Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
+			PublicKey: "pub-key-pub", Digest: fakeDigest("key-pub"), HasPrivateKey: false, Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
 		})
 		require.NoError(t, err)
 		cert := newTestCertificate(t, 102, "engine-a", "key-pub")
@@ -100,7 +100,7 @@ func TestCertificateViewFilterAndCount(t *testing.T) {
 	insertTestKey(t, kmsStore, "engine-a", "key-priv")
 	_, err := kmsStore.Insert(context.Background(), &models.Key{
 		KeyID: "key-pub", EngineID: "engine-a", Name: "key-pub", Algorithm: "ECDSA", Size: 256,
-		PublicKey: "pub-key-pub", HasPrivateKey: false, Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
+		PublicKey: "pub-key-pub", Digest: fakeDigest("key-pub"), HasPrivateKey: false, Aliases: []string{}, Tags: []string{}, Metadata: map[string]any{},
 	})
 	require.NoError(t, err)
 
@@ -239,7 +239,7 @@ func TestCertificateWriteResponsesMatchView(t *testing.T) {
 	_, kms, certs := newKMSAndCertStores(t)
 	ctx := context.Background()
 	insertTestKey(t, kms, "engine", "private")
-	_, err := kms.Insert(ctx, &models.Key{KeyID: "public", EngineID: "engine", PublicKey: "public", HasPrivateKey: false})
+	_, err := kms.Insert(ctx, &models.Key{KeyID: "public", EngineID: "engine", PublicKey: "public", Digest: fakeDigest("public"), HasPrivateKey: false})
 	require.NoError(t, err)
 	for i, tc := range []struct {
 		name, engine, key string
