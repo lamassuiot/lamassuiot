@@ -30,6 +30,8 @@ coverage:
         - shared-http
       crypto-aws:
         target: auto
+        # Coverage varies by about 0.2% between runs with no code change.
+        threshold: 1%
         flags:
         - crypto-aws
       crypto-filesystem:
@@ -70,6 +72,9 @@ coverage:
         - eventbus-aws
       storage-postgres:
         target: auto
+        # Code shared with the Oracle provider moved to core/, where these tests
+        # exercise it without counting it (-coverpkg=./...).
+        threshold: 1%
         flags:
         - storage-postgres
       storage-oracle:
