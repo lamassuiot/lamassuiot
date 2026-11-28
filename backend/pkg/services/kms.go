@@ -637,10 +637,11 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 	// refused before anything is written to the engine. A row named by the digest is the same key when the engine holds
 	// it; otherwise it has the public key only (the key of a deleted CA) or the engine lost its key, and the imported
 	// private key is added to it.
+	// The errors of the storage and of the engine are logged, not returned: their text can carry hosts, URLs or ARNs.
 	existing, err := svc.rowOfPublicKey(ctx, publicKey, engineID)
 	if err != nil {
 		lFunc.Errorf("could not look up the public key of the imported key: %s", err)
-		return nil, err
+		return nil, errors.New("could not look up the public key of the imported key")
 	}
 	if existing != nil && existing.KeyID != existing.Digest {
 		lFunc.Infof("engine %s already stores this public key as key %s", engineID, existing.KeyID)
@@ -650,7 +651,7 @@ func (svc *KMSServiceBackend) ImportKey(ctx context.Context, input services.Impo
 		held, err := engineHolds(ctx, engineInstance, existing.KeyID)
 		if err != nil {
 			lFunc.Errorf("could not tell whether engine %s holds key %s: %s", engineID, existing.KeyID, err)
-			return nil, fmt.Errorf("could not tell whether engine %s holds key %s: %w", engineID, existing.KeyID, err)
+			return nil, errors.New("could not tell whether the crypto engine already holds the key")
 		}
 		if held {
 			lFunc.Infof("engine %s already holds this key as %s", engineID, existing.KeyID)
@@ -776,9 +777,13 @@ func (svc *KMSServiceBackend) rowOfPublicKey(ctx context.Context, publicKey cryp
 // empty name are written: what was saved in the row meanwhile is kept.
 func (svc *KMSServiceBackend) addPrivateKeyToRow(ctx context.Context, lFunc *logrus.Entry, row *models.Key, name string) (*models.Key, error) {
 	updated, err := svc.kmsStorage.RecordPrivateKey(ctx, row.KeyID, row.EngineID, name)
+	if errors.Is(err, errs.ErrKeyNotFound) {
+		lFunc.Errorf("key %s of engine %s was deleted while its private key was imported", row.KeyID, row.EngineID)
+		return nil, err
+	}
 	if err != nil {
 		lFunc.Errorf("could not record the private key of key %s of engine %s: %s", row.KeyID, row.EngineID, err)
-		return nil, err
+		return nil, errors.New("could not record the imported private key")
 	}
 	updated.PKCS11URI = buildPKCS11ID(row.EngineID, row.KeyID, "private")
 	lFunc.Infof("key %s of engine %s now holds the imported private key", row.KeyID, row.EngineID)

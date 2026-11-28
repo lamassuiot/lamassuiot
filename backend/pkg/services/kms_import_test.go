@@ -73,10 +73,15 @@ func (e *importEngine) GetPrivateKeyByID(_ context.Context, name string) (crypto
 // importRows keeps rows by (key_id, engine_id) and enforces the two unique constraints of kms_keys.
 type importRows struct {
 	storage.KMSKeysRepo
-	rows map[string]*models.Key
+	rows      map[string]*models.Key
+	selectErr error // when set, SelectByDigest fails with it, as a database that cannot be reached
+	recordErr error // when set, RecordPrivateKey fails with it
 }
 
 func (r *importRows) SelectByDigest(_ context.Context, digest string) ([]*models.Key, error) {
+	if r.selectErr != nil {
+		return nil, r.selectErr
+	}
 	var out []*models.Key
 	for _, k := range r.rows {
 		if k.Digest == digest {
@@ -108,6 +113,9 @@ func (r *importRows) Insert(_ context.Context, key *models.Key) (*models.Key, er
 }
 
 func (r *importRows) RecordPrivateKey(_ context.Context, keyID, engineID, name string) (*models.Key, error) {
+	if r.recordErr != nil {
+		return nil, r.recordErr
+	}
 	k, ok := r.rows[keyID+"@"+engineID]
 	if !ok {
 		return nil, errs.ErrKeyNotFound
@@ -287,5 +295,58 @@ func TestImportKeyOverAnExistingRowOfItsPublicKey(t *testing.T) {
 		require.NotErrorIs(t, err, errs.ErrKeyAlreadyExists)
 		require.Empty(t, eng.keys, "nothing is written to the engine")
 		require.Equal(t, "original", rows.rows[digest+"@e1"].Name, "the row is left as it was")
+	})
+}
+
+// A failure of the engine or of the storage during an import is logged, and the caller gets a message that names
+// neither: the text of an engine or a database error can carry hosts, URLs or ARNs.
+func TestImportKeyKeepsInternalErrorsFromTheCaller(t *testing.T) {
+	ctx := context.Background()
+	newKey := func() *ecdsa.PrivateKey {
+		k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		return k
+	}
+	const internal = "dial tcp 10.0.12.7:8200: arn:aws:kms:eu-west-1:123456789012:key/secret refused"
+
+	t.Run("the storage fails to look the public key up", func(t *testing.T) {
+		svc, _, rows := newImportService(t)
+		rows.selectErr = errors.New(internal)
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: newKey(), EngineID: "e1"})
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "10.0.12.7")
+	})
+
+	t.Run("the engine cannot say whether it holds the key", func(t *testing.T) {
+		svc, eng, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		eng.getErr = errors.New(internal)
+		eng.listErr = errors.New(internal)
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub, HasPrivateKey: true}
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "10.0.12.7")
+	})
+
+	t.Run("the storage fails to record the private key", func(t *testing.T) {
+		svc, _, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub}
+		rows.recordErr = errors.New(internal)
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "10.0.12.7")
+	})
+
+	t.Run("a row deleted during the import is still reported as not found", func(t *testing.T) {
+		svc, _, rows := newImportService(t)
+		key := newKey()
+		pub, digest := storedPublicKey(t, key)
+		rows.rows[digest+"@e1"] = &models.Key{KeyID: digest, EngineID: "e1", Digest: digest, PublicKey: pub}
+		rows.recordErr = errs.ErrKeyNotFound
+		_, err := svc.ImportKey(ctx, services.ImportKeyInput{PrivateKey: key, EngineID: "e1"})
+		require.ErrorIs(t, err, errs.ErrKeyNotFound)
 	})
 }
