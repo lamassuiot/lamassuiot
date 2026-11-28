@@ -14,6 +14,8 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
+	oracleconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/stretchr/testify/require"
@@ -32,16 +34,42 @@ func kmsSchema(t *testing.T) *gorm.DB {
 
 // registerKeyUnderOtherName is how ca-to-kms-migration leaves a key after the CA schema was migrated: the
 // KMS holds it under another name than the key_id its certificates record. A plain rename of the key would
-// carry the certificates along, so the constraint is dropped while it is renamed and added back as the
-// migration adds it, without checking the rows it finds.
-func registerKeyUnderOtherName(t *testing.T, from, to string) {
+// carry the certificates along, so the constraint is dropped while it is renamed and added back without
+// checking the historical row. The returned function validates the Oracle constraint once normalization
+// has repaired that row; Postgres keeps its existing NOT VALID behavior.
+func registerKeyUnderOtherName(t *testing.T, from, to string) func() {
 	t.Helper()
-	db := kmsSchema(t)
-	require.NoError(t, db.Exec(`ALTER TABLE ca.certificates DROP CONSTRAINT certificates_key_fk`).Error)
-	require.NoError(t, db.Exec(`UPDATE kms.kms_keys SET key_id = ? WHERE key_id = ?`, to, from).Error)
-	require.NoError(t, db.Exec(`ALTER TABLE ca.certificates ADD CONSTRAINT certificates_key_fk
-		FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
-		ON DELETE RESTRICT ON UPDATE CASCADE NOT VALID`).Error)
+	switch serverTest.Storage.Config.Provider {
+	case cconfig.Oracle:
+		cfg, err := cconfig.DecodeStruct[oracleconfig.Config](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := oracle.OpenDatabase(context.Background(), cfg)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, db.Close()) })
+		_, err = db.ExecContext(context.Background(), `ALTER TABLE certificates DROP CONSTRAINT lamassu_cert_key_fk`)
+		require.NoError(t, err)
+		_, err = db.ExecContext(context.Background(), `UPDATE kms_keys SET key_id = :1 WHERE key_id = :2`, to, from)
+		require.NoError(t, err)
+		_, err = db.ExecContext(context.Background(), `ALTER TABLE certificates ADD CONSTRAINT lamassu_cert_key_fk
+			FOREIGN KEY (key_id, engine_id) REFERENCES kms_keys (key_id, engine_id)
+			DEFERRABLE INITIALLY IMMEDIATE ENABLE NOVALIDATE`)
+		require.NoError(t, err)
+		return func() {
+			_, err := db.ExecContext(context.Background(), `ALTER TABLE certificates ENABLE VALIDATE CONSTRAINT lamassu_cert_key_fk`)
+			require.NoError(t, err)
+		}
+	case cconfig.Postgres, "":
+		db := kmsSchema(t)
+		require.NoError(t, db.Exec(`ALTER TABLE ca.certificates DROP CONSTRAINT certificates_key_fk`).Error)
+		require.NoError(t, db.Exec(`UPDATE kms.kms_keys SET key_id = ? WHERE key_id = ?`, to, from).Error)
+		require.NoError(t, db.Exec(`ALTER TABLE ca.certificates ADD CONSTRAINT certificates_key_fk
+			FOREIGN KEY (engine_id, key_id) REFERENCES kms.kms_keys (engine_id, key_id)
+			ON DELETE RESTRICT ON UPDATE CASCADE NOT VALID`).Error)
+		return func() {}
+	default:
+		t.Fatalf("unsupported storage provider for legacy KMS key fixture: %s", serverTest.Storage.Config.Provider)
+		return func() {}
+	}
 }
 
 // filesystemKeyPath is where the filesystem crypto engine keeps a key.
@@ -83,12 +111,13 @@ func TestKeyOfACAImportedBeforeTheKMSIsRenamedToItsDigest(t *testing.T) {
 	require.Equal(t, opensslCAKeyID, ca.Certificate.KeyID)
 
 	// The key as an upgrade from before the KMS leaves it: in the engine and in the KMS under the SKI.
-	registerKeyUnderOtherName(t, opensslCAKeyID, opensslCASKI)
+	validateKeyForeignKey := registerKeyUnderOtherName(t, opensslCAKeyID, opensslCASKI)
 	require.NoError(t, os.Rename(filesystemKeyPath(t, opensslCAKeyID), filesystemKeyPath(t, opensslCASKI)))
 	_, err = serverTest.KMS.Service.GetKey(ctx, services.GetKeyInput{Identifier: keyURI(&ca.Certificate)})
 	require.ErrorIs(t, err, errs.ErrKeyNotFound, "precondition: the CA cannot reach its key")
 
 	require.Equal(t, 1, normalizeKeyNames(t))
+	validateKeyForeignKey()
 	require.Equal(t, 0, normalizeKeyNames(t), "running it again changes nothing")
 
 	require.FileExists(t, filesystemKeyPath(t, opensslCAKeyID))

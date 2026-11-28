@@ -14,6 +14,8 @@ import (
 	chelpers "github.com/lamassuiot/lamassuiot/v4/core/pkg/helpers"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/models"
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/services"
+	"github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle"
+	oracleconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/oracle/config"
 	"github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres"
 	pconfig "github.com/lamassuiot/lamassuiot/v4/engines/storage/postgres/config"
 	"github.com/stretchr/testify/require"
@@ -60,9 +62,7 @@ func TestCRLSettingsUseTheirReferencedSignerCertificate(t *testing.T) {
 	require.NoError(t, crl.CheckSignatureFrom((*x509.Certificate)(issuer.Certificate.Certificate)))
 
 	// The database only checks that the signer and its key exist, not that they fit the CA: generation checks it.
-	db := vaSchemaDB(t)
-	require.NoError(t, db.Exec(`UPDATE crl_settings s SET signer_serial_number = c.serial_number, signer_engine_id = c.engine_id,
-		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = ? AND s.ca_id = ?`, signer.Certificate.SerialNumber, role.CAID).Error)
+	pointCRLSignerAt(t, role.CAID, signer.Certificate.SerialNumber)
 	_, err = serverTest.VA.CRLService.CalculateCRL(ctx, services.CalculateCRLInput{CAID: role.CAID})
 	require.ErrorIs(t, err, errs.ErrValidateBadRequest)
 }
@@ -119,15 +119,48 @@ func waitForCRLSettings(t *testing.T, caID string, ready func(*models.CRLSetting
 	return settings
 }
 
-// vaSchemaDB opens the VA schema of the test database, to set states the VA never reaches on its own.
+// pointCRLSignerAt makes the CRL settings of a CA reference another signer certificate and its key directly in
+// the database, to set states the VA never reaches on its own.
+func pointCRLSignerAt(t *testing.T, caID, signerSerialNumber string) {
+	t.Helper()
+	update := `UPDATE crl_settings s SET signer_serial_number = c.serial_number, signer_engine_id = c.engine_id,
+		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = ? AND s.ca_id = ?`
+	if onOracle() {
+		// Oracle keeps every table in one schema and has no UPDATE ... FROM.
+		update = `UPDATE crl_settings s SET (signer_serial_number, signer_engine_id, signer_key_id) =
+			(SELECT c.serial_number, c.engine_id, c.key_id FROM certificates c WHERE c.serial_number = ?) WHERE s.ca_id = ?`
+	}
+	require.NoError(t, vaSchemaDB(t).Exec(update, signerSerialNumber, caID).Error)
+}
+
+// onOracle tells whether the tests run on the Oracle storage engine, whose SQL differs from PostgreSQL's.
+func onOracle() bool { return serverTest.Storage.Config.Provider == cconfig.Oracle }
+
+// vaSchemaDB opens the database that holds the CRL settings of the test storage engine, to set states the VA never
+// reaches on its own. On Oracle every table is in that one schema.
 func vaSchemaDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
-	require.NoError(t, err)
-	db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA"), cfg, postgres.VA_SCHEMA)
-	require.NoError(t, err)
-	pool, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = pool.Close() })
-	return db
+	switch serverTest.Storage.Config.Provider {
+	case cconfig.Oracle:
+		cfg, err := cconfig.DecodeStruct[oracleconfig.Config](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		pool, err := oracle.OpenDatabase(context.Background(), cfg)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pool.Close() })
+		db, err := oracle.OpenGORM(pool)
+		require.NoError(t, err)
+		return db
+	case cconfig.Postgres, "":
+		cfg, err := cconfig.DecodeStruct[pconfig.PostgresPSEConfig](serverTest.Storage.Config.Config)
+		require.NoError(t, err)
+		db, err := postgres.CreatePostgresDBConnection(chelpers.SetupLogger(cconfig.Info, "Test", "VA"), cfg, postgres.VA_SCHEMA)
+		require.NoError(t, err)
+		pool, err := db.DB()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = pool.Close() })
+		return db
+	default:
+		t.Fatalf("unsupported storage provider for VA tests: %s", serverTest.Storage.Config.Provider)
+		return nil
+	}
 }

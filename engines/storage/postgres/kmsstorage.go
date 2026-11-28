@@ -164,22 +164,15 @@ func (db *PostgresKMSStore) DeleteWith(ctx context.Context, keyID, engineID stri
 // RenameKey runs under a lock shared by every rename, so KMS instances starting at once do not rename the
 // same key twice. The certificates that reference the key follow it through their foreign key, which
 // cascades updates.
+//
+// The engine is renamed last, after the update succeeds: it cannot be rolled back, so any database failure
+// (such as a taken new name, reported as gorm.ErrDuplicatedKey) must happen first. A failure of the engine
+// rename rolls the update back. Only a failure to commit can still leave the engine renamed and the
+// database unchanged.
 func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, newKeyID string, renameInEngine func() error) (bool, error) {
 	renamed := false
 	err := db.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Exec(`SELECT pg_advisory_xact_lock(hashtext('lamassu.kms.rename-key'))`).Error; err != nil {
-			return err
-		}
-
-		var found int64
-		if err := tx.Table(kmsTableName).Where("key_id = ? AND engine_id = ?", oldKeyID, engineID).Count(&found).Error; err != nil {
-			return err
-		}
-		if found == 0 {
-			return nil
-		}
-
-		if err := renameInEngine(); err != nil {
 			return err
 		}
 
@@ -188,7 +181,14 @@ func (db *PostgresKMSStore) RenameKey(ctx context.Context, engineID, oldKeyID, n
 		if res.Error != nil {
 			return res.Error
 		}
-		renamed = res.RowsAffected == 1
+		if res.RowsAffected != 1 {
+			return nil
+		}
+
+		if err := renameInEngine(); err != nil {
+			return err
+		}
+		renamed = true
 		return nil
 	})
 	return renamed && err == nil, err

@@ -47,11 +47,11 @@ func setupIoTEngine(t *testing.T, db *gorm.DB) *engine.Engine {
 }
 
 func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	// "write" and "list" are global actions in the IoT schema for organization.
 	policy := &models.Policy{
@@ -85,11 +85,11 @@ func TestGetGlobalCapabilities_PolicyWithGlobalActions(t *testing.T) {
 }
 
 func TestGetGlobalCapabilities_PolicyWithOnlyAtomicActions(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	// Only atomic actions granted – global capabilities should be empty.
 	policy := &models.Policy{
@@ -118,11 +118,11 @@ func TestGetGlobalCapabilities_PolicyWithOnlyAtomicActions(t *testing.T) {
 }
 
 func TestGetGlobalCapabilities_WildcardActionsIncludesGlobalSubset(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	// Wildcard "*" expands to all actions (atomic + global) – only global should appear.
 	policy := &models.Policy{
@@ -150,11 +150,11 @@ func TestGetGlobalCapabilities_WildcardActionsIncludesGlobalSubset(t *testing.T)
 }
 
 func TestGetGlobalCapabilities_MultipleEntityTypes(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	policy := &models.Policy{
 		ID:   "multi-entity",
@@ -190,11 +190,11 @@ func TestGetGlobalCapabilities_MultipleEntityTypes(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestGetEntityCapabilities_DirectGrants(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	policy := &models.Policy{
 		ID:   "entity-policy",
@@ -233,11 +233,11 @@ func TestGetEntityCapabilities_DirectGrants(t *testing.T) {
 }
 
 func TestGetEntityCapabilities_NoAccess(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	// Policy grants only "org-2", not "org-99".
 	policy := &models.Policy{
@@ -266,11 +266,11 @@ func TestGetEntityCapabilities_NoAccess(t *testing.T) {
 }
 
 func TestGetEntityCapabilities_UnknownSchema(t *testing.T) {
-	postgres, err := testutil.RunPostgresWithMigration("testdata/init.sql")
+	testDB, err := testutil.RunWithMigration("testdata/init.sql")
 	require.NoError(t, err)
-	defer postgres.Cleanup()
+	defer testDB.Cleanup()
 
-	eng := setupIoTEngine(t, postgres.DB)
+	eng := setupIoTEngine(t, testDB.DB)
 
 	registry := engine.NewPolicyRegistry()
 

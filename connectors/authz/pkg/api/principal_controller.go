@@ -33,11 +33,13 @@ func (ctrl *PrincipalController) CreatePrincipal(c *gin.Context) {
 	}
 
 	principal := &models.Principal{
-		ID:         req.ID,
-		Name:       req.Name,
-		Type:       req.Type,
-		AuthConfig: *req.AuthConfig,
-		Active:     active,
+		ID:     req.ID,
+		Name:   req.Name,
+		Type:   req.Type,
+		Active: active,
+	}
+	if req.AuthConfig != nil {
+		principal.AuthConfig = *req.AuthConfig
 	}
 	if req.Description != nil {
 		principal.Description = *req.Description
@@ -83,10 +85,7 @@ func (ctrl *PrincipalController) ListPrincipals(c *gin.Context) {
 
 	principals, nextBookmark, err := ctrl.manager.ListPrincipals(c.Request.Context(), queryParams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to list principals",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyListError(c, "Failed to list principals", err)
 		return
 	}
 
@@ -218,10 +217,7 @@ func (ctrl *PrincipalController) GetPrincipalPolicies(c *gin.Context) {
 
 	grants, nextBookmark, err := ctrl.manager.GetPrincipalPolicies(c.Request.Context(), id, queryParams)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
-			Error:   "Failed to get policies",
-			Details: map[string]string{"error": err.Error()},
-		})
+		replyListError(c, "Failed to get policies", err)
 		return
 	}
 

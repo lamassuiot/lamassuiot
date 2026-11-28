@@ -21,6 +21,9 @@ type GormPrincipalStore struct {
 
 // NewGormPrincipalStore creates the store. Schema is managed by RunMigrations.
 func NewGormPrincipalStore(db *gorm.DB) (*GormPrincipalStore, error) {
+	if db.Dialector.Name() == "oracle" {
+		return &GormPrincipalStore{db: db}, nil
+	}
 	q, err := postgres.TableQuery[models.Principal](nil, db, "principals", "id", models.Principal{})
 	if err != nil {
 		return nil, err
@@ -40,6 +43,11 @@ func (s *GormPrincipalStore) Create(ctx context.Context, p *models.Principal) er
 	}
 	if p.Name == "" {
 		return fmt.Errorf("principal name is required")
+	}
+	// Oracle stores '' as NULL, which violates the NOT NULL type column, while
+	// PostgreSQL would accept it. Reject it up front so both providers agree.
+	if p.Type == "" {
+		return fmt.Errorf("principal type is required")
 	}
 	if err := s.db.WithContext(ctx).Create(p).Error; err != nil {
 		return fmt.Errorf("create principal: %w", err)
@@ -71,6 +79,16 @@ func (s *GormPrincipalStore) GetWithPolicies(ctx context.Context, id string) (*m
 
 func (s *GormPrincipalStore) List(ctx context.Context, queryParams *resources.QueryParameters) ([]*models.Principal, string, error) {
 	var principals []*models.Principal
+	if s.querier == nil {
+		bookmark, err := listAuthzRows(ctx, s.db, &models.Principal{}, "id", queryParams, nil, false, func(p models.Principal) {
+			cp := p
+			principals = append(principals, &cp)
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("list principals: %w", err)
+		}
+		return principals, bookmark, nil
+	}
 	nextBookmark, err := s.querier.SelectAll(ctx, queryParams, []postgres.GormExtraOps{}, false, func(p models.Principal) {
 		cp := p
 		principals = append(principals, &cp)
@@ -216,6 +234,17 @@ func (s *GormPrincipalStore) Has(ctx context.Context, principalID, policyID stri
 
 func (s *GormPrincipalStore) ListForPrincipal(ctx context.Context, principalID string, queryParams *resources.QueryParameters) ([]models.PrincipalPolicy, string, error) {
 	var rows []models.PrincipalPolicy
+	if s.ppQuerier == nil {
+		bookmark, err := listAuthzRows(ctx, s.db, &models.PrincipalPolicy{}, "id", queryParams, func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("principal_id = ?", principalID)
+		}, queryParams == nil, func(pp models.PrincipalPolicy) {
+			rows = append(rows, pp)
+		})
+		if err != nil {
+			return nil, "", fmt.Errorf("list grants for principal: %w", err)
+		}
+		return rows, bookmark, nil
+	}
 	filter := postgres.GormExtraOps{Query: "principal_id = ?", AdditionalWhere: []any{principalID}}
 	// nil queryParams means "load everything" (e.g. internal auth resolution); paginate only when params provided.
 	exhaustive := queryParams == nil

@@ -30,6 +30,8 @@ coverage:
         - shared-http
       crypto-aws:
         target: auto
+        # Coverage varies by about 0.2% between runs with no code change.
+        threshold: 1%
         flags:
         - crypto-aws
       crypto-filesystem:
@@ -70,8 +72,15 @@ coverage:
         - eventbus-aws
       storage-postgres:
         target: auto
+        # Code shared with the Oracle provider moved to core/, where these tests
+        # exercise it without counting it (-coverpkg=./...).
+        threshold: 1%
         flags:
         - storage-postgres
+      storage-oracle:
+        target: auto
+        flags:
+        - storage-oracle
       connector-awsiot:
         target: auto
         flags:
@@ -94,10 +103,20 @@ coverage:
         - backend-assemblers-device-manager
         - backend-assemblers-dms-manager
         - backend-assemblers-alerts
+        - backend-assemblers-oracle-ca
+        - backend-assemblers-oracle-kms
+        - backend-assemblers-oracle-va
+        - backend-assemblers-oracle-device-manager
+        - backend-assemblers-oracle-dms-manager
+        - backend-assemblers-oracle-alerts
     patch: off
 
 # Flag names must match the "tag"/"flags" values uploaded by .github/workflows/ci-test.yaml
 flags:
+  storage-oracle:
+    paths:
+        - engines/storage/oracle/
+    carryforward: true
   core:
     paths:
         - core/
@@ -199,6 +218,30 @@ flags:
         - backend/
     carryforward: true
   backend-assemblers-alerts:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-ca:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-kms:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-va:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-device-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-dms-manager:
+    paths:
+        - backend/
+    carryforward: true
+  backend-assemblers-oracle-alerts:
     paths:
         - backend/
     carryforward: true

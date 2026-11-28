@@ -190,7 +190,7 @@ func TestCertificateViewPreservesAuthorization(t *testing.T) {
 			}
 			filter, err := eng.GetListFilter(context.Background(), policies, "pki", "ca", "certificate")
 			require.NoError(t, err)
-			require.Contains(t, filter, "FROM ca.certificates_view AS certificates", "the engine must read the entity through its view")
+			require.Contains(t, filter, "FROM ca.certificates_view certificates", "the engine must read the entity through its view")
 
 			ctx := context.WithValue(context.Background(), authzsdk.AuthzQueryKey, filter)
 			for _, exhaustive := range []bool{false, true} {
