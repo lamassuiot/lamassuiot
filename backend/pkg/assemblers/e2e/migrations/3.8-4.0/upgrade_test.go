@@ -37,7 +37,7 @@ import (
 // They run one after the other, because postgres.NewMigrator resets goose's process-wide registry.
 //
 //  1. 3.8 state, written with SQL: A, B and C with their va_role and the last CRL 3.8 published, and the key files.
-//  2. Upgrade in the production order kms -> ca-to-kms-migration -> ca -> va. Right after it, kms_keys holds exactly
+//  2. Upgrade in the production order ca-to-kms-migration -> kms -> ca -> va. Right after it, kms_keys holds exactly
 //     A, B and C, with no ghost, and every row has its engine file and every file its row. B is still named by its
 //     SKI, and certificates and CRL signers reference the rows.
 //  3. The KMS starts with migrate_keys_format. B is renamed to its digest in the engine and in its row, keeps its id,
@@ -58,14 +58,14 @@ func TestUpgrade38To40(t *testing.T) {
 			require.Equal(t, map[variant]int{variantClean: 2, variantGhost: 4}[v], e.kmsRowCount(), "kms_keys rows in 3.8")
 			require.Equal(t, sortedStrings(a.Digest, skiB, c.Digest), e.engineFiles(), "engine files in 3.8")
 
-			// Phase 2: the upgrade, in the production order kms -> ca-to-kms-migration -> ca -> va.
-			e.migrate(postgres.KMS_SCHEMA)
+			// Phase 2: the upgrade, in the production order ca-to-kms-migration -> kms -> ca -> va.
 			res := e.runTool()
+			e.migrate(postgres.KMS_SCHEMA)
 			e.migrate(postgres.CA_SCHEMA)
 			e.migrate(postgres.VA_SCHEMA)
 			require.Equal(t, map[variant]catokms.Result{
-				variantClean: {Inserted: 1, Skipped: 2}, // B inserted; A found by its digest, C by its key_id
-				variantGhost: {Skipped: 3},              // the kms migration already removed the ghost
+				variantClean: {Inserted: 1, Skipped: 2}, // B inserted; A found by its public key, C by its key_id
+				variantGhost: {Skipped: 3},              // B and the ghost of A found by their SKI: the kms migration then removes the ghost
 			}[v], res)
 
 			// Moment 1: right after the migrations.

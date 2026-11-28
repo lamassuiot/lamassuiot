@@ -7,7 +7,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -55,7 +54,9 @@ func Migrate(ctx context.Context, logger *log.Entry, caStorage CALister, kmsStor
 // Lamassu service config.
 //
 // CAs are read from the ca tables, not through the CA repository: the tool runs before the ca
-// migrations, which need the keys it registers, and the repository reads what they create.
+// migrations, which need the keys it registers, and the repository reads what they create. For the
+// same reason it runs on the kms schema of 3.8: the upgrade order is this tool, then the kms, ca and
+// va migrations. Run again after the upgrade, it reads the migrated kms schema.
 func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconfig.PluggableStorageEngine, dryRun bool) (Result, error) {
 	engine, err := storagebuilder.BuildStorageEngine(logger, storageConf)
 	if err != nil {
@@ -77,31 +78,36 @@ func MigrateWithConfig(ctx context.Context, logger *log.Entry, storageConf cconf
 	if err != nil {
 		return Result{}, fmt.Errorf("connect to KMS storage: %w", err)
 	}
-	if err := checkKMSSchema(kmsDB); err != nil {
+	identity, err := hasKeyIdentity(kmsDB)
+	if err != nil {
 		return Result{}, err
 	}
-	kmsStorage, err := engine.GetKMSStorage()
-	if err != nil {
-		return Result{}, fmt.Errorf("get KMS storage: %w", err)
+	var kmsStorage storage.KMSKeysRepo
+	if identity {
+		kmsStorage, err = engine.GetKMSStorage()
+		if err != nil {
+			return Result{}, fmt.Errorf("get KMS storage: %w", err)
+		}
+	} else {
+		logger.Infof("the kms schema has no key identity yet: registering the keys in the kms schema of 3.8, whose migration computes their digest")
+		kmsStorage, err = newLegacyKMSKeys(ctx, kmsDB)
+		if err != nil {
+			return Result{}, err
+		}
 	}
 
 	return Migrate(ctx, logger, caStorage, kmsStorage, dryRun)
 }
 
-// checkKMSSchema refuses a kms schema that has not been migrated to the key identity (kms_keys.digest): the tool
-// registers every key with its digest and applies no migration itself, so against an older schema each insert would
-// fail with a SQL error. The required order is kms -> this tool -> ca -> va.
-func checkKMSSchema(db *gorm.DB) error {
+// hasKeyIdentity reports whether the kms schema has the key identity migration (kms_keys.digest), which the KMS
+// repository needs. Without it the tool writes the columns of the kms schema of 3.8.
+func hasKeyIdentity(db *gorm.DB) (bool, error) {
 	var migrated bool
 	if err := db.Raw(`SELECT EXISTS (SELECT 1 FROM information_schema.columns
 		WHERE table_schema = current_schema() AND table_name = 'kms_keys' AND column_name = 'digest')`).Scan(&migrated).Error; err != nil {
-		return fmt.Errorf("check the kms schema: %w", err)
+		return false, fmt.Errorf("check the kms schema: %w", err)
 	}
-	if !migrated {
-		return errors.New("the kms schema has not been migrated: kms_keys has no digest column. Apply the kms migrations " +
-			"(goose-lamassu, schema kms) before this tool; the required order is kms, ca-to-kms-migration, ca, va")
-	}
-	return nil
+	return migrated, nil
 }
 
 // ---------------------------------------------------------------------------

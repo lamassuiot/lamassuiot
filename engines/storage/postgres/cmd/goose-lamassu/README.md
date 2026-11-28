@@ -25,10 +25,10 @@ goose-lamassu DBSTRING COMMAND [ARGS...]
 
 ## Migration order
 
-Migrate **`kms` → `ca` → `va`**, one at a time. Never run them in parallel.
+When upgrading from 3.8, run [`ca-to-kms-migration`](../../../../../backend/cmd/ca-to-kms-migration/README.md) first: it registers in the KMS the keys of the existing CAs, which the `ca` migration needs, and it runs on the `kms` and `ca` schemas of 3.8. Then migrate **`kms` → `ca` → `va`**, one at a time. Never run them in parallel.
 
 1. `kms`
-2. `ca`: certificates reference KMS keys. If `kms` is not migrated yet, it fails with `kms schema not found: migrate the kms schema before the ca schema`. Register legacy keys in KMS before running it with [`ca-to-kms-migration`](../../../../../backend/cmd/ca-to-kms-migration/README.md), which runs on the `ca` schema of earlier versions.
+2. `ca`: certificates reference KMS keys. If `kms` is not migrated yet, it fails with `kms schema not found: migrate the kms schema before the ca schema`. If a CA key is not in the KMS, it fails with `unresolved certificate key`: run `ca-to-kms-migration` and migrate again.
 3. `va`: CRL settings reference their signer certificates and KMS keys and are keyed by CA ID, so it needs both `kms` and `ca` migrated. Before running it, every SKI must belong to a single CA, every VA role must have a signer certificate with a key, and no CA ID may contain `/` or equal the SKI of another role; the migration fails and lists the affected rows otherwise. If `va` is not migrated, CRL settings and CRL requests fail with `relation "crl_settings" does not exist`.
 
 The foreign keys validate existing rows.

@@ -41,9 +41,9 @@ func TestUpgrade38To40OfACADeletedIn38(t *testing.T) {
 	require.Equal(t, 2, e.kmsRowCount(), "kms_keys rows in 3.8: the digest of A and its ghost")
 	require.Equal(t, []string{a.Digest}, e.engineFiles(), "engine files in 3.8")
 
-	// Phase 2: the upgrade, in the production order kms -> ca-to-kms-migration -> ca -> va.
-	e.migrate(postgres.KMS_SCHEMA)
+	// Phase 2: the upgrade, in the production order ca-to-kms-migration -> kms -> ca -> va.
 	require.Equal(t, catokms.Result{}, e.runTool(), "the tool reads existing CAs only, and A is deleted")
+	e.migrate(postgres.KMS_SCHEMA)
 	e.migrate(postgres.CA_SCHEMA)
 	e.migrate(postgres.VA_SCHEMA)
 
@@ -87,9 +87,9 @@ func TestUpgrade38To40OfAPreKMSCADeletedIn38(t *testing.T) {
 	require.Zero(t, e.kmsRowCount(), "kms_keys rows in 3.8")
 	require.Empty(t, e.engineFiles(), "engine files in 3.8")
 
-	// Phase 2: the upgrade, in the production order kms -> ca-to-kms-migration -> ca -> va.
-	e.migrate(postgres.KMS_SCHEMA)
+	// Phase 2: the upgrade, in the production order ca-to-kms-migration -> kms -> ca -> va.
 	require.Equal(t, catokms.Result{}, e.runTool(), "the tool reads existing CAs only, and B is deleted")
+	e.migrate(postgres.KMS_SCHEMA)
 	e.migrate(postgres.CA_SCHEMA)
 	e.migrate(postgres.VA_SCHEMA)
 

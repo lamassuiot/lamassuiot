@@ -111,7 +111,7 @@ The tool exits with code `0` on success and `1` if any key insertion failed, mak
 
 The recommended way to run this migration in a Kubernetes environment is as a Helm `pre-upgrade` hook Job. The Job runs before Helm replaces any existing resources, ensuring the KMS database is populated before the new version of the services starts.
 
-The tool applies no schema migration and registers every key with its `digest`, so it needs the `kms` schema already migrated; it stops with an error that says so otherwise. It must also run before the `ca` and `va` migrations, which need the keys it registers. The order is `kms` migration, this tool, `ca` migration, `va` migration. A chart that runs a single hook to migrate every schema cannot honour it: migrate the schemas one at a time (`goose-lamassu ... search_path=kms up`, and so on) and give this Job a hook weight between the `kms` migration and the `ca` one.
+The tool applies no schema migration. The order is this tool, then the `kms`, `ca` and `va` migrations: the `ca` and `va` migrations need the keys it registers. It runs on the `kms` schema of 3.8, which has no `digest`: it finds the keys the KMS already stores by their public key, writes the columns of 3.8, and the `kms` migration computes their digest afterwards. Run again after the upgrade, it reads the migrated schema. Give this Job a hook weight lower than the Job that migrates the schemas.
 
 Create a `templates/ca-to-kms-migration-job.yaml` in your Helm chart:
 
@@ -122,7 +122,7 @@ metadata:
   name: {{ include "lamassu.fullname" . }}-ca-to-kms-migration
   annotations:
     "helm.sh/hook": pre-upgrade
-    "helm.sh/hook-weight": "-8"         # after the kms schema migration, before the ca and va ones
+    "helm.sh/hook-weight": "-8"         # before the Job that migrates the schemas
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
 spec:
   backoffLimit: 3
@@ -199,4 +199,4 @@ A key left as it was keeps its name until the cause in the warning is fixed and 
 go test ./backend/pkg/migration/catokms/...
 ```
 
-The tests use in-memory mock storage implementations and need no external dependencies, except `TestCheckKMSSchema` and `TestMigrateWithConfigRunsBeforeTheCASchemaIsMigrated`, which start a PostgreSQL container and need Docker.
+The tests use in-memory mock storage implementations and need no external dependencies, except `TestHasKeyIdentity`, `TestMigrateWithConfigRunsBeforeTheCASchemaIsMigrated` and `TestMigrateWithConfigRunsBeforeTheKMSSchemaIsMigrated`, which start a PostgreSQL container and need Docker.
