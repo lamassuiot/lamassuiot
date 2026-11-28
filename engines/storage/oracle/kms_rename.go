@@ -13,9 +13,10 @@ import (
 
 var kmsKeyPK = regexp.MustCompile(`(?i)\([^)]*\blamassu_kms_keys_pk\)`)
 
-// renameKey updates the composite key and its certificate references under a
-// shared database lock. The certificate FK must be DEFERRABLE and named
-// lamassu_cert_key_fk. The migration must seed the kms_rename lock row.
+// renameKey updates the composite key and its references from certificates
+// and CRL settings under a shared database lock: Oracle has no ON UPDATE
+// CASCADE. Both FKs, lamassu_cert_key_fk and lamassu_crl_signer_key_fk, must
+// be DEFERRABLE. The migration must seed the kms_rename lock row.
 //
 // The engine is renamed last, after both updates succeed: it cannot be rolled
 // back, so any database failure (such as a taken target key) must happen
@@ -47,8 +48,8 @@ func renameKey(ctx context.Context, db *gorm.DB, engineID, oldKeyID, newKeyID st
 		if err != nil {
 			return err
 		}
-		// Certificates still reference the old key until the second update.
-		if err := tx.Exec("SET CONSTRAINTS lamassu_cert_key_fk DEFERRED").Error; err != nil {
+		// Certificates and CRL settings still reference the old key until they are updated below.
+		if err := tx.Exec("SET CONSTRAINTS lamassu_cert_key_fk, lamassu_crl_signer_key_fk DEFERRED").Error; err != nil {
 			return err
 		}
 		result := tx.Exec("UPDATE kms_keys SET key_id = ?, aliases = ? WHERE key_id = ? AND engine_id = ?", newKeyID, string(encoded), oldKeyID, engineID)
@@ -62,6 +63,9 @@ func renameKey(ctx context.Context, db *gorm.DB, engineID, oldKeyID, newKeyID st
 			return fmt.Errorf("rename key: expected one key, updated %d", result.RowsAffected)
 		}
 		if err := tx.Exec("UPDATE certificates SET key_id = ? WHERE key_id = ? AND engine_id = ?", newKeyID, oldKeyID, engineID).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("UPDATE crl_settings SET signer_key_id = ? WHERE signer_key_id = ? AND signer_engine_id = ?", newKeyID, oldKeyID, engineID).Error; err != nil {
 			return err
 		}
 		if err := renameInEngine(); err != nil {

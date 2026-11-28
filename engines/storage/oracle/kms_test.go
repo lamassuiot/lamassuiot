@@ -44,7 +44,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = pool.Close() })
 	var existing int
-	if err := pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_tables WHERE table_name IN ('KMS_KEYS','CERTIFICATES','ISSUANCE_PROFILES','VA_ROLE','DMS','EVENTS','SUBSCRIPTIONS','DEVICES','DEVICE_EVENTS','DEVICE_GROUPS','LAMASSU_LOCKS','LAMASSU_SCHEMA_MIGRATIONS','LAMASSU_MIGRATION_LOCK')`).Scan(&existing); err != nil || existing != 0 {
+	if err := pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM user_tables WHERE table_name IN ('KMS_KEYS','CERTIFICATES','ISSUANCE_PROFILES','CRL_SETTINGS','DMS','EVENTS','SUBSCRIPTIONS','DEVICES','DEVICE_EVENTS','DEVICE_GROUPS','LAMASSU_LOCKS','LAMASSU_SCHEMA_MIGRATIONS','LAMASSU_MIGRATION_LOCK')`).Scan(&existing); err != nil || existing != 0 {
 		t.Fatalf("test requires an empty schema: existing=%d error=%v", existing, err)
 	}
 	if engine, err := NewStorageEngine(ctx, cfg); err == nil {
@@ -54,7 +54,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	t.Cleanup(func() {
 		_, _ = pool.ExecContext(context.Background(), "DROP VIEW certificates_view")
 		_, _ = pool.ExecContext(context.Background(), "DROP TYPE lamassu_json_sort_key FORCE")
-		for _, name := range []string{"device_groups", "device_events", "devices", "subscriptions", "events", "dms", "va_role", "issuance_profiles", "ca_certificates", "certificates", "kms_keys", "lamassu_locks", "lamassu_schema_migrations", "lamassu_migration_lock"} {
+		for _, name := range []string{"device_groups", "device_events", "devices", "subscriptions", "events", "dms", "crl_settings", "issuance_profiles", "ca_certificates", "certificates", "kms_keys", "lamassu_locks", "lamassu_schema_migrations", "lamassu_migration_lock"} {
 			_, _ = pool.ExecContext(context.Background(), "DROP TABLE "+name+" PURGE")
 		}
 	})
@@ -90,9 +90,9 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	if err != nil || certRepo == nil {
 		t.Fatalf("certificate repository: %v", err)
 	}
-	vaRepo, err := engine.GetVARoleStorage()
-	if err != nil || vaRepo == nil {
-		t.Fatalf("VA repository: %v", err)
+	crlRepo, err := engine.GetCRLSettingsStorage()
+	if err != nil || crlRepo == nil {
+		t.Fatalf("CRL settings repository: %v", err)
 	}
 	guarded := context.WithValue(ctx, authzsdk.AuthzQueryKey, "SELECT * FROM devices WHERE 1=0")
 	if count, err := deviceRepo.Count(guarded, nil); err != nil || count != 0 {
@@ -140,7 +140,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	jsonSortRepos := []storage.KMSKeysRepo{store}
 	kmsContractRepos := []kmsContractRepository{{name: "oracle", repo: store}}
 	caContractRepos := []caContractRepositories{{name: "oracle", kms: kmsRepo, cert: certRepo, ca: caRepo}}
-	vaContractRepos := []vaContractRepositories{{name: "oracle", db: db, kms: kmsRepo, cert: certRepo, va: vaRepo}}
+	vaContractRepos := []vaContractRepositories{{name: "oracle", kms: kmsRepo, cert: certRepo, crl: crlRepo}}
 	if pgHost != "" {
 		logger := logrus.NewEntry(logrus.New())
 		pgCfg := pgconfig.PostgresPSEConfig{
@@ -192,11 +192,11 @@ func TestOracleKMSPointOperations(t *testing.T) {
 		if sqlDB, err := pgVADB.DB(); err == nil {
 			t.Cleanup(func() { _ = sqlDB.Close() })
 		}
-		pgVARepo, err := pgstorage.NewVARepository(logger, pgVADB)
+		pgCRLRepo, err := pgstorage.NewCRLSettingsRepository(logger, pgVADB)
 		if err != nil {
-			t.Fatalf("create PostgreSQL VA repository: %v", err)
+			t.Fatalf("create PostgreSQL CRL settings repository: %v", err)
 		}
-		vaContractRepos = append(vaContractRepos, vaContractRepositories{name: "postgres", db: pgVADB, kms: pgRepo, cert: pgCertRepo, va: pgVARepo})
+		vaContractRepos = append(vaContractRepos, vaContractRepositories{name: "postgres", kms: pgRepo, cert: pgCertRepo, crl: pgCRLRepo})
 	}
 	testJSONPathFilterContract(t, ctx, jsonSortRepos...)
 	testOracleJSONPathSort(t, ctx, jsonSortRepos...)
@@ -204,7 +204,7 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	testKMSRepositoryContracts(t, ctx, kmsContractRepos...)
 	testEmptyStringFilterContract(t, ctx, kmsContractRepos...)
 	testCAAndCertificateContracts(t, ctx, caContractRepos...)
-	testVARepositoryContracts(t, ctx, vaContractRepos...)
+	testCRLSettingsRepositoryContracts(t, ctx, vaContractRepos...)
 	var jsonPathKeys []string
 	_, err = store.SelectAll(ctx, storage.StorageListRequest[models.Key]{
 		QueryParams: &resources.QueryParameters{PageSize: 10, Filters: []resources.FilterOption{
@@ -356,7 +356,6 @@ func TestOracleKMSPointOperations(t *testing.T) {
 	if found, stored, err := certStore.SelectExistsBySerialNumber(ctx, "two"); err != nil || !found || stored.Certificate == nil || !reflect.DeepEqual(stored.Certificate.Raw, der) || !stored.HasPrivateKey || stored.KeyID != "id" || stored.Subject.CommonName != "device" || stored.Metadata["purpose"] != "test" {
 		t.Fatalf("certificate round trip: found=%v certificate=%+v err=%v", found, stored, err)
 	}
-	testVARoles(t, ctx, db, certStore, now)
 	directCARepo := &caStore{db: db}
 	ca := &models.CACertificate{ID: "ca-two", CertificateSerialNumber: "two", CreationTS: now, Level: 2, ProfileID: "profile", Metadata: map[string]any{"owner": "test"}}
 	if created, err := directCARepo.Insert(ctx, ca); err != nil || created.Certificate.SerialNumber != "two" || !created.Certificate.HasPrivateKey {

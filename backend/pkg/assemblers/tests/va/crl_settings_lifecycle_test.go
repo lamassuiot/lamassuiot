@@ -23,7 +23,11 @@ func waitForStatus(t *testing.T, caID string, status models.CRLSettingsStatus) *
 func kmsKeyExists(t *testing.T, cert models.Certificate) bool {
 	t.Helper()
 	var n int64
-	require.NoError(t, vaSchemaDB(t).Raw(`SELECT count(*) FROM kms.kms_keys WHERE engine_id = ? AND key_id = ?`, cert.EngineID, cert.KeyID).Scan(&n).Error)
+	table := "kms.kms_keys"
+	if onOracle() {
+		table = "kms_keys"
+	}
+	require.NoError(t, vaSchemaDB(t).Raw(`SELECT count(*) FROM `+table+` WHERE engine_id = ? AND key_id = ?`, cert.EngineID, cert.KeyID).Scan(&n).Error)
 	return n > 0
 }
 
@@ -179,8 +183,13 @@ func TestReconciliationFinalizesTheSettingsOfARevokedCA(t *testing.T) {
 	require.NoError(t, err)
 	final := waitForStatus(t, ca.ID, models.CRLSettingsFinal)
 	// Back to ACTIVE, as if the VA had never seen the revocation.
-	require.NoError(t, vaSchemaDB(t).Exec(`UPDATE crl_settings s SET status = 'ACTIVE', signer_engine_id = c.engine_id,
-		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = s.signer_serial_number AND s.ca_id = ?`, ca.ID).Error)
+	reactivate := `UPDATE crl_settings s SET status = 'ACTIVE', signer_engine_id = c.engine_id,
+		signer_key_id = c.key_id FROM ca.certificates c WHERE c.serial_number = s.signer_serial_number AND s.ca_id = ?`
+	if onOracle() {
+		reactivate = `UPDATE crl_settings s SET (status, signer_engine_id, signer_key_id) =
+			(SELECT 'ACTIVE', c.engine_id, c.key_id FROM certificates c WHERE c.serial_number = s.signer_serial_number) WHERE s.ca_id = ?`
+	}
+	require.NoError(t, vaSchemaDB(t).Exec(reactivate, ca.ID).Error)
 
 	got, err := serverTest.VA.CRLService.ReconcileCRLSettings(ctx, services.ReconcileCRLSettingsInput{CAID: ca.ID})
 	require.NoError(t, err)

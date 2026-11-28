@@ -123,7 +123,8 @@ var certKeyConstraint = regexp.MustCompile(`(?i)\([^)]*\blamassu_cert_key_fk\)`)
 
 func keyDeleteError(err error) error {
 	var sqlErr oracleerrors.SQLError
-	if errors.As(err, &sqlErr) && sqlErr.ErrorCode() == "ORA-02292" && certKeyConstraint.MatchString(sqlErr.Error()) {
+	if errors.As(err, &sqlErr) && sqlErr.ErrorCode() == "ORA-02292" &&
+		(certKeyConstraint.MatchString(sqlErr.Error()) || crlSettingsSignerKeyFK.MatchString(sqlErr.Error())) {
 		return errs.ErrKeyInUse
 	}
 	return err

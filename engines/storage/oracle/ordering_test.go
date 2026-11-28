@@ -67,7 +67,7 @@ func TestKeysetAfterMatchesOrderKeys(t *testing.T) {
 func TestBinarySortIndexesCoverKeysetColumns(t *testing.T) {
 	keysets := map[string][]string{
 		"certificates": {"serial_number"}, "ca_certificates": {"id"}, "kms_keys": {"key_id", "engine_id"},
-		"issuance_profiles": {"id"}, "va_role": {"ca_ski"}, "dms": {"id"}, "events": {"event_type"},
+		"issuance_profiles": {"id"}, "crl_settings": {"ca_id"}, "dms": {"id"}, "events": {"event_type"},
 		"subscriptions": {"id"}, "devices": {"id"}, "device_events": {"id"}, "device_groups": {"id"},
 	}
 	index := regexp.MustCompile(`^CREATE INDEX \w+ ON (\w+) \((.*)\)$`)
@@ -103,14 +103,14 @@ func TestTextSortColumnsMatchMigrations(t *testing.T) {
 	sortable := map[string]struct{}{}
 	for _, fields := range []map[string]struct{}{
 		certificateSortFields, caSortFields, kmsSortFields, deviceSortFields, deviceEventSortFields, groupSortFields,
-		dmsSortFields, eventSortFields, subscriptionSortFields, profileFields, vaFields,
+		dmsSortFields, eventSortFields, subscriptionSortFields, profileFields, crlSettingsFields,
 	} {
 		for name := range fields {
 			sortable[name] = struct{}{}
 		}
 	}
 	// Keyset columns passed to listRows by the repositories.
-	for _, name := range []string{"id", "serial_number", "key_id", "engine_id", "event_type", "ca_ski"} {
+	for _, name := range []string{"id", "serial_number", "key_id", "engine_id", "event_type", "ca_id"} {
 		sortable[name] = struct{}{}
 	}
 

@@ -178,7 +178,8 @@ Las relaciones actuales atraviesan dominios:
 - Certificados referencian claves KMS.
 - La vista [certificates_view](../engines/storage/postgres/migrations/ca/20261104130000_certificates_view.sql)
   deriva `has_private_key` mediante KMS.
-- VA referencia el certificado firmante de CRL.
+- Los ajustes de CRL (`crl_settings`) de VA referencian el certificado firmante
+  y, mientras están `ACTIVE`, retienen su clave KMS.
 
 Si el aislamiento operativo por servicio exige esquemas separados, la
 alternativa es usar propietarios explícitos y permisos entre ellos. En
@@ -290,7 +291,9 @@ atomicidad distribuida que no existe.
   [device_groups.go](../engines/storage/postgres/device_groups.go), con pruebas
   de jerarquías y concurrencia.
 - Preservar el borrado en cascada de eventos de dispositivos.
-- Reproducir la protección del certificado firmante de VA.
+- Reproducir la protección del certificado firmante de CRL y la retención de
+  su clave KMS. Oracle no tiene `ON UPDATE CASCADE`: renombrar una clave
+  actualiza también `crl_settings`, con la FK diferible.
 - Traducir errores de unicidad y foreign key a los mismos errores de dominio,
   identificando la restricción concreta cuando sea necesario.
 
@@ -328,7 +331,7 @@ histórico PostgreSQL. Debe incluir:
 3. Vistas y relaciones entre dominios.
 4. Metadatos de versión y comprobación al arrancar.
 5. Orden de dependencias: por ejemplo, KMS antes de la FK de certificados;
-   certificados antes de la FK de VA.
+   certificados y claves antes de las FK de `crl_settings`.
 
 El migrador debe contemplar que el DDL de Oracle tiene efectos transaccionales
 distintos a PostgreSQL: usar pasos verificables, control de versión, bloqueo

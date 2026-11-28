@@ -32,6 +32,7 @@ func TestOracleRenameKey(t *testing.T) {
 		{`CREATE TABLE lamassu_locks (lock_id VARCHAR2(64) PRIMARY KEY)`, `DROP TABLE lamassu_locks PURGE`},
 		{`CREATE TABLE kms_keys (key_id VARCHAR2(128) NOT NULL, engine_id VARCHAR2(128) NOT NULL, aliases JSON, CONSTRAINT lamassu_kms_keys_pk PRIMARY KEY(key_id, engine_id))`, `DROP TABLE kms_keys PURGE`},
 		{`CREATE TABLE certificates (serial_number VARCHAR2(128) PRIMARY KEY, key_id VARCHAR2(128), engine_id VARCHAR2(128), CONSTRAINT lamassu_cert_key_fk FOREIGN KEY(key_id, engine_id) REFERENCES kms_keys(key_id, engine_id) DEFERRABLE INITIALLY IMMEDIATE)`, `DROP TABLE certificates PURGE`},
+		{`CREATE TABLE crl_settings (ca_id VARCHAR2(128) PRIMARY KEY, signer_key_id VARCHAR2(128), signer_engine_id VARCHAR2(128), CONSTRAINT lamassu_crl_signer_key_fk FOREIGN KEY(signer_key_id, signer_engine_id) REFERENCES kms_keys(key_id, engine_id) DEFERRABLE INITIALLY IMMEDIATE)`, `DROP TABLE crl_settings PURGE`},
 	} {
 		if _, err := pool.ExecContext(ctx, step.create); err != nil {
 			t.Fatal(err)
@@ -48,6 +49,8 @@ func TestOracleRenameKey(t *testing.T) {
 		`INSERT INTO kms_keys VALUES ('old', 'other', '[]')`,
 		`INSERT INTO certificates VALUES ('one', 'old', 'engine')`,
 		`INSERT INTO certificates VALUES ('two', 'old', 'other')`,
+		`INSERT INTO crl_settings VALUES ('ca-one', 'old', 'engine')`,
+		`INSERT INTO crl_settings VALUES ('ca-two', 'old', 'other')`,
 	} {
 		if _, err := pool.ExecContext(ctx, query); err != nil {
 			t.Fatal(err)
@@ -65,6 +68,9 @@ func TestOracleRenameKey(t *testing.T) {
 	var keyID string
 	if err := pool.QueryRowContext(ctx, `SELECT key_id FROM certificates WHERE serial_number = 'one'`).Scan(&keyID); err != nil || keyID != "old" {
 		t.Fatalf("callback failure must roll back references: %q, %v", keyID, err)
+	}
+	if err := pool.QueryRowContext(ctx, `SELECT signer_key_id FROM crl_settings WHERE ca_id = 'ca-one'`).Scan(&keyID); err != nil || keyID != "old" {
+		t.Fatalf("callback failure must roll back CRL settings references: %q, %v", keyID, err)
 	}
 	var oldKeys int
 	if err := pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM kms_keys WHERE key_id = 'old' AND engine_id = 'engine'`).Scan(&oldKeys); err != nil || oldKeys != 1 {
@@ -124,6 +130,12 @@ func TestOracleRenameKey(t *testing.T) {
 	var staleReferences int
 	if err := pool.QueryRowContext(ctx, `SELECT COUNT(*) FROM certificates WHERE key_id = 'old' AND engine_id = 'engine'`).Scan(&staleReferences); err != nil || staleReferences != 0 {
 		t.Fatalf("stale certificate references after concurrent rename: count=%d error=%v", staleReferences, err)
+	}
+	if err := pool.QueryRowContext(ctx, `SELECT signer_key_id FROM crl_settings WHERE ca_id = 'ca-one'`).Scan(&keyID); err != nil || keyID != "new" {
+		t.Fatalf("CRL settings did not follow the renamed key: key=%q error=%v", keyID, err)
+	}
+	if err := pool.QueryRowContext(ctx, `SELECT signer_key_id FROM crl_settings WHERE ca_id = 'ca-two'`).Scan(&keyID); err != nil || keyID != "old" {
+		t.Fatalf("CRL settings of the same key id in another engine changed: key=%q error=%v", keyID, err)
 	}
 	select {
 	case <-secondEntered:

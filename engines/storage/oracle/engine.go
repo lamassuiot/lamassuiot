@@ -37,7 +37,7 @@ func NewStorageEngine(ctx context.Context, cfg config.Config) (*StorageEngine, e
 	}
 	return &StorageEngine{pool: pool, CommonStorageEngine: storage.CommonStorageEngine{
 		CA: &caStore{db}, Cert: &certificateStore{db}, IssuanceProfile: &issuanceProfileStore{db},
-		Device: &deviceStore{db}, DMS: &dmsStore{db}, VA: &vaStore{db},
+		Device: &deviceStore{db}, DMS: &dmsStore{db}, VA: &crlSettingsStore{db},
 		Events: &eventStore{db}, Subscriptions: &subscriptionStore{db}, KMS: &kmsStore{db},
 	}}, nil
 }
@@ -72,10 +72,10 @@ func (s *StorageEngine) GetCertStorage() (storage.CertificatesRepo, error) { ret
 func (s *StorageEngine) GetIssuanceProfileStorage() (storage.IssuanceProfileRepo, error) {
 	return s.IssuanceProfile, nil
 }
-func (s *StorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error) { return s.Device, nil }
-func (s *StorageEngine) GetVARoleStorage() (storage.VARepo, error)            { return s.VA, nil }
-func (s *StorageEngine) GetDMSStorage() (storage.DMSRepo, error)              { return s.DMS, nil }
-func (s *StorageEngine) GetEventsStorage() (storage.EventRepository, error)   { return s.Events, nil }
+func (s *StorageEngine) GetDeviceStorage() (storage.DeviceManagerRepo, error)    { return s.Device, nil }
+func (s *StorageEngine) GetCRLSettingsStorage() (storage.CRLSettingsRepo, error) { return s.VA, nil }
+func (s *StorageEngine) GetDMSStorage() (storage.DMSRepo, error)                 { return s.DMS, nil }
+func (s *StorageEngine) GetEventsStorage() (storage.EventRepository, error)      { return s.Events, nil }
 func (s *StorageEngine) GetSubscriptionsStorage() (storage.SubscriptionsRepository, error) {
 	return s.Subscriptions, nil
 }

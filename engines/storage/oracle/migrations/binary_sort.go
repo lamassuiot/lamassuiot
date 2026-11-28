@@ -18,7 +18,7 @@ func BinarySortIndexes() Migration {
 		`CREATE INDEX lamassu_ca_sort_idx ON ca_certificates (NLSSORT(id, 'NLS_SORT=BINARY'), 0)`,
 		`CREATE INDEX lamassu_kms_sort_idx ON kms_keys (NLSSORT(key_id, 'NLS_SORT=BINARY'), NLSSORT(engine_id, 'NLS_SORT=BINARY'), 0)`,
 		`CREATE INDEX lamassu_profile_sort_idx ON issuance_profiles (NLSSORT(id, 'NLS_SORT=BINARY'), 0)`,
-		`CREATE INDEX lamassu_va_sort_idx ON va_role (NLSSORT(ca_ski, 'NLS_SORT=BINARY'), 0)`,
+		`CREATE INDEX lamassu_crl_sort_idx ON crl_settings (NLSSORT(ca_id, 'NLS_SORT=BINARY'), 0)`,
 		`CREATE INDEX lamassu_dms_sort_idx ON dms (NLSSORT(id, 'NLS_SORT=BINARY'), 0)`,
 		`CREATE INDEX lamassu_event_sort_idx ON events (NLSSORT(event_type, 'NLS_SORT=BINARY'), 0)`,
 		`CREATE INDEX lamassu_sub_sort_idx ON subscriptions (NLSSORT(id, 'NLS_SORT=BINARY'), 0)`,

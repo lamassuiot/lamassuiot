@@ -15,15 +15,15 @@ import "gorm.io/gorm/clause"
 // TestTextSortColumnsMatchMigrations keeps this list in sync with the schema.
 var textSortColumns = map[string]struct{}{
 	// Identifiers and keyset columns.
-	"id": {}, "serial_number": {}, "key_id": {}, "engine_id": {}, "event_type": {}, "ca_ski": {},
+	"id": {}, "serial_number": {}, "key_id": {}, "engine_id": {}, "event_type": {}, "ca_id": {},
 	// Certificates and CAs.
 	"subject_key_id": {}, "authority_key_id": {}, "status": {}, "key_meta_type": {}, "key_meta_strength": {},
 	"subject_common_name": {}, "subject_organization": {}, "subject_organization_unit": {}, "subject_country": {}, "subject_state": {}, "subject_locality": {},
 	"issuer_common_name": {}, "issuer_organization": {}, "issuer_organization_unit": {}, "issuer_country": {}, "issuer_state": {}, "issuer_locality": {},
 	"revocation_reason": {}, "type": {}, "issuer_meta_serial_number": {}, "issuer_meta_id": {}, "profile_id": {},
-	// KMS, devices, DMS, groups, alerts and VA.
+	// KMS, devices, DMS, groups, alerts and CRL settings.
 	"name": {}, "algorithm": {}, "icon_color": {}, "dms_owner": {}, "device_id": {}, "source": {}, "parent_id": {}, "user_id": {},
-	"crl_refresh_interval": {}, "crl_validity": {}, "crl_signer_certificate_serial_number": {},
+	"legacy_ski": {},
 }
 
 func isTextSortColumn(name string) bool {

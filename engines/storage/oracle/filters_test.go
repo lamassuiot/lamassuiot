@@ -17,7 +17,7 @@ func TestEmptyStringColumnsMatchMigrations(t *testing.T) {
 	filterable := map[string]struct{}{}
 	for _, fields := range []map[string]struct{}{
 		certificateFilterFields, caFilterFields, kmsFilterFields, deviceFields, deviceEventFields, groupFields,
-		dmsFilterFields, eventFields, subscriptionFields, profileFields, vaFields,
+		dmsFilterFields, eventFields, subscriptionFields, profileFields, crlSettingsFields,
 	} {
 		for name := range fields {
 			filterable[name] = struct{}{}

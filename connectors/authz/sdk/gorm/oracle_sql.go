@@ -31,7 +31,7 @@ var authzEntities = map[string]authzEntity{
 	"devices":            {"devicemanager", "devices", "id", ""},
 	"dms":                {"dmsmanager", "dms", "id", ""},
 	"kms_keys":           {"kms", "kms_keys", "key_id", ""},
-	"va_role":            {"va", "va_role", "ca_ski", ""},
+	"crl_settings":       {"va", "crl_settings", "ca_id", ""},
 }
 
 func authzTokens(input string) ([]authzToken, error) {

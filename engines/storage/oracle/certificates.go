@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/lamassuiot/lamassuiot/v4/core/pkg/engines/storage"
@@ -91,7 +92,6 @@ func (s *certificateStore) SelectByExpirationDate(ctx context.Context, before, a
 }
 
 var certificatePK = regexp.MustCompile(`(?i)\([^)]*\blamassu_cert_pk\)`)
-var vaSignerConstraint = regexp.MustCompile(`(?i)\([^)]*\blamassu_va_signer_fk\)`)
 
 func constraintError(err error, code string, constraint *regexp.Regexp) bool {
 	var sqlErr oracleerrors.SQLError
@@ -148,7 +148,7 @@ func (s *certificateStore) Update(ctx context.Context, cert *models.Certificate)
 
 func (s *certificateStore) Delete(ctx context.Context, serial string) error {
 	tx := s.db.WithContext(ctx).Table("certificates").Where("serial_number = ?", serial).Delete(&models.Certificate{})
-	if constraintError(tx.Error, "ORA-02292", vaSignerConstraint) {
+	if constraintError(tx.Error, "ORA-02292", crlSettingsSignerCertFK) {
 		return errs.ErrCertificateInUse
 	}
 	if tx.Error != nil {
@@ -158,6 +158,28 @@ func (s *certificateStore) Delete(ctx context.Context, serial string) error {
 		return gorm.ErrRecordNotFound
 	}
 	return nil
+}
+
+// CRLSettingsHoldingKey names the CAs whose ACTIVE CRL settings have one of the certificates as signer: they retain
+// its KMS key (lamassu_crl_signer_key_fk), which the KMS cannot delete until they are FINAL. It only reads, so it
+// takes no row locks.
+func (s *certificateStore) CRLSettingsHoldingKey(ctx context.Context, serials []string) ([]string, error) {
+	holders := []string{}
+	// Avoid Oracle's IN-list limit.
+	for start := 0; start < len(serials); start += 1000 {
+		end := min(start+1000, len(serials))
+		var chunk []string
+		err := s.db.WithContext(ctx).Table(crlSettingsTable).
+			Where("status = ? AND signer_serial_number IN ?", models.CRLSettingsActive, serials[start:end]).
+			Pluck("ca_id", &chunk).Error
+		if err != nil {
+			return nil, err
+		}
+		holders = append(holders, chunk...)
+	}
+	// Byte order, like PostgreSQL's "C" collation and the NLS_SORT=BINARY keyset order.
+	slices.Sort(holders)
+	return holders, nil
 }
 
 func (s *certificateStore) ReleaseKey(ctx context.Context, serials []string) error {
